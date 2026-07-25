@@ -66,8 +66,8 @@ GameConfig.Lobby = {
 local halfZ = (GameConfig.Grid.SizeZ * GameConfig.Grid.Spacing) / 2
 GameConfig.GameRoom = {
 	-- Pad au sud de la grille (Z négatif), hors bulles
-	SpawnOffset = Vector3.new(0, 8, -(halfZ + 24)),
-	ExitOffset = Vector3.new(0, 6, -(halfZ + 36)),
+	SpawnOffset = Vector3.new(0, 8, -(halfZ + 44)),
+	ExitOffset = Vector3.new(0, 6, -(halfZ + 56)),
 	ExitSize = Vector3.new(14, 6, 8),
 	PadSize = Vector3.new(24, 2, 24),
 	PadColor = Color3.fromRGB(50, 140, 180),
