@@ -13,6 +13,7 @@ local store = DataStoreService:GetDataStore("BPW_PlayerData_v1")
 
 local DataService = {}
 local profiles: { [Player]: any } = {}
+local mutationWaiter: ((Player, number) -> boolean)? = nil
 
 local TEMPLATE = {
 	Coins = 0,
@@ -27,6 +28,9 @@ local TEMPLATE = {
 	Cosmetics = {},
 	Titles = {},
 	EquippedTitle = "",
+	CurrentBubbles = 0,
+	BackpackCapacity = Config.Backpack.DefaultCapacity,
+	PendingSellValue = 0,
 	Version = 1,
 }
 
@@ -50,6 +54,19 @@ local function reconcile(data, template)
 	return data
 end
 
+local function reconcileBackpack(data)
+	local bubbles = data.CurrentBubbles
+	local pending = data.PendingSellValue
+	if type(bubbles) ~= "number" or bubbles ~= bubbles or bubbles <= 0 then
+		data.CurrentBubbles = 0
+		data.PendingSellValue = 0
+	elseif type(pending) ~= "number" or pending ~= pending or pending <= 0 then
+		warn("[DataService] sac réinitialisé : bulles sans valeur de vente valide")
+		data.CurrentBubbles = 0
+		data.PendingSellValue = 0
+	end
+end
+
 local function retry(fn, tries: number?)
 	local attempts = tries or 4
 	for i = 1, attempts do
@@ -68,12 +85,17 @@ function DataService.Get(player: Player)
 	return profiles[player]
 end
 
+function DataService.SetMutationWaiter(waiter: ((Player, number) -> boolean)?)
+	mutationWaiter = waiter
+end
+
 function DataService.Load(player: Player)
 	local ok, saved = retry(function()
 		return store:GetAsync("player_" .. player.UserId)
 	end)
 
 	local data = if ok and type(saved) == "table" then reconcile(saved, TEMPLATE) else deepCopy(TEMPLATE)
+	reconcileBackpack(data)
 	data.__loaded = ok            -- si false : on ne sauvegarde PAS (évite d'écraser)
 	data.__joinClock = os.clock()
 	profiles[player] = data
@@ -97,11 +119,19 @@ function DataService.Save(player: Player)
 		warn("[DataService] sauvegarde ignorée pour " .. player.Name .. " (chargement échoué)")
 		return
 	end
+	if mutationWaiter then
+		local ok, unlocked = pcall(mutationWaiter, player, Config.World.MutationLockTimeout)
+		if not ok then
+			warn("[DataService] attente de mutation échouée pour " .. player.Name)
+		elseif not unlocked then
+			warn("[DataService] délai d'attente de mutation dépassé pour " .. player.Name)
+		end
+	end
 	data.Playtime += os.clock() - (data.__joinClock or os.clock())
 	data.__joinClock = os.clock()
 
 	local payload = deepCopy(data)
-	payload.__loaded, payload.__joinClock = nil, nil
+	payload.__loaded, payload.__joinClock, payload.__dirty = nil, nil, nil
 
 	retry(function()
 		store:SetAsync("player_" .. player.UserId, payload)
@@ -117,6 +147,10 @@ end
 function DataService.Push(player: Player)
 	local d = profiles[player]
 	if not d then return end
+	player:SetAttribute("Coins", d.Coins)
+	player:SetAttribute("CurrentBubbles", d.CurrentBubbles)
+	player:SetAttribute("BackpackCapacity", d.BackpackCapacity)
+	player:SetAttribute("PendingSellValue", d.PendingSellValue)
 	local ls = player:FindFirstChild("leaderstats")
 	if ls then
 		(ls:FindFirstChild("Pièces") :: IntValue).Value = math.min(d.Coins, 2^31 - 1)
@@ -134,10 +168,26 @@ function DataService.Push(player: Player)
 	})
 end
 
-function DataService.AddCoins(player: Player, amount: number)
+local CREDIT_SOURCES = {
+	BubbleSale = true,
+	Chest = true,
+	DailyReward = true,
+	Code = true,
+	Admin = true,
+}
+
+function DataService.AddCoins(player: Player, amount: number, source: string?): boolean
 	local d = profiles[player]
-	if not d then return end
+	if not d then return false end
+	if type(amount) ~= "number" or amount ~= amount or amount == math.huge then return false end
+	amount = math.floor(amount)
+	if amount <= 0 then return false end
+	if source ~= nil and not CREDIT_SOURCES[source] then
+		warn("[DataService] source inconnue:", source)
+	end
 	d.Coins = math.max(0, d.Coins + amount)
+	d.__dirty = true
+	return true
 end
 
 function DataService.AddXP(player: Player, amount: number)
