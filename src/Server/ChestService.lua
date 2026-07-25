@@ -81,7 +81,8 @@ local function spawnChest()
 		local worldMult = BubbleService.CurrentWorld().Mult
 		coins = math.floor(coins * worldMult)
 
-		DataService.AddCoins(player, coins)
+		-- Les coffres restent une source directe de pièces (hors sac, spec §2).
+		DataService.AddCoins(player, coins, "Chest")
 		DataService.AddXP(player, tier.XP)
 		local profile = DataService.Get(player)
 		if profile then profile.ChestsOpened += 1 end

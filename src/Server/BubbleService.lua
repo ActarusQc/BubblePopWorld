@@ -1,6 +1,7 @@
 --!strict
 -- Cœur du jeu : génération de la grille, éclatement, régénération,
--- récompenses, anti-exploit et diffusion groupée des effets.
+-- récompenses (sac uniquement, jamais de pièces), anti-exploit
+-- et diffusion groupée des effets.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,6 +13,7 @@ local BubbleTypes = require(Shared.BubbleTypes)
 local Remotes = require(Shared.Remotes)
 
 local DataService = require(script.Parent.DataService)
+local BackpackService = require(script.Parent.BackpackService)
 local GlobalCounterService = require(script.Parent.GlobalCounterService)
 local ComboService = require(script.Parent.ComboService)
 local AmbianceService = require(script.Parent.AmbianceService)
@@ -213,15 +215,8 @@ function BubbleService.BuildWorld(worldDef)
 	worldFolder.Name = "BubbleWorld"
 	worldFolder.Parent = workspace
 
-	-- Plancher sous la nappe de bulles (pas de film blanc)
-	local floor = Instance.new("Part")
-	floor.Name = "Floor"
-	floor.Anchored = true
-	floor.Size = Vector3.new(G.SizeX * G.Spacing + 40, 4, G.SizeZ * G.Spacing + 40)
-	floor.CFrame = CFrame.new(G.Origin - Vector3.new(0, 3, 0))
-	floor.Color = currentWorld.Ground
-	floor.Material = Enum.Material.Sand
-	floor.Parent = worldFolder
+	-- Aucun plancher continu sous la grille (spec §8.6) : la chute entre les cases
+	-- vides est voulue ; ZoneService gère les barrières latérales et le FallReset.
 
 	for x = 1, G.SizeX do
 		grid[x] = {}
@@ -250,61 +245,165 @@ local function regen(cell)
 	applyBubbleAppearance(cell.part, cell.def, cell.tintIndex, true)
 end
 
--- Retourne pièces, xp, def (ou nil si la bulle n'était pas disponible)
-local function popCell(x: number, z: number)
-	if not BubbleService.InBounds(x, z) then return nil end
-	local cell = grid[x] and grid[x][z]
-	if not cell or not cell.alive then return nil end
+--------------------------------------------------------------------
+-- Verrou de cellule : jeton unique, un seul joueur gagne la course
+--------------------------------------------------------------------
+local function tryClaim(cell: any): any?
+	if not cell.alive or cell.popClaim ~= nil then return nil end
+	local token = {}
+	cell.popClaim = token
+	return token
+end
 
-	local def = cell.def
+local function releaseClaim(cell: any, token: any)
+	if cell.popClaim == token then
+		cell.popClaim = nil
+	end
+end
+
+-- Mutation réelle de la bulle. Retourne false si la case n'est plus éclatable.
+local function applyPop(cell: any, x: number, z: number): boolean
+	if not cell.alive then return false end
+	local part = cell.part :: BasePart?
+	if not part or not part.Parent then return false end
+
 	cell.alive = false
-	cell.part.CanCollide = false
+	part.CanCollide = false
 	-- CanQuery = false : le raycast client traverse la case vide (plus de faux rebonds)
-	cell.part.CanQuery = false
-	cell.part.CanTouch = false
-	cell.part.Transparency = 1
-	cell.part:SetAttribute("Alive", false)
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Transparency = 1
+	part:SetAttribute("Alive", false)
 
-	table.insert(effectQueue, { x, z, def.Id })
+	table.insert(effectQueue, { x, z, cell.def.Id })
 	task.delay(B.RegenTime, function()
 		if cell.part.Parent then regen(cell) end
 	end)
 
-	return def
+	return true
+end
+
+local function positiveNumber(value: any, fallback: number): number
+	local n = tonumber(value)
+	if type(n) ~= "number" or n ~= n or n == math.huge or n == -math.huge or n <= 0 then
+		return fallback
+	end
+	return n
+end
+
+type PopContext = {
+	coinMult: number,
+	xpMult: number,
+	worldMult: number,
+	extra: number,
+	combo: () -> number,
+}
+
+-- Traite une cellule déjà réservée (claim posé par l'appelant).
+-- Retourne "ok" (+ def), "full" (sac plein) ou "skip".
+local function popClaimedCell(player: Player, cell: any, x: number, z: number, ctx: PopContext): (string, any?)
+	if not cell.alive then return "skip" end
+
+	local def = cell.def
+	if type(def) ~= "table" or type(def.Id) ~= "string" then return "skip" end
+
+	local storage = math.max(1, math.floor(positiveNumber(def.StorageValue, 1)))
+	if not BackpackService.CanAdd(player, storage) then
+		return "full"
+	end
+
+	local baseSell = positiveNumber(def.SellValue, positiveNumber(def.Coins, 1))
+	local raw = baseSell * ctx.coinMult * ctx.worldMult * ctx.extra * ctx.combo()
+	local sellValue = BackpackService.RoundSellValue(raw, baseSell)
+	if not sellValue or sellValue <= 0 then return "skip" end
+
+	local added, err, tx = BackpackService.AddBubbles(player, storage, sellValue)
+	if not added then
+		return if err == "sac plein" then "full" else "skip"
+	end
+
+	-- Le pop réel est le seul point où une erreur Lua laisserait une transaction
+	-- orpheline : on le protège explicitement pour garantir le rollback.
+	local popOk, popped = pcall(applyPop, cell, x, z)
+	if not popOk then
+		warn(("[BubbleService] pop échoué en %d,%d : %s"):format(x, z, tostring(popped)))
+	end
+	if not popOk or popped ~= true then
+		BackpackService.RollbackAdd(player, tx)
+		return "skip"
+	end
+
+	return "ok", def
 end
 
 -- API publique : éclate une liste de cellules pour un joueur.
-function BubbleService.PopCells(player: Player, cells: { { number } }, multiplier: number?)
-	local profile = DataService.Get(player)
-	if not profile then return 0 end
+-- Les bulles ne créditent JAMAIS de pièces ici : elles remplissent le sac
+-- (vente via BackpackService.Sell). L'XP reste immédiate après un pop réussi.
+function BubbleService.PopCells(player: Player, cells: { { number } }, multiplier: number?): number
+	if not DataService.Get(player) then return 0 end
 
 	local coinMult, xpMult = DataService.Multipliers(player)
-	local worldMult = currentWorld.Mult
-	local extra = multiplier or 1
 
-	local coins, xp, count = 0, 0, 0
+	-- Le combo n'est enregistré qu'une fois par lot, et seulement si au moins une
+	-- cellule est réellement sur le point d'être ajoutée au sac.
+	local comboMult: number? = nil
+	local ctx: PopContext = {
+		coinMult = coinMult,
+		xpMult = xpMult,
+		worldMult = currentWorld.Mult,
+		extra = multiplier or 1,
+		combo = function(): number
+			if not comboMult then
+				comboMult = ComboService.Register(player)
+			end
+			return comboMult :: number
+		end,
+	}
+
+	local rawXP, count = 0, 0
 	local announce = nil
+	local notifiedFull = false
 
 	for _, c in ipairs(cells) do
-		local def = popCell(c[1], c[2])
-		if def then
-			coins += def.Coins
-			xp += def.XP
-			count += 1
-			if def.Announce then announce = def end
+		local x, z = c[1], c[2]
+		if BubbleService.InBounds(x, z) then
+			local cell = grid[x] and grid[x][z]
+			if cell then
+				local token = tryClaim(cell)
+				if token then
+					local status: string? = nil
+					local def: any = nil
+					local ok = xpcall(function()
+						status, def = popClaimedCell(player, cell, x, z, ctx)
+					end, function(err)
+						warn(("[BubbleService] erreur de pop en %d,%d : %s"):format(x, z, tostring(err)))
+					end)
+					releaseClaim(cell, token) -- garanti sur tous les chemins
+
+					if ok and status == "ok" and def then
+						rawXP += positiveNumber(def.XP, 0)
+						count += 1
+						if def.Announce then announce = def end
+					elseif ok and status == "full" and not notifiedFull then
+						notifiedFull = true
+						BackpackService.NotifyFull(player)
+					end
+				end
+			end
 		end
 	end
 
 	if count == 0 then return 0 end
 
-	local comboMult = ComboService.Register(player)
+	local profile = DataService.Get(player)
+	if not profile then return count end
 
-	coins = math.floor(coins * coinMult * worldMult * extra * comboMult)
-	xp = math.floor(xp * xpMult * extra * comboMult)
-
-	DataService.AddCoins(player, coins)
-	DataService.AddXP(player, xp)
+	local xp = math.floor(rawXP * xpMult * ctx.extra * (comboMult or 1))
+	if xp > 0 then
+		DataService.AddXP(player, xp)
+	end
 	profile.Pops += count
+	profile.__dirty = true
 	DataService.Push(player)
 	GlobalCounterService.Add(count)
 
