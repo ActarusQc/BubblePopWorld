@@ -6,6 +6,7 @@ require(ReplicatedStorage:WaitForChild("Shared").Remotes) -- crée les remotes e
 
 local services = {
 	require(script.DataService),
+	require(script.BackpackService),
 	require(script.GlobalCounterService),
 	require(script.ComboService),
 	require(script.AmbianceService),
