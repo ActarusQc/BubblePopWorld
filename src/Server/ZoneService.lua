@@ -131,34 +131,37 @@ local function buildSafetyBorders(gameRoom: Folder)
 	local borders = ensureFolder(gameRoom, "SafetyBorders")
 	local G = Config.Grid
 	local W = Config.World
-	local halfX = (G.SizeX * G.Spacing) / 2
-	local halfZ = (G.SizeZ * G.Spacing) / 2
 	local t = W.BorderThickness
 	local h = W.BorderHeight
 	local yCenter = G.Origin.Y + h / 2
+	-- Les centres extrêmes sont à ((Size / 2) - 0.5) * Spacing. Les faces
+	-- intérieures des murs restent 2 studs après le volume des bulles.
+	local safetyGap = 2
+	local bubbleExtentX = ((G.SizeX / 2) - 0.5) * G.Spacing + G.BubbleSize.X / 2 + safetyGap
+	local bubbleExtentZ = ((G.SizeZ / 2) - 0.5) * G.Spacing + G.BubbleSize.Z / 2 + safetyGap
 
 	ensureBorderWall(borders, "BorderNorth",
-		Vector3.new(halfX * 2 + t * 2, h, t),
-		CFrame.new(G.Origin.X, yCenter, G.Origin.Z + halfZ + t / 2))
+		Vector3.new((bubbleExtentX + t) * 2, h, t),
+		CFrame.new(G.Origin.X, yCenter, G.Origin.Z + bubbleExtentZ + t / 2))
 
 	ensureBorderWall(borders, "BorderEast",
-		Vector3.new(t, h, halfZ * 2 + t * 2),
-		CFrame.new(G.Origin.X + halfX + t / 2, yCenter, G.Origin.Z))
+		Vector3.new(t, h, (bubbleExtentZ + t) * 2),
+		CFrame.new(G.Origin.X + bubbleExtentX + t / 2, yCenter, G.Origin.Z))
 
 	ensureBorderWall(borders, "BorderWest",
-		Vector3.new(t, h, halfZ * 2 + t * 2),
-		CFrame.new(G.Origin.X - halfX - t / 2, yCenter, G.Origin.Z))
+		Vector3.new(t, h, (bubbleExtentZ + t) * 2),
+		CFrame.new(G.Origin.X - bubbleExtentX - t / 2, yCenter, G.Origin.Z))
 
 	-- Sud : ouverture centrale (pas de mur au-dessus des plateformes spawn/sortie).
 	local gapWidth = math.max(Config.GameRoom.ExitSize.X, Config.GameRoom.PadSize.X) + 6
-	local segLen = math.max(0, halfX + t - gapWidth / 2)
+	local segLen = math.max(0, bubbleExtentX + t - gapWidth / 2)
 	if segLen > 0 then
 		ensureBorderWall(borders, "BorderSouthLeft",
 			Vector3.new(segLen, h, t),
-			CFrame.new(G.Origin.X - (gapWidth / 2 + segLen / 2), yCenter, G.Origin.Z - halfZ - t / 2))
+			CFrame.new(G.Origin.X - (gapWidth / 2 + segLen / 2), yCenter, G.Origin.Z - bubbleExtentZ - t / 2))
 		ensureBorderWall(borders, "BorderSouthRight",
 			Vector3.new(segLen, h, t),
-			CFrame.new(G.Origin.X + (gapWidth / 2 + segLen / 2), yCenter, G.Origin.Z - halfZ - t / 2))
+			CFrame.new(G.Origin.X + (gapWidth / 2 + segLen / 2), yCenter, G.Origin.Z - bubbleExtentZ - t / 2))
 	end
 end
 
@@ -248,8 +251,8 @@ local function buildGameRoom(gameRoom: Folder)
 
 	local spawnPos = G.Origin + R.SpawnOffset
 	local exitPos = G.Origin + R.ExitOffset
-	validateOutsideGrid(spawnPos, 0, "GameRoom.SpawnOffset")
-	validateOutsideGrid(exitPos, 0, "GameRoom.ExitOffset")
+	validateOutsideGrid(spawnPos, Config.Lobby.ClearanceFromGrid, "GameRoom.SpawnOffset")
+	validateOutsideGrid(exitPos, Config.Lobby.ClearanceFromGrid, "GameRoom.ExitOffset")
 
 	-- Plateformes (pads) uniquement sous spawn/sortie : aucun plancher continu sous la grille.
 	ensurePart(gameRoom, "SpawnPad", function()
