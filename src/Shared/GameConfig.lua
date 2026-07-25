@@ -12,6 +12,67 @@ GameConfig.Grid = {
 	Origin = Vector3.new(0, 6, 0),           -- centre de la grille
 }
 
+-- Bounds grille (half-extent approx centres ± Spacing/2)
+function GameConfig.GetGridBounds()
+	local G = GameConfig.Grid
+	local halfX = (G.SizeX * G.Spacing) / 2
+	local halfZ = (G.SizeZ * G.Spacing) / 2
+	return {
+		MinX = G.Origin.X - halfX,
+		MaxX = G.Origin.X + halfX,
+		MinZ = G.Origin.Z - halfZ,
+		MaxZ = G.Origin.Z + halfZ,
+		MinY = G.Origin.Y - 2,
+		Origin = G.Origin,
+	}
+end
+
+GameConfig.Backpack = {
+	DefaultCapacity = 25,
+	MaxCapacity = 1000,
+	NearlyFullRatio = 0.75,
+	FullNotifyCooldown = 3,
+}
+
+GameConfig.World = {
+	FallResetY = -25,
+	FallResetDestination = "GameRoom",
+	RebuildGeneratedLayout = false,
+	TeleportCooldown = 1.5,
+	SellMaxDistance = 16,
+	BorderHeight = 28,
+	BorderThickness = 3,
+	BorderTransparency = 0.45,
+	BorderColor = Color3.fromRGB(80, 200, 255),
+	MutationLockTimeout = 5,
+}
+
+-- Lobby HORS de la grille : RootOffset.Z doit être < MinZ - marge (ex. 40 studs)
+-- Valeurs par défaut calculées / documentées pour Size 40, Spacing 6 → halfZ=120
+-- RootOffset Z ≈ -(halfZ + 60) = -180 (marge 60 hors bordure)
+GameConfig.Lobby = {
+	RootOffset = Vector3.new(0, 0, -180), -- validé vs GetGridBounds + marge
+	FloorSize = Vector3.new(80, 2, 60),
+	FloorColor = Color3.fromRGB(60, 100, 160),
+	SpawnOffset = Vector3.new(0, 4, 0),
+	SellZoneOffset = Vector3.new(-20, 2, 10),
+	SellZoneSize = Vector3.new(12, 4, 12),
+	EntranceOffset = Vector3.new(0, 2, 28), -- vers +Z direction grille, toujours hors MinZ
+	EntranceSize = Vector3.new(14, 6, 8),
+	ClearanceFromGrid = 40,
+	SignText = "1. Entre dans la salle\n2. Fais éclater des bulles\n3. Remplis ton sac\n4. Reviens vendre tes bulles",
+}
+
+local halfZ = (GameConfig.Grid.SizeZ * GameConfig.Grid.Spacing) / 2
+GameConfig.GameRoom = {
+	-- Pad au sud de la grille (Z négatif), hors bulles
+	SpawnOffset = Vector3.new(0, 8, -(halfZ + 24)),
+	ExitOffset = Vector3.new(0, 6, -(halfZ + 36)),
+	ExitSize = Vector3.new(14, 6, 8),
+	PadSize = Vector3.new(24, 2, 24),
+	PadColor = Color3.fromRGB(50, 140, 180),
+}
+
 GameConfig.Bubble = {
 	RegenTime = 30,          -- secondes avant réapparition
 	PressDepth = 0.7,        -- enfoncement visuel quand on marche dessus
@@ -137,5 +198,19 @@ GameConfig.Worlds = {
 	{ Id = "Candy",      Label = "Bonbons",        LevelReq = 200, Mult = 24.0, Sky = Color3.fromRGB(255, 190, 230), Ground = Color3.fromRGB(255, 150, 200) },
 	{ Id = "Underwater", Label = "Sous-marin",     LevelReq = 260, Mult = 35.0, Sky = Color3.fromRGB(30, 120, 180),  Ground = Color3.fromRGB(25, 90, 140) },
 }
+
+local function assertOutsideGrid(worldPos: Vector3, label: string)
+	local b = GameConfig.GetGridBounds()
+	local margin = GameConfig.Lobby.ClearanceFromGrid
+	if worldPos.X > b.MinX - margin and worldPos.X < b.MaxX + margin
+		and worldPos.Z > b.MinZ - margin and worldPos.Z < b.MaxZ + margin then
+		warn("[BPW] layout overlap risk:", label, worldPos)
+	end
+end
+
+assertOutsideGrid(GameConfig.Lobby.RootOffset, "Lobby.RootOffset")
+local gridOrigin = GameConfig.Grid.Origin
+assertOutsideGrid(gridOrigin + GameConfig.GameRoom.SpawnOffset, "GameRoom.SpawnOffset")
+assertOutsideGrid(gridOrigin + GameConfig.GameRoom.ExitOffset, "GameRoom.ExitOffset")
 
 return GameConfig
