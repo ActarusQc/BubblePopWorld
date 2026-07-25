@@ -16,6 +16,7 @@ export type Tx = {
 	Id: string,
 	StorageAdded: number,
 	SellValueAdded: number,
+	Gen: number,
 	Valid: boolean,
 }
 
@@ -24,6 +25,24 @@ local BackpackService = {}
 -- Verrou de mutation par joueur : une seule opération sac à la fois (AddBubbles/RollbackAdd/Sell).
 local locks: { [Player]: boolean } = {}
 local lastFullNotify: { [Player]: number } = {}
+-- Compteur de génération sac (session) : invalidé après Sell pour bloquer les rollbacks périmés.
+local gen: { [Player]: number } = {}
+
+local function getGen(player: Player): number
+	return gen[player] or 0
+end
+
+local function bumpGen(player: Player)
+	gen[player] = getGen(player) + 1
+end
+
+-- Invariant symétrique : sac vide ⇔ valeur de vente nulle.
+local function enforceBackpackInvariant(d: any)
+	if d.CurrentBubbles <= 0 or d.PendingSellValue <= 0 then
+		d.CurrentBubbles = 0
+		d.PendingSellValue = 0
+	end
+end
 
 local function isFiniteNumber(value: any): boolean
 	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
@@ -151,12 +170,14 @@ local function doAddBubbles(player: Player, storageAmount: number, sellValue: nu
 
 	d.CurrentBubbles += storageAmount
 	d.PendingSellValue += sellValue
+	enforceBackpackInvariant(d)
 	d.__dirty = true
 
 	local tx: Tx = {
 		Id = HttpService:GenerateGUID(false),
 		StorageAdded = storageAmount,
 		SellValueAdded = sellValue,
+		Gen = getGen(player),
 		Valid = true,
 	}
 	return true, nil, tx
@@ -171,7 +192,7 @@ function BackpackService.AddBubbles(player: Player, storageAmount: number, sellV
 	end
 	storageAmount = math.floor(storageAmount)
 
-	if not isFiniteNumber(sellValue) or sellValue < 0 then
+	if not isFiniteNumber(sellValue) or sellValue <= 0 then
 		return false, "sellValue invalide"
 	end
 	sellValue = math.floor(sellValue)
@@ -190,6 +211,9 @@ local function doRollbackAdd(player: Player, tx: Tx?): boolean
 	if not tx or not tx.Valid then
 		return false
 	end
+	if tx.Gen ~= getGen(player) then
+		return false
+	end
 	local d = DataService.Get(player)
 	if not d then
 		tx.Valid = false
@@ -198,11 +222,7 @@ local function doRollbackAdd(player: Player, tx: Tx?): boolean
 
 	d.CurrentBubbles = math.max(0, d.CurrentBubbles - tx.StorageAdded)
 	d.PendingSellValue = math.max(0, d.PendingSellValue - tx.SellValueAdded)
-	if d.CurrentBubbles <= 0 then
-		-- Invariant : sac vide ⇔ valeur de vente nulle.
-		d.CurrentBubbles = 0
-		d.PendingSellValue = 0
-	end
+	enforceBackpackInvariant(d)
 	d.__dirty = true
 
 	tx.Valid = false
@@ -243,6 +263,7 @@ local function doSell(player: Player): (number?, number?, string?)
 	-- Vider le sac immédiatement en mémoire : aucun état intermédiaire observable hors verrou.
 	d.CurrentBubbles = 0
 	d.PendingSellValue = 0
+	bumpGen(player)
 	d.__dirty = true
 
 	return sold, earned, nil
@@ -278,6 +299,7 @@ function BackpackService.Start()
 	Players.PlayerRemoving:Connect(function(player)
 		locks[player] = nil
 		lastFullNotify[player] = nil
+		gen[player] = nil
 	end)
 end
 
