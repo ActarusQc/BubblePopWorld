@@ -234,6 +234,8 @@ end
 -- Éclatement
 --------------------------------------------------------------------
 local function regen(cell)
+	-- Un claim ne doit jamais survivre au cycle de régénération.
+	cell.popClaim = nil
 	cell.def = BubbleTypes.Roll(rng)
 	cell.alive = true
 	cell.part.CanCollide = true
@@ -319,7 +321,7 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 
 	local added, err, tx = BackpackService.AddBubbles(player, storage, sellValue)
 	if not added then
-		return if err == "sac plein" then "full" else "skip"
+		return if err == BackpackService.ErrorCodes.BackpackFull then "full" else "skip"
 	end
 
 	-- Le pop réel est le seul point où une erreur Lua laisserait une transaction
@@ -329,7 +331,9 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 		warn(("[BubbleService] pop échoué en %d,%d : %s"):format(x, z, tostring(popped)))
 	end
 	if not popOk or popped ~= true then
-		BackpackService.RollbackAdd(player, tx)
+		if not BackpackService.RollbackAdd(player, tx) then
+			warn(("[BubbleService] rollback du sac échoué en %d,%d"):format(x, z))
+		end
 		return "skip"
 	end
 

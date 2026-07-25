@@ -108,6 +108,14 @@ end
 local lobbySpawnPart: BasePart? = nil
 local gameRoomSpawnPart: BasePart? = nil
 
+local function disableStudioBaseplate()
+	local baseplate = workspace:FindFirstChild("Baseplate")
+	if baseplate and baseplate:IsA("BasePart") then
+		baseplate.CanCollide = false
+		baseplate.Transparency = 1
+	end
+end
+
 --------------------------------------------------------------------
 -- Barrières de sécurité (côtés grille, ouverture centrale côté spawn/sortie)
 --------------------------------------------------------------------
@@ -315,6 +323,8 @@ end
 -- Idempotent : ne recrée/déplace jamais un objet existant (sauf Rebuild + GeneratedByCode).
 -- Ne détruit jamais la map existante.
 function ZoneService.EnsureWorld(): Folder
+	disableStudioBaseplate()
+
 	local root = ensureFolder(workspace, "BubblePopWorld")
 	local lobby = ensureFolder(root, "Lobby")
 	local gameRoom = ensureFolder(root, "GameRoom")

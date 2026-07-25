@@ -21,6 +21,9 @@ export type Tx = {
 }
 
 local BackpackService = {}
+BackpackService.ErrorCodes = table.freeze({
+	BackpackFull = "BackpackFull",
+})
 
 -- Verrou de mutation par joueur : une seule opération sac à la fois (AddBubbles/RollbackAdd/Sell).
 local locks: { [Player]: boolean } = {}
@@ -165,7 +168,7 @@ local function doAddBubbles(player: Player, storageAmount: number, sellValue: nu
 	end
 	if d.CurrentBubbles + storageAmount > d.BackpackCapacity then
 		BackpackService.NotifyFull(player)
-		return false, "sac plein"
+		return false, BackpackService.ErrorCodes.BackpackFull
 	end
 
 	d.CurrentBubbles += storageAmount
