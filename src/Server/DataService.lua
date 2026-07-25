@@ -54,17 +54,35 @@ local function reconcile(data, template)
 	return data
 end
 
-local function reconcileBackpack(data)
-	local bubbles = data.CurrentBubbles
-	local pending = data.PendingSellValue
-	if type(bubbles) ~= "number" or bubbles ~= bubbles or bubbles <= 0 then
-		data.CurrentBubbles = 0
-		data.PendingSellValue = 0
-	elseif type(pending) ~= "number" or pending ~= pending or pending <= 0 then
-		warn("[DataService] sac réinitialisé : bulles sans valeur de vente valide")
-		data.CurrentBubbles = 0
-		data.PendingSellValue = 0
+local function finiteNumber(value: any, fallback: number): number
+	local numberValue = tonumber(value)
+	if type(numberValue) ~= "number" or numberValue ~= numberValue
+		or numberValue == math.huge or numberValue == -math.huge then
+		return fallback
 	end
+	return numberValue
+end
+
+local function reconcileBackpack(data)
+	local capacity = math.clamp(
+		finiteNumber(data.BackpackCapacity, Config.Backpack.DefaultCapacity),
+		Config.Backpack.DefaultCapacity,
+		Config.Backpack.MaxCapacity
+	)
+	local bubbles = math.clamp(math.floor(finiteNumber(data.CurrentBubbles, 0)), 0, capacity)
+	local pending = math.max(0, math.floor(finiteNumber(data.PendingSellValue, 0)))
+
+	if bubbles == 0 then
+		pending = 0
+	elseif pending <= 0 then
+		warn("[DataService] sac réinitialisé : bulles sans valeur de vente valide")
+		bubbles = 0
+		pending = 0
+	end
+
+	data.BackpackCapacity = capacity
+	data.CurrentBubbles = bubbles
+	data.PendingSellValue = pending
 end
 
 local function retry(fn, tries: number?)
@@ -123,8 +141,10 @@ function DataService.Save(player: Player)
 		local ok, unlocked = pcall(mutationWaiter, player, Config.World.MutationLockTimeout)
 		if not ok then
 			warn("[DataService] attente de mutation échouée pour " .. player.Name)
+			return
 		elseif not unlocked then
 			warn("[DataService] délai d'attente de mutation dépassé pour " .. player.Name)
+			return
 		end
 	end
 	data.Playtime += os.clock() - (data.__joinClock or os.clock())
