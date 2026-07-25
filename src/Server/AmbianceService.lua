@@ -56,30 +56,10 @@ function AmbianceService.Apply(worldDef)
 	cc.Parent = Lighting
 end
 
--- Murs invisibles : on ne tombe plus hors de la nappe de bulles.
-function AmbianceService.BuildWalls(parent: Instance)
-	local G = Config.Grid
-	local w = G.SizeX * G.Spacing
-	local d = G.SizeZ * G.Spacing
-	local height = 220
-
-	local sides = {
-		{ Vector3.new(w + 20, height, 4), Vector3.new(0, height / 2, -d / 2 - 8) },
-		{ Vector3.new(w + 20, height, 4), Vector3.new(0, height / 2, d / 2 + 8) },
-		{ Vector3.new(4, height, d + 20), Vector3.new(-w / 2 - 8, height / 2, 0) },
-		{ Vector3.new(4, height, d + 20), Vector3.new(w / 2 + 8, height / 2, 0) },
-	}
-
-	for i, side in ipairs(sides) do
-		local wall = Instance.new("Part")
-		wall.Name = "Wall" .. i
-		wall.Anchored = true
-		wall.CanCollide = true
-		wall.Transparency = 1
-		wall.Size = side[1]
-		wall.CFrame = CFrame.new(G.Origin + side[2])
-		wall.Parent = parent
-	end
+-- No-op : les barrières de sécurité sont désormais gérées de façon idempotente par
+-- `ZoneService` (dossier `SafetyBorders` sous `Workspace.BubblePopWorld.GameRoom`),
+-- avec ouverture côté spawn/sortie. Conservé pour compatibilité des appelants existants.
+function AmbianceService.BuildWalls(_parent: Instance)
 end
 
 function AmbianceService.Start()
