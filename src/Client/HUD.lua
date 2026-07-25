@@ -80,6 +80,37 @@ function HUD.Start()
 	xpFill.Parent = xpBack
 	corner(xpFill, 7)
 
+	-- Jauge du sac : son état provient exclusivement des attributs du joueur.
+	local backpackFrame = Instance.new("Frame")
+	backpackFrame.Size = UDim2.new(0, 260, 0, 74)
+	backpackFrame.Position = UDim2.new(0, 16, 0, 120)
+	backpackFrame.BackgroundColor3 = BG
+	backpackFrame.BackgroundTransparency = 0.15
+	backpackFrame.BorderSizePixel = 0
+	backpackFrame.Parent = gui
+	corner(backpackFrame, 14)
+
+	local backpackLabel = label(backpackFrame, "Sac 0 / 0", UDim2.new(1, -24, 0, 24), UDim2.new(0, 12, 0, 7))
+
+	local backpackBack = Instance.new("Frame")
+	backpackBack.Size = UDim2.new(1, -24, 0, 14)
+	backpackBack.Position = UDim2.new(0, 12, 0, 34)
+	backpackBack.BackgroundColor3 = Color3.fromRGB(40, 44, 56)
+	backpackBack.BorderSizePixel = 0
+	backpackBack.Parent = backpackFrame
+	corner(backpackBack, 7)
+
+	local backpackFill = Instance.new("Frame")
+	backpackFill.Size = UDim2.new(0, 0, 1, 0)
+	backpackFill.BackgroundColor3 = ACCENT
+	backpackFill.BorderSizePixel = 0
+	backpackFill.Parent = backpackBack
+	corner(backpackFill, 7)
+
+	local backpackStatus = label(backpackFrame, "Place disponible", UDim2.new(1, -24, 0, 18), UDim2.new(0, 12, 0, 52), false)
+	backpackStatus.TextColor3 = ACCENT
+	backpackStatus.TextSize = 13
+
 	-- Compteur mondial
 	local globalFrame = Instance.new("Frame")
 	globalFrame.Size = UDim2.new(0, 320, 0, 52)
@@ -147,6 +178,40 @@ function HUD.Start()
 		end)
 	end
 
+	local function attributeNumber(name: string): number
+		local value = player:GetAttribute(name)
+		return if type(value) == "number" then value else 0
+	end
+
+	local function refreshBackpack()
+		local current = math.max(0, attributeNumber("CurrentBubbles"))
+		local capacity = math.max(0, attributeNumber("BackpackCapacity"))
+		local pendingSellValue = math.max(0, attributeNumber("PendingSellValue"))
+		local area = player:GetAttribute("PlayerArea")
+		local ratio = if capacity > 0 then math.clamp(current / capacity, 0, 1) else 0
+
+		backpackLabel.Text = ("Sac %s / %s"):format(comma(current), comma(capacity))
+		backpackFill.Size = UDim2.new(ratio, 0, 1, 0)
+
+		if ratio >= 1 then
+			backpackFill.BackgroundColor3 = Color3.fromRGB(255, 90, 90)
+			backpackStatus.TextColor3 = Color3.fromRGB(255, 120, 120)
+			backpackStatus.Text = "Sac plein !"
+		elseif ratio >= Config.Backpack.NearlyFullRatio then
+			backpackFill.BackgroundColor3 = Color3.fromRGB(255, 190, 70)
+			backpackStatus.TextColor3 = Color3.fromRGB(255, 210, 90)
+			backpackStatus.Text = "Sac presque plein"
+		else
+			backpackFill.BackgroundColor3 = ACCENT
+			backpackStatus.TextColor3 = ACCENT
+			backpackStatus.Text = "Place disponible"
+		end
+
+		if area == "Lobby" then
+			backpackStatus.Text = ("Valeur du sac : %s pièces"):format(comma(pendingSellValue))
+		end
+	end
+
 	-- Branchements
 	Remotes.Event("StatsUpdate").OnClientEvent:Connect(function(stats)
 		coinsLabel.Text = comma(stats.Coins) .. " pièces"
@@ -154,6 +219,11 @@ function HUD.Start()
 		local ratio = if stats.XPNeeded > 0 then math.clamp(stats.XP / stats.XPNeeded, 0, 1) else 0
 		TweenService:Create(xpFill, TweenInfo.new(0.25), { Size = UDim2.new(ratio, 0, 1, 0) }):Play()
 	end)
+
+	for _, attributeName in { "CurrentBubbles", "BackpackCapacity", "PendingSellValue", "PlayerArea" } do
+		player:GetAttributeChangedSignal(attributeName):Connect(refreshBackpack)
+	end
+	refreshBackpack()
 
 	Remotes.Event("GlobalCounter").OnClientEvent:Connect(function(total, target)
 		globalLabel.Text = ("%s / %s bulles"):format(comma(total), comma(target))

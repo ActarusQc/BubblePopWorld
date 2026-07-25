@@ -119,7 +119,8 @@ function PopEffects.Start()
 			burst(pos, def.Color, special)
 
 			if special then
-				floatingText(pos, "+" .. def.Coins, def.Color)
+				local storageValue = if type(def.StorageValue) == "number" then math.max(1, math.floor(def.StorageValue)) else 1
+				floatingText(pos, "+" .. storageValue, def.Color)
 			end
 
 			if played < 4 then
