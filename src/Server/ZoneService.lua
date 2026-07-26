@@ -222,45 +222,6 @@ local function addSurfaceSign(part: BasePart, face: Enum.NormalId, text: string,
 	label.Parent = gui
 end
 
--- Répare additivement un ProximityPrompt : complète uniquement les propriétés manquantes
--- (jamais d'écrasement d'une personnalisation Studio existante), sauf Rebuild.
-local function ensurePrompt(
-	part: BasePart,
-	name: string,
-	actionText: string,
-	objectText: string,
-	maxDistance: number
-): ProximityPrompt
-	local prompt = part:FindFirstChild(name)
-	if not (prompt and prompt:IsA("ProximityPrompt")) then
-		local created = Instance.new("ProximityPrompt")
-		created.Name = name
-		created.HoldDuration = 0.4
-		created.RequiresLineOfSight = false
-		created.Parent = part
-		prompt = created
-	end
-	local p = prompt :: ProximityPrompt
-	if Config.World.RebuildGeneratedLayout or p.ActionText == "" then
-		p.ActionText = actionText
-	end
-	if Config.World.RebuildGeneratedLayout or p.ObjectText == "" then
-		p.ObjectText = objectText
-	end
-	if Config.World.RebuildGeneratedLayout or p.MaxActivationDistance <= 0 then
-		p.MaxActivationDistance = maxDistance
-	end
-	return p
-end
-
-local function connectOnce(prompt: ProximityPrompt, key: string, fn: (Player) -> ())
-	if prompt:GetAttribute(key) == true then
-		return
-	end
-	prompt:SetAttribute(key, true)
-	prompt.Triggered:Connect(fn)
-end
-
 local function validateOutsideGrid(pos: Vector3, margin: number, label: string)
 	local b = Config.GetGridBounds()
 	if pos.X > b.MinX - margin and pos.X < b.MaxX + margin
@@ -274,6 +235,8 @@ end
 --------------------------------------------------------------------
 local lobbySpawnPart: BasePart? = nil
 local gameRoomSpawnPart: BasePart? = nil
+-- Zone de vente des bulles uniquement (la boutique d'items n'en a pas).
+local sellZonePart: BasePart? = nil
 
 local function disableStudioBaseplate()
 	local baseplate = workspace:FindFirstChild("Baseplate")
@@ -523,17 +486,6 @@ local function buildEntranceArch(decor: Folder, root: Vector3)
 		CanQuery = false,
 	})
 	glow.Parent = decor
-
-	local hint = makePart({
-		Name = "EntranceHint",
-		Size = Vector3.new(10, 1.2, 0.3),
-		CFrame = CFrame.new(pos + Vector3.new(0, 8.2, 1.8)),
-		Color = Color3.fromRGB(30, 45, 80),
-		Material = Enum.Material.SmoothPlastic,
-		CanCollide = false,
-	})
-	hint.Parent = decor
-	addSurfaceSign(hint, Enum.NormalId.Front, "Escaliers →")
 end
 
 --------------------------------------------------------------------
@@ -627,7 +579,7 @@ local function addSellValueScreen(board: BasePart)
 	caption.Name = "Caption"
 	caption.Size = UDim2.new(1, 0, 0.28, 0)
 	caption.BackgroundTransparency = 1
-	caption.Text = "Valeur du sac :"
+	caption.Text = "Bag value:"
 	caption.TextColor3 = PALETTE.White
 	caption.Font = Enum.Font.GothamBold
 	caption.TextScaled = true
@@ -656,7 +608,7 @@ local function addSellValueScreen(board: BasePart)
 	unit.Size = UDim2.new(0.34, 0, 0.55, 0)
 	unit.Position = UDim2.new(0.64, 0, 0.28, 0)
 	unit.BackgroundTransparency = 1
-	unit.Text = "pièces"
+	unit.Text = "coins"
 	unit.TextColor3 = PALETTE.White
 	unit.Font = Enum.Font.Gotham
 	unit.TextScaled = true
@@ -685,7 +637,7 @@ local function addSellTitleGui(sign: BasePart)
 	line1.Size = UDim2.new(1, -24, 0.42, 0)
 	line1.Position = UDim2.new(0, 12, 0.1, 0)
 	line1.BackgroundTransparency = 1
-	line1.Text = "VENDRE LES"
+	line1.Text = "SELL YOUR"
 	line1.TextColor3 = PALETTE.White
 	line1.Font = Enum.Font.GothamBold
 	line1.TextScaled = true
@@ -695,7 +647,7 @@ local function addSellTitleGui(sign: BasePart)
 	line2.Size = UDim2.new(1, -24, 0.42, 0)
 	line2.Position = UDim2.new(0, 12, 0.5, 0)
 	line2.BackgroundTransparency = 1
-	line2.Text = "BULLES"
+	line2.Text = "BUBBLES"
 	line2.TextColor3 = PALETTE.White
 	line2.Font = Enum.Font.GothamBold
 	line2.TextScaled = true
@@ -1307,7 +1259,7 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 	termLabel.Size = UDim2.new(1, -16, 0.42, 0)
 	termLabel.Position = UDim2.new(0, 8, 0.06, 0)
 	termLabel.BackgroundTransparency = 1
-	termLabel.Text = "Transforme tes bulles en pièces !"
+	termLabel.Text = "Turn your bubbles into coins!"
 	termLabel.TextColor3 = PALETTE.White
 	termLabel.Font = Enum.Font.GothamBold
 	termLabel.TextScaled = true
@@ -1384,7 +1336,7 @@ local function buildLeaderboardBoard(decor: Folder, root: Vector3)
 	title.Size = UDim2.new(1, -16, 0, 44)
 	title.Position = UDim2.new(0, 8, 0, 8)
 	title.BackgroundTransparency = 1
-	title.Text = "TOP 10 JOUEURS"
+	title.Text = "TOP 10 PLAYERS"
 	title.TextColor3 = PALETTE.White
 	title.Font = Enum.Font.GothamBold
 	title.TextScaled = true
@@ -1395,7 +1347,7 @@ local function buildLeaderboardBoard(decor: Folder, root: Vector3)
 	subtitle.Size = UDim2.new(1, -16, 0, 24)
 	subtitle.Position = UDim2.new(0, 8, 0, 52)
 	subtitle.BackgroundTransparency = 1
-	subtitle.Text = "Classement richesse (pièces)"
+	subtitle.Text = "Wealth leaderboard (coins)"
 	subtitle.TextColor3 = PALETTE.Cyan
 	subtitle.Font = Enum.Font.Gotham
 	subtitle.TextScaled = true
@@ -1558,6 +1510,12 @@ local function buildLobby(lobby: Folder)
 		buildGuideSign(decor, root)
 	end
 
+	-- Décor hérité : le panonceau "Escaliers" n'existe plus.
+	local staleHint = decor:FindFirstChild("EntranceHint")
+	if staleHint then
+		staleHint:Destroy()
+	end
+
 	local spawn = ensurePart(lobby, "LobbySpawn", function()
 		local p = Instance.new("Part")
 		p.Anchored = true
@@ -1629,18 +1587,13 @@ local function buildLobby(lobby: Folder)
 		end
 	end
 
-	local sellPrompt = ensurePrompt(sellZone, "SellPrompt", "Vendre mes bulles", "VENDRE LES BULLES", Config.World.SellMaxDistance)
-	connectOnce(sellPrompt, "_wiredSell", function(player: Player)
-		local char = player.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if not (hrp and hrp:IsA("BasePart")) then
-			return
+	-- Vente automatique : plus aucun prompt à déclencher sur la zone de vente.
+	for _, child in ipairs(sellZone:GetChildren()) do
+		if child:IsA("ProximityPrompt") then
+			child:Destroy()
 		end
-		if (hrp.Position - sellZone.Position).Magnitude > Config.World.SellMaxDistance then
-			return
-		end
-		BackpackService.Sell(player)
-	end)
+	end
+	sellZonePart = sellZone
 end
 
 --------------------------------------------------------------------
@@ -2074,6 +2027,82 @@ local function watchPlayerArea()
 	end)
 end
 
+--------------------------------------------------------------------
+-- Vente automatique (kiosque de vente des bulles uniquement)
+--------------------------------------------------------------------
+-- `sellSpent[player]` = une vente a déjà eu lieu pour ce séjour dans la zone ;
+-- il faut ressortir (au-delà de ExitMargin) pour réarmer une nouvelle vente.
+local sellSpent: { [Player]: boolean } = {}
+local sellLastAt: { [Player]: number } = {}
+
+local function insideZone(zone: BasePart, pos: Vector3, margin: number): boolean
+	local offset = zone.CFrame:PointToObjectSpace(pos)
+	local half = zone.Size / 2
+	return math.abs(offset.X) <= half.X + margin
+		and math.abs(offset.Y) <= half.Y + margin
+		and math.abs(offset.Z) <= half.Z + margin
+end
+
+local function watchAutoSell()
+	local A = Config.Lobby.AutoSell
+	local accum = 0
+	RunService.Heartbeat:Connect(function(dt)
+		accum += dt
+		if accum < A.PollInterval then
+			return
+		end
+		accum = 0
+
+		local zone = sellZonePart
+		if not (zone and zone.Parent) then
+			return
+		end
+
+		for _, player in ipairs(Players:GetPlayers()) do
+			local char = player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if not (hrp and hrp:IsA("BasePart")) then
+				sellSpent[player] = nil
+				continue
+			end
+
+			if not insideZone(zone, hrp.Position, 0) then
+				-- Hystérésis : on ne réarme qu'une fois clairement sorti de la zone.
+				if not insideZone(zone, hrp.Position, A.ExitMargin) then
+					sellSpent[player] = nil
+				end
+				continue
+			end
+
+			if sellSpent[player] then
+				continue
+			end
+
+			-- Sac vide : aucune vente, aucun message (pas de spam tant qu'on reste dedans).
+			local profile = DataService.Get(player)
+			if not profile or profile.CurrentBubbles <= 0 then
+				continue
+			end
+
+			local last = sellLastAt[player]
+			if last and os.clock() - last < A.Cooldown then
+				continue
+			end
+
+			sellSpent[player] = true
+			sellLastAt[player] = os.clock()
+			task.spawn(function()
+				local sold = BackpackService.Sell(player)
+				if not sold then
+					-- Verrou occupé ou crédit refusé : on réarme pour un nouvel essai,
+					-- que le cooldown espacera de toute façon.
+					sellSpent[player] = nil
+				end
+			end)
+		end
+	end)
+end
+
 local function watchFallReset()
 	RunService.Heartbeat:Connect(function()
 		for _, player in ipairs(Players:GetPlayers()) do
@@ -2119,9 +2148,12 @@ function ZoneService.Start()
 		teleportLast[player] = nil
 		spawningInProgress[player] = nil
 		fallResetGuard[player] = nil
+		sellSpent[player] = nil
+		sellLastAt[player] = nil
 	end)
 
 	watchPlayerArea()
+	watchAutoSell()
 	watchFallReset()
 end
 

@@ -5,11 +5,11 @@ local BubbleTypes = {}
 
 BubbleTypes.List = {
 	-- Teintes bulle de savon (pas de blanc opaque)
-	{ Id = "Normal",    Label = "Bulle",             Weight = 1000, StorageValue = 1, SellValue = 1,    Coins = 1,    XP = 1,   Color = Color3.fromRGB(145, 225, 255) },
-	{ Id = "Rare",      Label = "Bulle rare",        Weight = 110,  StorageValue = 1, SellValue = 8,    Coins = 8,    XP = 5,   Color = Color3.fromRGB(90, 170, 255) },
-	{ Id = "Golden",    Label = "Bulle dorée",       Weight = 30,   StorageValue = 1, SellValue = 45,   Coins = 45,   XP = 22,  Color = Color3.fromRGB(255, 200, 70) },
-	{ Id = "Diamond",   Label = "Bulle diamant",     Weight = 7,    StorageValue = 1, SellValue = 220,  Coins = 220,  XP = 95,  Color = Color3.fromRGB(100, 240, 230) },
-	{ Id = "Legendary", Label = "Bulle légendaire",  Weight = 1,    StorageValue = 1, SellValue = 1800, Coins = 1800, XP = 700, Color = Color3.fromRGB(255, 110, 210), Announce = true },
+	{ Id = "Normal",    Label = "Bubble",           Weight = 1000, StorageValue = 1, SellValue = 1,    Coins = 1,    Color = Color3.fromRGB(145, 225, 255) },
+	{ Id = "Rare",      Label = "Rare bubble",      Weight = 110,  StorageValue = 1, SellValue = 8,    Coins = 8,    Color = Color3.fromRGB(90, 170, 255) },
+	{ Id = "Golden",    Label = "Golden bubble",    Weight = 30,   StorageValue = 1, SellValue = 45,   Coins = 45,   Color = Color3.fromRGB(255, 200, 70) },
+	{ Id = "Diamond",   Label = "Diamond bubble",   Weight = 7,    StorageValue = 1, SellValue = 220,  Coins = 220,  Color = Color3.fromRGB(100, 240, 230) },
+	{ Id = "Legendary", Label = "Legendary bubble", Weight = 1,    StorageValue = 1, SellValue = 1800, Coins = 1800, Color = Color3.fromRGB(255, 110, 210), Announce = true },
 }
 
 BubbleTypes.ById = {}

@@ -4,6 +4,7 @@
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
@@ -15,10 +16,13 @@ local DataService = {}
 local profiles: { [Player]: any } = {}
 local mutationWaiter: ((Player, number) -> boolean)? = nil
 
+-- XP : champ hérité, conservé pour ne pas perdre les anciens profils, mais gelé —
+-- il ne pilote plus le niveau (voir TotalBubblesSold) et n'est plus incrémenté ni affiché.
 local TEMPLATE = {
 	Coins = 0,
 	XP = 0,
 	Level = 1,
+	TotalBubblesSold = 0,
 	Pops = 0,
 	Playtime = 0,
 	ChestsOpened = 0,
@@ -85,6 +89,13 @@ local function reconcileBackpack(data)
 	data.PendingSellValue = pending
 end
 
+-- TotalBubblesSold est l'unique source de vérité du niveau : on l'assainit au chargement
+-- puis on recalcule Level, y compris pour un profil antérieur où Level venait de l'XP.
+local function reconcileProgression(data)
+	data.TotalBubblesSold = math.max(0, math.floor(finiteNumber(data.TotalBubblesSold, 0)))
+	data.Level = Config.LevelForBubbles(data.TotalBubblesSold)
+end
+
 local function retry(fn, tries: number?)
 	local attempts = tries or 4
 	for i = 1, attempts do
@@ -114,6 +125,7 @@ function DataService.Load(player: Player)
 
 	local data = if ok and type(saved) == "table" then reconcile(saved, TEMPLATE) else deepCopy(TEMPLATE)
 	reconcileBackpack(data)
+	reconcileProgression(data)
 	data.__loaded = ok            -- si false : on ne sauvegarde PAS (évite d'écraser)
 	data.__joinClock = os.clock()
 	profiles[player] = data
@@ -121,9 +133,9 @@ function DataService.Load(player: Player)
 	-- leaderstats (classement natif Roblox)
 	local ls = Instance.new("Folder")
 	ls.Name = "leaderstats"
-	local coins = Instance.new("IntValue"); coins.Name = "Pièces"; coins.Parent = ls
-	local level = Instance.new("IntValue"); level.Name = "Niveau"; level.Parent = ls
-	local pops  = Instance.new("IntValue"); pops.Name = "Bulles";  pops.Parent = ls
+	local coins = Instance.new("IntValue"); coins.Name = "Coins"; coins.Parent = ls
+	local level = Instance.new("IntValue"); level.Name = "Level"; level.Parent = ls
+	local pops  = Instance.new("IntValue"); pops.Name = "Bubbles"; pops.Parent = ls
 	ls.Parent = player
 
 	DataService.Push(player)
@@ -200,18 +212,22 @@ function DataService.Push(player: Player)
 	player:SetAttribute("CurrentBubbles", d.CurrentBubbles)
 	player:SetAttribute("BackpackCapacity", d.BackpackCapacity)
 	player:SetAttribute("PendingSellValue", d.PendingSellValue)
+	player:SetAttribute("TotalBubblesSold", d.TotalBubblesSold)
 	local ls = player:FindFirstChild("leaderstats")
 	if ls then
-		(ls:FindFirstChild("Pièces") :: IntValue).Value = math.min(d.Coins, 2^31 - 1)
-		;(ls:FindFirstChild("Niveau") :: IntValue).Value = d.Level
-		;(ls:FindFirstChild("Bulles") :: IntValue).Value = math.min(d.Pops, 2^31 - 1)
+		(ls:FindFirstChild("Coins") :: IntValue).Value = math.min(d.Coins, 2^31 - 1)
+		;(ls:FindFirstChild("Level") :: IntValue).Value = d.Level
+		;(ls:FindFirstChild("Bubbles") :: IntValue).Value = math.min(d.Pops, 2^31 - 1)
 	end
+	local nextLevel = d.Level + 1
 	Remotes.Event("StatsUpdate"):FireClient(player, {
 		Coins = d.Coins,
-		XP = d.XP,
 		Level = d.Level,
-		XPNeeded = Config.XPForLevel(d.Level),
 		Pops = d.Pops,
+		BubblesSold = d.TotalBubblesSold,
+		LevelStart = Config.BubblesForLevel(d.Level),
+		-- nil au niveau max : le HUD affiche alors « MAX ».
+		NextLevelAt = if nextLevel <= Config.Progression.MaxLevel then Config.BubblesForLevel(nextLevel) else nil,
 		Upgrades = d.Upgrades,
 		Worlds = d.Worlds,
 	})
@@ -239,23 +255,26 @@ function DataService.AddCoins(player: Player, amount: number, source: string?): 
 	return true
 end
 
-function DataService.AddXP(player: Player, amount: number)
+-- Unique source de progression permanente : les bulles réellement vendues au kiosque.
+-- Appelée sous le verrou du sac par BackpackService, après le débit effectif du sac.
+function DataService.AddBubblesSold(player: Player, amount: number): boolean
 	local d = profiles[player]
-	if not d then return end
-	d.XP += amount
-	local leveled = false
-	while d.Level < Config.XP.MaxLevel do
-		local need = Config.XPForLevel(d.Level)
-		if d.XP < need then break end
-		d.XP -= need
-		d.Level += 1
-		leveled = true
-	end
-	if leveled then
+	if not d then return false end
+	if type(amount) ~= "number" or amount ~= amount or amount == math.huge then return false end
+	amount = math.floor(amount)
+	if amount <= 0 then return false end
+
+	d.TotalBubblesSold += amount
+	d.__dirty = true
+
+	local newLevel = Config.LevelForBubbles(d.TotalBubblesSold)
+	if newLevel > d.Level then
+		d.Level = newLevel
 		DataService.ApplyCharacterStats(player)
 		DataService.UnlockWorlds(player)
-		Remotes.Event("Announce"):FireClient(player, ("Niveau %d atteint !"):format(d.Level), "level")
+		Remotes.Event("Announce"):FireClient(player, ("Level %d reached!"):format(d.Level), "level")
 	end
+	return true
 end
 
 function DataService.UnlockWorlds(player: Player)
@@ -264,37 +283,50 @@ function DataService.UnlockWorlds(player: Player)
 	for _, world in ipairs(Config.Worlds) do
 		if d.Level >= world.LevelReq and not table.find(d.Worlds, world.Id) then
 			table.insert(d.Worlds, world.Id)
-			Remotes.Event("Announce"):FireClient(player, ("Nouveau monde débloqué : %s"):format(world.Label), "world")
+			Remotes.Event("Announce"):FireClient(player, ("New world unlocked: %s"):format(world.Label), "world")
 		end
 	end
 end
 
-function DataService.Multipliers(player: Player): (number, number)
+function DataService.Multipliers(player: Player): number
 	local d = profiles[player]
-	if not d then return 1, 1 end
-	local coin = 1 + d.Upgrades.CoinMult * Config.Upgrades.CoinMult.PerLevel
-	local xp = 1 + d.Upgrades.XPMult * Config.Upgrades.XPMult.PerLevel
-	return coin, xp
+	if not d then return 1 end
+	return 1 + d.Upgrades.CoinMult * Config.Upgrades.CoinMult.PerLevel
 end
 
+-- Vitesse et saut sont décidés par le serveur à chaque apparition du personnage.
 function DataService.ApplyCharacterStats(player: Player)
 	local d = profiles[player]
 	local char = player.Character
 	if not d or not char then return end
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
-	hum.WalkSpeed = Config.Character.BaseWalkSpeed + d.Upgrades.Speed * Config.Upgrades.Speed.PerLevel
-	hum.UseJumpPower = true
-	hum.JumpPower = Config.Character.BaseJumpPower + d.Upgrades.Jump * Config.Upgrades.Jump.PerLevel
+	local M = Config.PlayerMovement
+	hum.WalkSpeed = math.clamp(
+		M.WalkSpeed + d.Upgrades.Speed * Config.Upgrades.Speed.PerLevel, 0, M.MaxWalkSpeed)
+	hum.UseJumpPower = M.UseJumpPower
+	hum.JumpPower = math.clamp(
+		M.JumpPower + d.Upgrades.Jump * Config.Upgrades.Jump.PerLevel, 0, M.MaxJumpPower)
 end
 
 function DataService.Start()
+	-- Valeurs de départ appliquées par Roblox dès l'apparition, avant même
+	-- ApplyCharacterStats : évite une frame de saut à la hauteur par défaut.
+	local M = Config.PlayerMovement
+	StarterPlayer.CharacterUseJumpPower = M.UseJumpPower
+	StarterPlayer.CharacterJumpPower = M.JumpPower
+	StarterPlayer.CharacterWalkSpeed = M.WalkSpeed
+
 	Players.PlayerAdded:Connect(function(player)
 		DataService.Load(player)
-		player.CharacterAdded:Connect(function()
-			task.wait(0.2)
+		local function onCharacter(character: Model)
+			character:WaitForChild("Humanoid", 10)
 			DataService.ApplyCharacterStats(player)
-		end)
+		end
+		player.CharacterAdded:Connect(onCharacter)
+		if player.Character then
+			task.spawn(onCharacter, player.Character)
+		end
 	end)
 
 	Players.PlayerRemoving:Connect(function(player)

@@ -148,7 +148,7 @@ local function wireMainSign(mesh: BasePart, face: Enum.NormalId)
 	line1.Size = UDim2.new(1, -20, 0.55, 0)
 	line1.Position = UDim2.new(0, 10, 0.08, 0)
 	line1.BackgroundTransparency = 1
-	line1.Text = "VENDS TES BULLES"
+	line1.Text = "SELL YOUR BUBBLES"
 	line1.TextColor3 = WHITE
 	line1.Font = Enum.Font.GothamBold
 	line1.TextScaled = true
@@ -160,7 +160,7 @@ local function wireMainSign(mesh: BasePart, face: Enum.NormalId)
 	line2.Size = UDim2.new(1, -20, 0.3, 0)
 	line2.Position = UDim2.new(0, 10, 0.62, 0)
 	line2.BackgroundTransparency = 1
-	line2.Text = "ÉCLATE · REMPLIS · ENCAISSE"
+	line2.Text = "POP · FILL · CASH IN"
 	line2.TextColor3 = CYAN
 	line2.Font = Enum.Font.Gotham
 	line2.TextScaled = true
@@ -195,7 +195,7 @@ local function wireValueDisplay(mesh: BasePart, face: Enum.NormalId)
 	caption.Name = "Caption"
 	caption.Size = UDim2.new(1, 0, 0.28, 0)
 	caption.BackgroundTransparency = 1
-	caption.Text = "Valeur du sac :"
+	caption.Text = "Bag value:"
 	caption.TextColor3 = WHITE
 	caption.Font = Enum.Font.GothamBold
 	caption.TextScaled = true
@@ -224,7 +224,7 @@ local function wireValueDisplay(mesh: BasePart, face: Enum.NormalId)
 	unit.Size = UDim2.new(0.34, 0, 0.55, 0)
 	unit.Position = UDim2.new(0.64, 0, 0.28, 0)
 	unit.BackgroundTransparency = 1
-	unit.Text = "pièces"
+	unit.Text = "coins"
 	unit.TextColor3 = WHITE
 	unit.Font = Enum.Font.Gotham
 	unit.TextScaled = true
@@ -262,7 +262,7 @@ local function wireTerminal(mesh: BasePart, face: Enum.NormalId)
 	t2.Size = UDim2.new(1, -12, 0.22, 0)
 	t2.Position = UDim2.new(0, 6, 0.42, 0)
 	t2.BackgroundTransparency = 1
-	t2.Text = "Approche le pad"
+	t2.Text = "Step on the pad"
 	t2.TextColor3 = WHITE
 	t2.Font = Enum.Font.Gotham
 	t2.TextScaled = true
@@ -273,7 +273,7 @@ local function wireTerminal(mesh: BasePart, face: Enum.NormalId)
 	t3.Size = UDim2.new(1, -12, 0.22, 0)
 	t3.Position = UDim2.new(0, 6, 0.66, 0)
 	t3.BackgroundTransparency = 1
-	t3.Text = "puis VENDRE"
+	t3.Text = "then SELL"
 	t3.TextColor3 = WHITE
 	t3.Font = Enum.Font.Gotham
 	t3.TextScaled = true

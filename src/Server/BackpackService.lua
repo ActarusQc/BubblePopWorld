@@ -28,6 +28,7 @@ BackpackService.ErrorCodes = table.freeze({
 -- Verrou de mutation par joueur : une seule opération sac à la fois (AddBubbles/RollbackAdd/Sell).
 local locks: { [Player]: boolean } = {}
 local lastFullNotify: { [Player]: number } = {}
+local lastSellSave: { [Player]: number } = {}
 -- Compteur de génération sac (session) : invalidé après Sell pour bloquer les rollbacks périmés.
 local gen: { [Player]: number } = {}
 
@@ -157,7 +158,7 @@ function BackpackService.NotifyFull(player: Player)
 		return
 	end
 	lastFullNotify[player] = now
-	Remotes.Event("Announce"):FireClient(player, "Ton sac est plein ! Va vendre tes bulles.", "backpack_full")
+	Remotes.Event("Announce"):FireClient(player, "Your backpack is full! Go sell your bubbles.", "backpack_full")
 end
 
 -- Doit être appelé sous le verrou (voir AddBubbles).
@@ -264,10 +265,14 @@ local function doSell(player: Player): (number?, number?, string?)
 	end
 
 	-- Vider le sac immédiatement en mémoire : aucun état intermédiaire observable hors verrou.
+	-- Un second déclenchement du kiosque retombera donc sur "empty" : pas de double crédit.
 	d.CurrentBubbles = 0
 	d.PendingSellValue = 0
 	bumpGen(player)
 	d.__dirty = true
+
+	-- Progression permanente : seules les bulles réellement retirées du sac comptent.
+	DataService.AddBubblesSold(player, sold)
 
 	return sold, earned, nil
 end
@@ -286,16 +291,25 @@ function BackpackService.Sell(player: Player): (number?, number?, string?)
 
 	if sold and earned then
 		DataService.Push(player)
+
+		-- Persiste la progression peu après la vente, sans une écriture par transaction.
+		local now = os.clock()
+		local last = lastSellSave[player]
+		if not last or now - last >= Config.Data.SaveAfterSellThrottle then
+			lastSellSave[player] = now
+			task.spawn(DataService.Save, player)
+		end
+
 		Remotes.Event("Announce"):FireClient(
 			player,
-			("Tu as vendu %d bulles pour %d pièces!"):format(sold, earned),
+			("You sold %d bubbles for %d coins!"):format(sold, earned),
 			"sell"
 		)
 		return sold, earned, nil
 	end
 
 	if err == "empty" then
-		Remotes.Event("Announce"):FireClient(player, "Ton sac est vide, rien à vendre.", "sell")
+		Remotes.Event("Announce"):FireClient(player, "Your backpack is empty, nothing to sell.", "sell")
 	end
 	return nil, nil, err
 end
@@ -321,6 +335,7 @@ function BackpackService.Start()
 	Players.PlayerRemoving:Connect(function(player)
 		locks[player] = nil
 		lastFullNotify[player] = nil
+		lastSellSave[player] = nil
 		gen[player] = nil
 	end)
 end

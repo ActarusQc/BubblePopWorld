@@ -16,7 +16,7 @@ local services = {
 	require(script.DropService),
 	require(script.ChestService),
 	require(script.ShopService),
-	require(script.BubbleShopBuilder),
+	require(script.ItemShopBuilder),
 	require(script.LeaderboardService),
 	require(script.AdminService),
 }

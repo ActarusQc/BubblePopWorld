@@ -1,0 +1,7 @@
+Cursor instructions (short)
+---------------------------
+Use the imported V2 MeshParts to rebuild the sell kiosk with a more premium, maquette-like silhouette.
+Prioritize the modular meshes over primitive Parts for the visible structure.
+Keep the existing sell logic intact.
+Use SurfaceGui for text and a transparent Part/Cylinder for the tank chamber.
+Do not delete manual imported MeshParts on rebuild.

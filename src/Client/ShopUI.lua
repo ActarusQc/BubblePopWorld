@@ -30,7 +30,7 @@ function ShopUI.Start()
 	toggle.Size = UDim2.new(0, 130, 0, 44)
 	toggle.Position = UDim2.new(0, 16, 0, 124)
 	toggle.BackgroundColor3 = Color3.fromRGB(120, 200, 255)
-	toggle.Text = "Boutique"
+	toggle.Text = "Shop"
 	toggle.TextColor3 = Color3.fromRGB(10, 12, 18)
 	toggle.Font = Enum.Font.GothamBold
 	toggle.TextSize = 16
@@ -58,7 +58,7 @@ function ShopUI.Start()
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.new(1, 0, 0, 46)
 	title.BackgroundTransparency = 1
-	title.Text = "Améliorations"
+	title.Text = "Upgrades"
 	title.TextColor3 = Color3.new(1, 1, 1)
 	title.Font = Enum.Font.GothamBlack
 	title.TextSize = 22
@@ -99,7 +99,7 @@ function ShopUI.Start()
 			name.Size = UDim2.new(1, -150, 1, 0)
 			name.Position = UDim2.new(0, 12, 0, 0)
 			name.BackgroundTransparency = 1
-			name.Text = ("%s  ·  niv. %d/%d"):format(item.Label, item.Level, item.Max)
+			name.Text = ("%s  ·  lv. %d/%d"):format(item.Label, item.Level, item.Max)
 			name.TextColor3 = Color3.new(1, 1, 1)
 			name.Font = Enum.Font.GothamMedium
 			name.TextSize = 15
@@ -113,7 +113,7 @@ function ShopUI.Start()
 			buy.TextColor3 = Color3.fromRGB(10, 12, 18)
 			buy.Font = Enum.Font.GothamBold
 			buy.TextSize = 14
-			buy.Text = if item.Cost < 0 then "MAX" else (tostring(item.Cost) .. " pièces")
+			buy.Text = if item.Cost < 0 then "MAX" else (tostring(item.Cost) .. " coins")
 			buy.BorderSizePixel = 0
 			buy.Selectable = true
 			buy.SelectionOrder = 1
@@ -126,7 +126,7 @@ function ShopUI.Start()
 				if item.Cost < 0 then return end
 				local ok, msg = Remotes.Func("BuyUpgrade"):InvokeServer(item.Id)
 				if not ok then
-					buy.Text = msg or "Refusé"
+					buy.Text = msg or "Denied"
 					task.wait(1)
 				end
 				render()

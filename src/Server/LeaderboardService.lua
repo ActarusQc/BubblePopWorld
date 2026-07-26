@@ -11,9 +11,9 @@ local Remotes = require(Shared.Remotes)
 local DataService = require(script.Parent.DataService)
 
 local BOARDS = {
-	{ Id = "Pops",  Label = "Bulles éclatées", Store = DataStoreService:GetOrderedDataStore(Config.LeaderboardStoreName("Pops")),  Field = "Pops" },
-	{ Id = "Level", Label = "Niveau",          Store = DataStoreService:GetOrderedDataStore(Config.LeaderboardStoreName("Level")), Field = "Level" },
-	{ Id = "Coins", Label = "Richesse",        Store = DataStoreService:GetOrderedDataStore(Config.LeaderboardStoreName("Coins")), Field = "Coins" },
+	{ Id = "Pops",  Label = "Bubbles popped", Store = DataStoreService:GetOrderedDataStore(Config.LeaderboardStoreName("Pops")),  Field = "Pops" },
+	{ Id = "Level", Label = "Level",          Store = DataStoreService:GetOrderedDataStore(Config.LeaderboardStoreName("Level")), Field = "Level" },
+	{ Id = "Coins", Label = "Wealth",         Store = DataStoreService:GetOrderedDataStore(Config.LeaderboardStoreName("Coins")), Field = "Coins" },
 }
 
 -- Classement principal affiché sur le panneau lobby.
@@ -90,7 +90,7 @@ local function updateWorldBoard()
 				nameLabel.Text = tostring(entry.Name)
 			end
 			if valueLabel and valueLabel:IsA("TextLabel") then
-				valueLabel.Text = comma(entry.Value) .. " pcs"
+				valueLabel.Text = comma(entry.Value) .. " coins"
 			end
 		else
 			if rankLabel and rankLabel:IsA("TextLabel") then

@@ -52,7 +52,7 @@ local function ensureWingToggleTool(player: Player): Tool?
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
 	tool.ManualActivationOnly = true
-	tool.ToolTip = "RT / clic : mettre ou retirer les ailes"
+	tool.ToolTip = "RT / click: equip or unequip the wings"
 	tool:SetAttribute("ToolId", "Ailes")
 	tool:SetAttribute("Permanent", true)
 	tool:SetAttribute("Consumable", false)
@@ -84,16 +84,16 @@ local function toggleWings(player: Player)
 	local equipped = player:GetAttribute("HasWings") == true
 	setWingsEquipped(player, not equipped)
 	if not equipped then
-		Remotes.Event("Announce"):FireClient(player, "Ailes mises — saute pour voler !", "item")
+		Remotes.Event("Announce"):FireClient(player, "Wings on — jump to fly!", "item")
 	else
-		Remotes.Event("Announce"):FireClient(player, "Ailes retirées.", "item")
+		Remotes.Event("Announce"):FireClient(player, "Wings off.", "item")
 	end
 end
 
 local function grantWings(player: Player)
 	if player:GetAttribute("OwnsWings") == true then
 		ensureWingToggleTool(player)
-		Remotes.Event("Announce"):FireClient(player, "Tu as déjà des Ailes (outil pour les mettre/retirer).", "item")
+		Remotes.Event("Announce"):FireClient(player, "You already own Wings (use the tool to toggle them).", "item")
 		return
 	end
 
@@ -102,7 +102,7 @@ local function grantWings(player: Player)
 	ensureWingToggleTool(player)
 	Remotes.Event("Announce"):FireClient(
 		player,
-		"Ailes obtenues ! Équipe l'outil Ailes puis RT pour les mettre/retirer.",
+		"Wings unlocked! Equip the Wings tool, then press RT to toggle them.",
 		"item"
 	)
 end
@@ -148,13 +148,13 @@ function ToolService.Give(player: Player, id: string)
 
 	Remotes.Event("Announce"):FireClient(
 		player,
-		("Objet : %s (1 usage) — équipe puis RT / clic"):format(def.Name),
+		("Item: %s (1 use) — equip it, then RT / click"):format(def.Name),
 		"item"
 	)
 
 	if def.Announce then
 		Remotes.Event("Announce"):FireAllClients(
-			("%s a trouvé l'objet mythique %s !"):format(player.DisplayName, def.Name), "legendary")
+			("%s found the mythic item %s!"):format(player.DisplayName, def.Name), "legendary")
 		local profile = DataService.Get(player)
 		if profile then profile.MythicsFound += 1 end
 	end

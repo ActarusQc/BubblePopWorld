@@ -183,7 +183,7 @@ local function spawnDrop()
 
 	if def.Rarity == "Epic" or def.Rarity == "Mythic" then
 		Remotes.Event("Announce"):FireAllClients(
-			("Un objet %s vient d'apparaître : %s"):format(def.Rarity, def.Name), "item")
+			("A %s item just appeared: %s"):format(def.Rarity, def.Name), "item")
 	end
 
 	Debris:AddItem(model, Config.Drops.Lifetime)

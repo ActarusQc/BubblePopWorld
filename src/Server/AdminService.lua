@@ -76,7 +76,7 @@ local function resetUserId(userId: number): (boolean, string)
 		end
 		DataService.Save(target)
 		LeaderboardService.RemoveEntry(userId)
-		Remotes.Event("Announce"):FireClient(target, "Ta progression a été réinitialisée.", "admin")
+		Remotes.Event("Announce"):FireClient(target, "Your progress has been reset.", "admin")
 		log("profil réinitialisé EN LIGNE : %s (%d)", target.Name, userId)
 		return true, ("%s réinitialisé (en ligne) et sauvegardé."):format(target.Name)
 	end

@@ -316,7 +316,6 @@ end
 
 type PopContext = {
 	coinMult: number,
-	xpMult: number,
 	worldMult: number,
 	extra: number,
 	combo: () -> number,
@@ -362,19 +361,18 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 end
 
 -- API publique : éclate une liste de cellules pour un joueur.
--- Les bulles ne créditent JAMAIS de pièces ici : elles remplissent le sac
--- (vente via BackpackService.Sell). L'XP reste immédiate après un pop réussi.
+-- Un pop ne crédite JAMAIS ni pièces ni progression permanente : il remplit le sac.
+-- Pièces et niveau arrivent uniquement à la vente (BackpackService.Sell).
 function BubbleService.PopCells(player: Player, cells: { { number } }, multiplier: number?): number
 	if not DataService.Get(player) then return 0 end
 
-	local coinMult, xpMult = DataService.Multipliers(player)
+	local coinMult = DataService.Multipliers(player)
 
 	-- Le combo n'est enregistré qu'une fois par lot, et seulement si au moins une
 	-- cellule est réellement sur le point d'être ajoutée au sac.
 	local comboMult: number? = nil
 	local ctx: PopContext = {
 		coinMult = coinMult,
-		xpMult = xpMult,
 		worldMult = currentWorld.Mult,
 		extra = multiplier or 1,
 		combo = function(): number
@@ -385,7 +383,7 @@ function BubbleService.PopCells(player: Player, cells: { { number } }, multiplie
 		end,
 	}
 
-	local rawXP, count = 0, 0
+	local count = 0
 	local announce = nil
 	local notifiedFull = false
 
@@ -406,7 +404,6 @@ function BubbleService.PopCells(player: Player, cells: { { number } }, multiplie
 					releaseClaim(cell, token) -- garanti sur tous les chemins
 
 					if ok and status == "ok" and def then
-						rawXP += positiveNumber(def.XP, 0)
 						count += 1
 						if def.Announce then announce = def end
 					elseif ok and status == "full" and not notifiedFull then
@@ -423,10 +420,6 @@ function BubbleService.PopCells(player: Player, cells: { { number } }, multiplie
 	local profile = DataService.Get(player)
 	if not profile then return count end
 
-	local xp = math.floor(rawXP * xpMult * ctx.extra * (comboMult or 1))
-	if xp > 0 then
-		DataService.AddXP(player, xp)
-	end
 	profile.Pops += count
 	profile.__dirty = true
 	DataService.Push(player)
@@ -434,7 +427,7 @@ function BubbleService.PopCells(player: Player, cells: { { number } }, multiplie
 
 	if announce then
 		Remotes.Event("Announce"):FireAllClients(
-			("%s a éclaté une %s !"):format(player.DisplayName, announce.Label), "legendary")
+			("%s popped a %s!"):format(player.DisplayName, announce.Label), "legendary")
 	end
 
 	return count

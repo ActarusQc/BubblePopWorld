@@ -94,10 +94,12 @@ function HUD.Start()
 	panel.Parent = gui
 	corner(panel, 14)
 
-	local coinsLabel = label(panel, "0 pièces", UDim2.new(1, -20, 0, 28), UDim2.new(0, 12, 0, 6))
+	local coinsLabel = label(panel, "0 coins", UDim2.new(1, -20, 0, 28), UDim2.new(0, 12, 0, 6))
 	coinsLabel.TextColor3 = Color3.fromRGB(255, 210, 80)
 
-	local levelLabel = label(panel, "Niveau 1  ·  0 bulles", UDim2.new(1, -20, 0, 20), UDim2.new(0, 12, 0, 36))
+	local levelLabel = label(panel, "Level 1 — 0 / 125 bubbles sold", UDim2.new(1, -20, 0, 20), UDim2.new(0, 12, 0, 36))
+	levelLabel.TextSize = 14
+	levelLabel.TextScaled = false
 
 	local xpBack = Instance.new("Frame")
 	xpBack.Size = UDim2.new(1, -24, 0, 8)
@@ -114,7 +116,7 @@ function HUD.Start()
 	xpFill.Parent = xpBack
 	corner(xpFill, 4)
 
-	local backpackLabel = label(panel, "Sac : 0 / 0", UDim2.new(1, -24, 0, 22), UDim2.new(0, 12, 0, 72))
+	local backpackLabel = label(panel, "Backpack: 0 / 0", UDim2.new(1, -24, 0, 22), UDim2.new(0, 12, 0, 72))
 	backpackLabel.TextColor3 = ACCENT
 
 	local backpackBack = Instance.new("Frame")
@@ -132,7 +134,7 @@ function HUD.Start()
 	backpackFill.Parent = backpackBack
 	corner(backpackFill, 7)
 
-	local backpackStatus = label(panel, "Place disponible", UDim2.new(1, -24, 0, 18), UDim2.new(0, 12, 0, 118), false)
+	local backpackStatus = label(panel, "Room available", UDim2.new(1, -24, 0, 18), UDim2.new(0, 12, 0, 118), false)
 	backpackStatus.TextColor3 = ACCENT
 	backpackStatus.TextSize = 13
 
@@ -146,7 +148,7 @@ function HUD.Start()
 	globalFrame.Parent = gui
 	corner(globalFrame, 12)
 
-	local globalLabel = label(globalFrame, "Objectif mondial…", UDim2.new(1, -20, 0, 22), UDim2.new(0, 10, 0, 5))
+	local globalLabel = label(globalFrame, "Global goal…", UDim2.new(1, -20, 0, 22), UDim2.new(0, 10, 0, 5))
 	globalLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 	local goalBack = Instance.new("Frame")
@@ -216,21 +218,21 @@ function HUD.Start()
 		local pendingSellValue = math.max(0, attributeNumber("PendingSellValue"))
 		local ratio = if capacity > 0 then math.clamp(current / capacity, 0, 1) else 0
 
-		backpackLabel.Text = ("Sac : %s / %s"):format(comma(current), comma(capacity))
+		backpackLabel.Text = ("Backpack: %s / %s"):format(comma(current), comma(capacity))
 		backpackFill.Size = UDim2.new(ratio, 0, 1, 0)
 
 		if ratio >= 1 then
 			backpackFill.BackgroundColor3 = Color3.fromRGB(255, 90, 90)
 			backpackStatus.TextColor3 = Color3.fromRGB(255, 120, 120)
-			backpackStatus.Text = "Sac plein !"
+			backpackStatus.Text = "Backpack full!"
 		elseif ratio >= Config.Backpack.NearlyFullRatio then
 			backpackFill.BackgroundColor3 = Color3.fromRGB(255, 190, 70)
 			backpackStatus.TextColor3 = Color3.fromRGB(255, 210, 90)
-			backpackStatus.Text = "Sac presque plein"
+			backpackStatus.Text = "Backpack almost full"
 		else
 			backpackFill.BackgroundColor3 = ACCENT
 			backpackStatus.TextColor3 = ACCENT
-			backpackStatus.Text = "Place disponible"
+			backpackStatus.Text = "Room available"
 		end
 
 		-- Valeur du sac : écran du kiosque (monde), pas dans le HUD.
@@ -240,15 +242,28 @@ function HUD.Start()
 			if sellLabel.Parent and sellLabel.Parent:IsA("Frame") then
 				sellLabel.Text = comma(pendingSellValue)
 			else
-				sellLabel.Text = ("Valeur du sac : %s pièces"):format(comma(pendingSellValue))
+				sellLabel.Text = ("Bag value: %s coins"):format(comma(pendingSellValue))
 			end
 		end
 	end
 
+	-- Progression = bulles vendues au kiosque, jamais les bulles encore dans le sac.
 	Remotes.Event("StatsUpdate").OnClientEvent:Connect(function(stats)
-		coinsLabel.Text = comma(stats.Coins) .. " pièces"
-		levelLabel.Text = ("Niveau %d  ·  %s bulles"):format(stats.Level, comma(stats.Pops))
-		local ratio = if stats.XPNeeded > 0 then math.clamp(stats.XP / stats.XPNeeded, 0, 1) else 0
+		coinsLabel.Text = comma(stats.Coins) .. " coins"
+
+		local sold = stats.BubblesSold or 0
+		local levelStart = stats.LevelStart or 0
+		local nextAt = stats.NextLevelAt
+		local ratio = 0
+		if nextAt then
+			levelLabel.Text = ("Level %d — %s / %s bubbles sold")
+				:format(stats.Level, comma(sold), comma(nextAt))
+			local span = nextAt - levelStart
+			ratio = if span > 0 then math.clamp((sold - levelStart) / span, 0, 1) else 1
+		else
+			levelLabel.Text = ("Level %d — MAX (%s bubbles sold)"):format(stats.Level, comma(sold))
+			ratio = 1
+		end
 		TweenService:Create(xpFill, TweenInfo.new(0.25), { Size = UDim2.new(ratio, 0, 1, 0) }):Play()
 	end)
 
@@ -269,7 +284,7 @@ function HUD.Start()
 	end)
 
 	Remotes.Event("GlobalCounter").OnClientEvent:Connect(function(total, target)
-		globalLabel.Text = ("%s / %s bulles"):format(comma(total), comma(target))
+		globalLabel.Text = ("%s / %s bubbles"):format(comma(total), comma(target))
 		goalFill.Size = UDim2.new(math.clamp(total / target, 0, 1), 0, 1, 0)
 	end)
 

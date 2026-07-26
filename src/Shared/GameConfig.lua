@@ -89,6 +89,20 @@ GameConfig.Lobby = {
 		SignSize = Vector3.new(15.5, 4.0, 1.15),
 		PadSize = Vector3.new(11, 0.4, 9),
 	},
+	-- Vente automatique : entrer dans SellZone suffit, aucun ProximityPrompt.
+	AutoSell = {
+		PollInterval = 0.2, -- fréquence du test de présence dans SellZone
+		ExitMargin = 3,     -- hystérésis : ré-armement seulement une fois clairement sorti
+		Cooldown = 1.5,     -- délai mini entre deux ventes automatiques d'un même joueur
+	},
+	-- Boutique d'items (achats futurs) : bâtiment distinct du kiosque de vente,
+	-- purement décoratif pour l'instant (aucune logique de vente de bulles).
+	ItemShop = {
+		OriginOffset = Vector3.new(30, 0, 14),
+		YawDegrees = -90, -- façade tournée vers le centre du lobby (-X)
+		SignText = "SHOP",
+		TaglineText = "ITEMS · COMING SOON",
+	},
 	-- Utilisé uniquement quand SellBooth.Mode == "StudioModel".
 	SellKiosk = {
 		MainSignGuiFace = "Back",
@@ -101,7 +115,7 @@ GameConfig.Lobby = {
 	EntranceSize = Vector3.new(16, 10, 6),
 	ClearanceFromGrid = 40,
 	RailingHeight = 4,
-	SignText = "1. Entre dans la salle\n2. Fais éclater des bulles\n3. Remplis ton sac\n4. Reviens vendre tes bulles",
+	SignText = "1. Enter the room\n2. Pop some bubbles\n3. Fill your backpack\n4. Come back and sell them",
 }
 
 local halfZ = (GameConfig.Grid.SizeZ * GameConfig.Grid.Spacing) / 2
@@ -175,26 +189,79 @@ GameConfig.Bubble = {
 	PopDelay = 0.06,                -- délai avant éclatement (on voit la bulle céder)
 }
 
-GameConfig.XP = {
-	Base = 100,
-	Growth = 1.16,
+-- Progression. Le niveau récompense la boucle complète (éclater → remplir → vendre) :
+-- il dérive uniquement du cumul de bulles RÉELLEMENT vendues au kiosque, jamais des pops.
+-- LevelThresholds[n] = total cumulé de bulles vendues pour atteindre le niveau n.
+-- Au-delà du tableau, l'écart entre deux niveaux repart du dernier écart connu
+-- (5000 - 3800 = 1200) et croît de 12 % par niveau : chaque palier coûte plus que le précédent.
+GameConfig.Progression = {
+	LevelThresholds = {
+		0,
+		125,
+		300,
+		550,
+		900,
+		1375,
+		2000,
+		2800,
+		3800,
+		5000,
+	},
+	PostTableIncrement = 1200,
+	PostTableGrowth = 1.12,
 	MaxLevel = 500,
 }
 
-function GameConfig.XPForLevel(level: number): number
-	return math.floor(GameConfig.XP.Base * (GameConfig.XP.Growth ^ (level - 1)))
+local thresholdCache: { number } = {}
+
+-- Total cumulé de bulles vendues nécessaire pour atteindre `level`.
+function GameConfig.BubblesForLevel(level: number): number
+	local P = GameConfig.Progression
+	local table_ = P.LevelThresholds
+	if level <= 1 then
+		return 0
+	end
+	if level <= #table_ then
+		return table_[level]
+	end
+	if level > P.MaxLevel then
+		level = P.MaxLevel
+	end
+	if thresholdCache[level] then
+		return thresholdCache[level]
+	end
+	local total = table_[#table_]
+	local increment = P.PostTableIncrement
+	for n = #table_ + 1, level do
+		increment *= P.PostTableGrowth
+		total += math.floor(increment + 0.5)
+		thresholdCache[n] = total
+	end
+	return total
+end
+
+-- Niveau correspondant à un cumul de bulles vendues (1 = aucune vente).
+function GameConfig.LevelForBubbles(sold: number): number
+	local P = GameConfig.Progression
+	local level = 1
+	while level < P.MaxLevel and sold >= GameConfig.BubblesForLevel(level + 1) do
+		level += 1
+	end
+	return level
 end
 
 -- Améliorations achetables. PerLevel = gain par niveau d'amélioration.
+-- XPMult n'est plus vendue (l'XP ne pilote plus la progression) : la définition reste
+-- pour que les niveaux déjà achetés se rechargent sans erreur, mais elle sort de la boutique.
 GameConfig.Upgrades = {
-	Speed     = { Label = "Vitesse",              Max = 20, BaseCost = 150, Growth = 1.35, PerLevel = 1.5 },
-	Jump      = { Label = "Saut",                 Max = 20, BaseCost = 200, Growth = 1.40, PerLevel = 2.5 },
-	Power     = { Label = "Puissance (rayon)",    Max = 8,  BaseCost = 800, Growth = 1.75, PerLevel = 1 },
-	CoinMult  = { Label = "Multiplicateur pièces",Max = 30, BaseCost = 300, Growth = 1.45, PerLevel = 0.10 },
-	XPMult    = { Label = "Multiplicateur XP",    Max = 30, BaseCost = 300, Growth = 1.45, PerLevel = 0.10 },
+	Speed     = { Label = "Speed",           Max = 20, BaseCost = 150, Growth = 1.35, PerLevel = 1.5 },
+	Jump      = { Label = "Jump",            Max = 20, BaseCost = 200, Growth = 1.40, PerLevel = 2.5 },
+	Power     = { Label = "Power (radius)",  Max = 8,  BaseCost = 800, Growth = 1.75, PerLevel = 1 },
+	CoinMult  = { Label = "Coin multiplier", Max = 30, BaseCost = 300, Growth = 1.45, PerLevel = 0.10 },
+	XPMult    = { Label = "XP multiplier",   Max = 30, BaseCost = 300, Growth = 1.45, PerLevel = 0.10 },
 }
 
-GameConfig.UpgradeOrder = { "Speed", "Jump", "Power", "CoinMult", "XPMult" }
+GameConfig.UpgradeOrder = { "Speed", "Jump", "Power", "CoinMult" }
 
 function GameConfig.UpgradeCost(id: string, currentLevel: number): number
 	local def = GameConfig.Upgrades[id]
@@ -202,9 +269,15 @@ function GameConfig.UpgradeCost(id: string, currentLevel: number): number
 	return math.floor(def.BaseCost * (def.Growth ^ currentLevel))
 end
 
-GameConfig.Character = {
-	BaseWalkSpeed = 20,
-	BaseJumpPower = 55,
+-- Déplacement du personnage. Le projet utilise JumpPower (UseJumpPower = true),
+-- pas JumpHeight : la hauteur du rebond sur les bulles en dépend directement
+-- (Bubble.BounceMultiplier × JumpPower), donc on ne touche jamais à la gravité.
+GameConfig.PlayerMovement = {
+	WalkSpeed = 16,
+	JumpPower = 35,
+	UseJumpPower = true,
+	MaxWalkSpeed = 80,
+	MaxJumpPower = 120,
 }
 
 GameConfig.Combo = {
@@ -227,10 +300,10 @@ GameConfig.Chest = {
 	MaxInterval = 210,
 	Lifetime = 50,
 	Tiers = {
-		{ Id = "Common",    Label = "Commun",     Weight = 60, Coins = {150, 400},     XP = 60,  Color = Color3.fromRGB(190,190,190) },
-		{ Id = "Rare",      Label = "Rare",       Weight = 25, Coins = {600, 1500},    XP = 250, Color = Color3.fromRGB(70,150,255) },
-		{ Id = "Epic",      Label = "Épique",     Weight = 12, Coins = {2500, 6000},   XP = 900, Color = Color3.fromRGB(180,80,255) },
-		{ Id = "Legendary", Label = "Légendaire", Weight = 3,  Coins = {12000, 30000}, XP = 4000,Color = Color3.fromRGB(255,180,40), Announce = true },
+		{ Id = "Common",    Label = "Common",    Weight = 60, Coins = {150, 400},     Color = Color3.fromRGB(190,190,190) },
+		{ Id = "Rare",      Label = "Rare",      Weight = 25, Coins = {600, 1500},    Color = Color3.fromRGB(70,150,255) },
+		{ Id = "Epic",      Label = "Epic",      Weight = 12, Coins = {2500, 6000},   Color = Color3.fromRGB(180,80,255) },
+		{ Id = "Legendary", Label = "Legendary", Weight = 3,  Coins = {12000, 30000}, Color = Color3.fromRGB(255,180,40), Announce = true },
 	},
 }
 
@@ -250,6 +323,9 @@ GameConfig.Data = {
 	StoreVersion = "v2",
 	LeaderboardPrefix = "BPW_LB_",
 	LeaderboardVersion = "v2",
+	-- Délai mini entre deux sauvegardes déclenchées par une vente : la progression
+	-- est persistée vite sans épuiser le budget d'écriture DataStore.
+	SaveAfterSellThrottle = 30,
 }
 
 function GameConfig.PlayerStoreName(): string
@@ -276,17 +352,19 @@ GameConfig.Admin = {
 -- Mondes (le monde 1 est généré par défaut ; les autres réutilisent le même
 -- générateur avec une palette et un multiplicateur différents).
 GameConfig.Worlds = {
-	{ Id = "Prairie",    Label = "Prairie",        LevelReq = 1,   Mult = 1.0,  Sky = Color3.fromRGB(150, 220, 255), Ground = Color3.fromRGB(120, 200, 120) },
-	{ Id = "Desert",     Label = "Désert",         LevelReq = 10,  Mult = 1.6,  Sky = Color3.fromRGB(255, 220, 160), Ground = Color3.fromRGB(230, 200, 130) },
-	{ Id = "Forest",     Label = "Forêt",          LevelReq = 20,  Mult = 2.4,  Sky = Color3.fromRGB(120, 190, 150), Ground = Color3.fromRGB(60, 130, 70) },
-	{ Id = "Ice",        Label = "Glace",          LevelReq = 35,  Mult = 3.5,  Sky = Color3.fromRGB(200, 240, 255), Ground = Color3.fromRGB(180, 230, 250) },
-	{ Id = "Volcano",    Label = "Volcan",         LevelReq = 55,  Mult = 5.0,  Sky = Color3.fromRGB(255, 120, 80),  Ground = Color3.fromRGB(90, 40, 40) },
-	{ Id = "Clouds",     Label = "Nuages",         LevelReq = 80,  Mult = 7.5,  Sky = Color3.fromRGB(240, 240, 255), Ground = Color3.fromRGB(230, 230, 245) },
-	{ Id = "Space",      Label = "Espace",         LevelReq = 110, Mult = 11.0, Sky = Color3.fromRGB(20, 15, 45),    Ground = Color3.fromRGB(40, 35, 80) },
-	{ Id = "Future",     Label = "Futuriste",      LevelReq = 150, Mult = 16.0, Sky = Color3.fromRGB(40, 200, 220),  Ground = Color3.fromRGB(30, 60, 90) },
-	{ Id = "Candy",      Label = "Bonbons",        LevelReq = 200, Mult = 24.0, Sky = Color3.fromRGB(255, 190, 230), Ground = Color3.fromRGB(255, 150, 200) },
-	{ Id = "Underwater", Label = "Sous-marin",     LevelReq = 260, Mult = 35.0, Sky = Color3.fromRGB(30, 120, 180),  Ground = Color3.fromRGB(25, 90, 140) },
+	{ Id = "Prairie",    Label = "Meadow",     LevelReq = 1,   Mult = 1.0,  Sky = Color3.fromRGB(150, 220, 255), Ground = Color3.fromRGB(120, 200, 120) },
+	{ Id = "Desert",     Label = "Desert",     LevelReq = 10,  Mult = 1.6,  Sky = Color3.fromRGB(255, 220, 160), Ground = Color3.fromRGB(230, 200, 130) },
+	{ Id = "Forest",     Label = "Forest",     LevelReq = 20,  Mult = 2.4,  Sky = Color3.fromRGB(120, 190, 150), Ground = Color3.fromRGB(60, 130, 70) },
+	{ Id = "Ice",        Label = "Ice",        LevelReq = 35,  Mult = 3.5,  Sky = Color3.fromRGB(200, 240, 255), Ground = Color3.fromRGB(180, 230, 250) },
+	{ Id = "Volcano",    Label = "Volcano",    LevelReq = 55,  Mult = 5.0,  Sky = Color3.fromRGB(255, 120, 80),  Ground = Color3.fromRGB(90, 40, 40) },
+	{ Id = "Clouds",     Label = "Clouds",     LevelReq = 80,  Mult = 7.5,  Sky = Color3.fromRGB(240, 240, 255), Ground = Color3.fromRGB(230, 230, 245) },
+	{ Id = "Space",      Label = "Space",      LevelReq = 110, Mult = 11.0, Sky = Color3.fromRGB(20, 15, 45),    Ground = Color3.fromRGB(40, 35, 80) },
+	{ Id = "Future",     Label = "Future",     LevelReq = 150, Mult = 16.0, Sky = Color3.fromRGB(40, 200, 220),  Ground = Color3.fromRGB(30, 60, 90) },
+	{ Id = "Candy",      Label = "Candy",      LevelReq = 200, Mult = 24.0, Sky = Color3.fromRGB(255, 190, 230), Ground = Color3.fromRGB(255, 150, 200) },
+	{ Id = "Underwater", Label = "Underwater", LevelReq = 260, Mult = 35.0, Sky = Color3.fromRGB(30, 120, 180),  Ground = Color3.fromRGB(25, 90, 140) },
 }
+
+GameConfig.Lobby.ItemShopPosition = lobbyRoot + GameConfig.Lobby.ItemShop.OriginOffset
 
 local function assertOutsideGrid(worldPos: Vector3, label: string)
 	local b = GameConfig.GetGridBounds()
@@ -300,6 +378,7 @@ end
 assertOutsideGrid(GameConfig.Lobby.RootOffset, "Lobby.RootOffset")
 assertOutsideGrid(GameConfig.Lobby.SellPosition, "Lobby.SellPosition")
 assertOutsideGrid(GameConfig.Lobby.EntrancePosition, "Lobby.EntrancePosition")
+assertOutsideGrid(GameConfig.Lobby.ItemShopPosition, "Lobby.ItemShopPosition")
 assertOutsideGrid(GameConfig.GameRoom.SpawnPadPosition, "GameRoom.SpawnPadPosition")
 assertOutsideGrid(GameConfig.GameRoom.ExitPosition, "GameRoom.ExitPosition")
 

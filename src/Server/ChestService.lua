@@ -58,7 +58,7 @@ local function spawnChest()
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
-	label.Text = "Coffre " .. tier.Label
+	label.Text = tier.Label .. " chest"
 	label.TextColor3 = tier.Color
 	label.TextStrokeTransparency = 0
 	label.TextScaled = true
@@ -66,8 +66,8 @@ local function spawnChest()
 	label.Parent = billboard
 
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Ouvrir"
-	prompt.ObjectText = "Coffre " .. tier.Label
+	prompt.ActionText = "Open"
+	prompt.ObjectText = tier.Label .. " chest"
 	prompt.HoldDuration = 0.6
 	prompt.MaxActivationDistance = 12
 	prompt.Parent = chest
@@ -83,18 +83,17 @@ local function spawnChest()
 
 		-- Les coffres restent une source directe de pièces (hors sac, spec §2).
 		DataService.AddCoins(player, coins, "Chest")
-		DataService.AddXP(player, tier.XP)
 		local profile = DataService.Get(player)
 		if profile then profile.ChestsOpened += 1 end
 		DataService.Push(player)
 
 		Remotes.Event("Announce"):FireAllClients(
-			("%s a ouvert un coffre %s (+%d pièces)"):format(player.DisplayName, tier.Label, coins), tier.Id)
+			("%s opened a %s chest (+%d coins)"):format(player.DisplayName, tier.Label, coins), tier.Id)
 		chest:Destroy()
 	end)
 
 	if tier.Announce then
-		Remotes.Event("Announce"):FireAllClients("⭐ Un coffre légendaire est apparu !", "legendary")
+		Remotes.Event("Announce"):FireAllClients("⭐ A legendary chest has appeared!", "legendary")
 		pcall(function()
 			MessagingService:PublishAsync(Config.Global.Topic .. "_Chest", { tier = tier.Id })
 		end)
