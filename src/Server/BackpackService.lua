@@ -286,7 +286,11 @@ function BackpackService.Sell(player: Player): (number?, number?, string?)
 
 	if sold and earned then
 		DataService.Push(player)
-		Remotes.Event("Announce"):FireClient(player, ("Sac vendu : +%d pièces !"):format(earned), "sell")
+		Remotes.Event("Announce"):FireClient(
+			player,
+			("Tu as vendu %d bulles pour %d pièces!"):format(sold, earned),
+			"sell"
+		)
 		return sold, earned, nil
 	end
 

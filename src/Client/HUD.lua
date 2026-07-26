@@ -42,6 +42,31 @@ local function comma(n: number): string
 	return (out:gsub("^%s+", ""))
 end
 
+local function findSellValueLabel(): TextLabel?
+	local root = workspace:FindFirstChild("BubblePopWorld")
+	if not root then
+		return nil
+	end
+	local lobby = root:FindFirstChild("Lobby")
+	if not lobby then
+		return nil
+	end
+	local decor = lobby:FindFirstChild("LobbyDecor")
+	local board = (decor and decor:FindFirstChild("SellValueBoard")) or lobby:FindFirstChild("SellValueBoard", true)
+	if not (board and board:IsA("BasePart")) then
+		return nil
+	end
+	local gui = board:FindFirstChild("SellValueGui")
+	if not (gui and gui:IsA("BillboardGui")) then
+		return nil
+	end
+	local textLabel = gui:FindFirstChild("Label")
+	if textLabel and textLabel:IsA("TextLabel") then
+		return textLabel
+	end
+	return nil
+end
+
 function HUD.Start()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "BPW_HUD"
@@ -50,9 +75,9 @@ function HUD.Start()
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Panneau stats
+	-- Panneau unique (stats + sac) — hors zone chat Roblox (bas-gauche).
 	local panel = Instance.new("Frame")
-	panel.Size = UDim2.new(0, 260, 0, 96)
+	panel.Size = UDim2.new(0, 270, 0, 148)
 	panel.Position = UDim2.new(0, 16, 0, 16)
 	panel.BackgroundColor3 = BG
 	panel.BackgroundTransparency = 0.15
@@ -60,44 +85,35 @@ function HUD.Start()
 	panel.Parent = gui
 	corner(panel, 14)
 
-	local coinsLabel = label(panel, "0", UDim2.new(1, -20, 0, 30), UDim2.new(0, 12, 0, 8))
+	local coinsLabel = label(panel, "0 pièces", UDim2.new(1, -20, 0, 28), UDim2.new(0, 12, 0, 6))
 	coinsLabel.TextColor3 = Color3.fromRGB(255, 210, 80)
 
-	local levelLabel = label(panel, "Niveau 1", UDim2.new(1, -20, 0, 22), UDim2.new(0, 12, 0, 42))
+	local levelLabel = label(panel, "Niveau 1  ·  0 bulles", UDim2.new(1, -20, 0, 20), UDim2.new(0, 12, 0, 36))
 
 	local xpBack = Instance.new("Frame")
-	xpBack.Size = UDim2.new(1, -24, 0, 14)
-	xpBack.Position = UDim2.new(0, 12, 0, 70)
+	xpBack.Size = UDim2.new(1, -24, 0, 8)
+	xpBack.Position = UDim2.new(0, 12, 0, 58)
 	xpBack.BackgroundColor3 = Color3.fromRGB(40, 44, 56)
 	xpBack.BorderSizePixel = 0
 	xpBack.Parent = panel
-	corner(xpBack, 7)
+	corner(xpBack, 4)
 
 	local xpFill = Instance.new("Frame")
 	xpFill.Size = UDim2.new(0, 0, 1, 0)
 	xpFill.BackgroundColor3 = ACCENT
 	xpFill.BorderSizePixel = 0
 	xpFill.Parent = xpBack
-	corner(xpFill, 7)
+	corner(xpFill, 4)
 
-	-- Jauge du sac : son état provient exclusivement des attributs du joueur.
-	local backpackFrame = Instance.new("Frame")
-	backpackFrame.Size = UDim2.new(0, 260, 0, 74)
-	backpackFrame.Position = UDim2.new(0, 16, 0, 120)
-	backpackFrame.BackgroundColor3 = BG
-	backpackFrame.BackgroundTransparency = 0.15
-	backpackFrame.BorderSizePixel = 0
-	backpackFrame.Parent = gui
-	corner(backpackFrame, 14)
-
-	local backpackLabel = label(backpackFrame, "Sac 0 / 0", UDim2.new(1, -24, 0, 24), UDim2.new(0, 12, 0, 7))
+	local backpackLabel = label(panel, "Sac : 0 / 0", UDim2.new(1, -24, 0, 22), UDim2.new(0, 12, 0, 72))
+	backpackLabel.TextColor3 = ACCENT
 
 	local backpackBack = Instance.new("Frame")
 	backpackBack.Size = UDim2.new(1, -24, 0, 14)
-	backpackBack.Position = UDim2.new(0, 12, 0, 34)
+	backpackBack.Position = UDim2.new(0, 12, 0, 98)
 	backpackBack.BackgroundColor3 = Color3.fromRGB(40, 44, 56)
 	backpackBack.BorderSizePixel = 0
-	backpackBack.Parent = backpackFrame
+	backpackBack.Parent = panel
 	corner(backpackBack, 7)
 
 	local backpackFill = Instance.new("Frame")
@@ -107,7 +123,7 @@ function HUD.Start()
 	backpackFill.Parent = backpackBack
 	corner(backpackFill, 7)
 
-	local backpackStatus = label(backpackFrame, "Place disponible", UDim2.new(1, -24, 0, 18), UDim2.new(0, 12, 0, 52), false)
+	local backpackStatus = label(panel, "Place disponible", UDim2.new(1, -24, 0, 18), UDim2.new(0, 12, 0, 118), false)
 	backpackStatus.TextColor3 = ACCENT
 	backpackStatus.TextSize = 13
 
@@ -139,10 +155,10 @@ function HUD.Start()
 	goalFill.Parent = goalBack
 	corner(goalFill, 6)
 
-	-- Bannières d'annonce
+	-- Bannières d'annonce (centre haut, hors chat)
 	local toastHolder = Instance.new("Frame")
-	toastHolder.Size = UDim2.new(0, 420, 0, 200)
-	toastHolder.Position = UDim2.new(0.5, -210, 0, 80)
+	toastHolder.Size = UDim2.new(0, 460, 0, 200)
+	toastHolder.Position = UDim2.new(0.5, -230, 0, 78)
 	toastHolder.BackgroundTransparency = 1
 	toastHolder.Parent = gui
 	local listLayout = Instance.new("UIListLayout")
@@ -155,11 +171,13 @@ function HUD.Start()
 		level = Color3.fromRGB(120, 255, 170),
 		world = Color3.fromRGB(180, 140, 255),
 		item = Color3.fromRGB(120, 200, 255),
+		sell = Color3.fromRGB(255, 220, 100),
+		backpack_full = Color3.fromRGB(255, 140, 100),
 	}
 
 	local function toast(text: string, kind: string?)
 		local frame = Instance.new("Frame")
-		frame.Size = UDim2.new(1, 0, 0, 34)
+		frame.Size = UDim2.new(1, 0, 0, 36)
 		frame.BackgroundColor3 = BG
 		frame.BackgroundTransparency = 0.1
 		frame.BorderSizePixel = 0
@@ -187,10 +205,9 @@ function HUD.Start()
 		local current = math.max(0, attributeNumber("CurrentBubbles"))
 		local capacity = math.max(0, attributeNumber("BackpackCapacity"))
 		local pendingSellValue = math.max(0, attributeNumber("PendingSellValue"))
-		local area = player:GetAttribute("PlayerArea")
 		local ratio = if capacity > 0 then math.clamp(current / capacity, 0, 1) else 0
 
-		backpackLabel.Text = ("Sac %s / %s"):format(comma(current), comma(capacity))
+		backpackLabel.Text = ("Sac : %s / %s"):format(comma(current), comma(capacity))
 		backpackFill.Size = UDim2.new(ratio, 0, 1, 0)
 
 		if ratio >= 1 then
@@ -207,12 +224,13 @@ function HUD.Start()
 			backpackStatus.Text = "Place disponible"
 		end
 
-		if area == "Lobby" then
-			backpackStatus.Text = ("Valeur du sac : %s pièces"):format(comma(pendingSellValue))
+		-- Valeur du sac : uniquement près de la zone de vente (monde), pas dans le HUD.
+		local sellLabel = findSellValueLabel()
+		if sellLabel then
+			sellLabel.Text = ("Valeur du sac : %s pièces"):format(comma(pendingSellValue))
 		end
 	end
 
-	-- Branchements
 	Remotes.Event("StatsUpdate").OnClientEvent:Connect(function(stats)
 		coinsLabel.Text = comma(stats.Coins) .. " pièces"
 		levelLabel.Text = ("Niveau %d  ·  %s bulles"):format(stats.Level, comma(stats.Pops))
@@ -224,6 +242,17 @@ function HUD.Start()
 		player:GetAttributeChangedSignal(attributeName):Connect(refreshBackpack)
 	end
 	refreshBackpack()
+
+	-- Le panneau vente peut apparaître après le HUD (sync Rojo / EnsureWorld).
+	task.spawn(function()
+		for _ = 1, 40 do
+			if findSellValueLabel() then
+				refreshBackpack()
+				break
+			end
+			task.wait(0.25)
+		end
+	end)
 
 	Remotes.Event("GlobalCounter").OnClientEvent:Connect(function(total, target)
 		globalLabel.Text = ("%s / %s bulles"):format(comma(total), comma(target))

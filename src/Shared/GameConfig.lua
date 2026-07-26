@@ -37,40 +37,68 @@ GameConfig.Backpack = {
 GameConfig.World = {
 	FallResetY = -25,
 	FallResetDestination = "GameRoom",
+	-- Dev : true une fois pour reconstruire le layout GeneratedByCode, puis false.
 	RebuildGeneratedLayout = false,
 	TeleportCooldown = 1.5,
 	SellMaxDistance = 16,
-	BorderHeight = 28,
-	BorderThickness = 3,
-	BorderTransparency = 0.45,
-	BorderColor = Color3.fromRGB(80, 200, 255),
+	-- Legacy (collision invisible) — préférer InvisibleCollisionHeight.
+	BorderHeight = 22,
+	BorderThickness = 2,
+	BorderTransparency = 0.72,
+	BorderColor = Color3.fromRGB(40, 140, 200),
+	VisibleBorderHeight = 10,
+	InvisibleCollisionHeight = 22,
 	MutationLockTimeout = 5,
 }
 
--- Lobby HORS de la grille : RootOffset.Z doit être < MinZ - marge (ex. 40 studs)
--- Valeurs par défaut calculées / documentées pour Size 40, Spacing 6 → halfZ=120
--- RootOffset Z ≈ -(halfZ + 60) = -180 (marge 60 hors bordure)
+-- Lobby HORS de la grille ET au sud des pads de la salle : le plancher (Z ∈ [-280, -200])
+-- ne doit jamais recouvrir SpawnPad / ExitPad (Z ∈ [-192, -152]).
+-- Size 40, Spacing 6 → halfZ=120, MinZ=-120.
+local lobbyRoot = Vector3.new(0, 0, -240)
+local lobbySellOffset = Vector3.new(-34, 2, 6)
+local lobbyEntranceOffset = Vector3.new(0, 3, 36)
+
 GameConfig.Lobby = {
-	RootOffset = Vector3.new(0, 0, -180), -- validé vs GetGridBounds + marge
-	FloorSize = Vector3.new(80, 2, 60),
-	FloorColor = Color3.fromRGB(60, 100, 160),
+	RootOffset = lobbyRoot,
+	FloorSize = Vector3.new(110, 2, 80), -- ~110×80 studs
+	FloorColor = Color3.fromRGB(28, 38, 68),
+	AccentColor = Color3.fromRGB(90, 210, 255),
+	VioletAccent = Color3.fromRGB(160, 110, 255),
 	SpawnOffset = Vector3.new(0, 4, 0),
-	SellZoneOffset = Vector3.new(-20, 2, 10),
-	SellZoneSize = Vector3.new(12, 4, 12),
-	EntranceOffset = Vector3.new(0, 2, 28), -- vers +Z direction grille, toujours hors MinZ
-	EntranceSize = Vector3.new(14, 6, 8),
+	SellZoneOffset = lobbySellOffset,
+	SellZoneSize = Vector3.new(14, 6, 12),
+	SellPosition = lobbyRoot + lobbySellOffset,
+	EntranceOffset = lobbyEntranceOffset,
+	EntrancePosition = lobbyRoot + lobbyEntranceOffset,
+	EntranceSize = Vector3.new(16, 10, 6),
 	ClearanceFromGrid = 40,
+	RailingHeight = 4,
 	SignText = "1. Entre dans la salle\n2. Fais éclater des bulles\n3. Remplis ton sac\n4. Reviens vendre tes bulles",
 }
 
 local halfZ = (GameConfig.Grid.SizeZ * GameConfig.Grid.Spacing) / 2
+local gameOrigin = GameConfig.Grid.Origin
+-- Bande sud, du nord au sud : passerelle → SpawnPad → ExitPad → (vide) → lobby.
+-- SpawnPad Z ∈ [-176, -152], ExitPad Z ∈ [-192, -176] : jointifs, jamais sécants,
+-- et tous deux au nord du plancher du lobby (bord nord à Z = -200).
+local gameSpawnOffset = Vector3.new(0, 8, -(halfZ + 44))
+local gameExitOffset = Vector3.new(0, 6, -(halfZ + 64))
+
 GameConfig.GameRoom = {
 	-- Pad au sud de la grille (Z négatif), hors bulles
-	SpawnOffset = Vector3.new(0, 8, -(halfZ + 44)),
-	ExitOffset = Vector3.new(0, 6, -(halfZ + 56)),
-	ExitSize = Vector3.new(14, 6, 8),
-	PadSize = Vector3.new(24, 2, 24),
-	PadColor = Color3.fromRGB(50, 140, 180),
+	SpawnOffset = gameSpawnOffset,
+	ExitOffset = gameExitOffset,
+	SpawnPadPosition = gameOrigin + gameSpawnOffset,
+	ExitPosition = gameOrigin + gameExitOffset,
+	ExitSize = Vector3.new(12, 8, 8),
+	PadSize = Vector3.new(28, 2, 24),
+	ExitPadSize = Vector3.new(22, 2, 16),
+	PadColor = Color3.fromRGB(36, 70, 110),
+	-- X = largeur de la passerelle, Y = épaisseur. La longueur réelle est calculée
+	-- par ZoneService (bord nord du SpawnPad → face sud des bulles) ; Z reste la
+	-- valeur nominale pour la géométrie par défaut de la grille.
+	PathSize = Vector3.new(16, 2, 28),
+	PathColor = Color3.fromRGB(42, 80, 125),
 }
 
 GameConfig.Bubble = {
@@ -209,8 +237,60 @@ local function assertOutsideGrid(worldPos: Vector3, label: string)
 end
 
 assertOutsideGrid(GameConfig.Lobby.RootOffset, "Lobby.RootOffset")
-local gridOrigin = GameConfig.Grid.Origin
-assertOutsideGrid(gridOrigin + GameConfig.GameRoom.SpawnOffset, "GameRoom.SpawnOffset")
-assertOutsideGrid(gridOrigin + GameConfig.GameRoom.ExitOffset, "GameRoom.ExitOffset")
+assertOutsideGrid(GameConfig.Lobby.SellPosition, "Lobby.SellPosition")
+assertOutsideGrid(GameConfig.Lobby.EntrancePosition, "Lobby.EntrancePosition")
+assertOutsideGrid(GameConfig.GameRoom.SpawnPadPosition, "GameRoom.SpawnPadPosition")
+assertOutsideGrid(GameConfig.GameRoom.ExitPosition, "GameRoom.ExitPosition")
+
+-- Emprises au sol : le plancher du lobby et les pads de la salle doivent rester
+-- disjoints en vue de dessus, sinon le spawn du lobby atterrit sur l'ExitPad.
+local function footprintsOverlap(aCenter: Vector3, aSize: Vector3, bCenter: Vector3, bSize: Vector3): boolean
+	return math.abs(aCenter.X - bCenter.X) < (aSize.X + bSize.X) / 2
+		and math.abs(aCenter.Z - bCenter.Z) < (aSize.Z + bSize.Z) / 2
+end
+
+-- Centres tels que construits par ZoneService (dessus des pads aligné sur Grid.Origin.Y).
+GameConfig.Lobby.FloorCenter = GameConfig.Lobby.RootOffset - Vector3.new(0, GameConfig.Lobby.FloorSize.Y / 2, 0)
+GameConfig.GameRoom.PadCenter = Vector3.new(
+	GameConfig.GameRoom.SpawnPadPosition.X,
+	gameOrigin.Y - GameConfig.GameRoom.PadSize.Y / 2,
+	GameConfig.GameRoom.SpawnPadPosition.Z
+)
+GameConfig.GameRoom.ExitPadCenter = Vector3.new(
+	GameConfig.GameRoom.ExitPosition.X,
+	gameOrigin.Y - GameConfig.GameRoom.ExitPadSize.Y / 2,
+	GameConfig.GameRoom.ExitPosition.Z
+)
+
+local volumes = {
+	{ "Lobby.Floor", GameConfig.Lobby.FloorCenter, GameConfig.Lobby.FloorSize },
+	{ "GameRoom.SpawnPad", GameConfig.GameRoom.PadCenter, GameConfig.GameRoom.PadSize },
+	{ "GameRoom.ExitPad", GameConfig.GameRoom.ExitPadCenter, GameConfig.GameRoom.ExitPadSize },
+}
+
+for i = 1, #volumes do
+	for j = i + 1, #volumes do
+		local a, b = volumes[i], volumes[j]
+		if footprintsOverlap(a[2] :: Vector3, a[3] :: Vector3, b[2] :: Vector3, b[3] :: Vector3) then
+			warn("[BPW] emprises générées sécantes :", a[1], "×", b[1])
+		end
+	end
+end
+
+-- Le spawn du lobby doit tomber sur le plancher du lobby, jamais sur un pad.
+local lobbySpawnPos = GameConfig.Lobby.RootOffset + GameConfig.Lobby.SpawnOffset
+local floorCenter = GameConfig.Lobby.FloorCenter
+local floorSize = GameConfig.Lobby.FloorSize
+if math.abs(lobbySpawnPos.X - floorCenter.X) > floorSize.X / 2 - 2
+	or math.abs(lobbySpawnPos.Z - floorCenter.Z) > floorSize.Z / 2 - 2 then
+	warn("[BPW] LobbySpawn hors du plancher du lobby :", lobbySpawnPos)
+end
+for _, volume in ipairs({ volumes[2], volumes[3] }) do
+	local center, size = volume[2] :: Vector3, volume[3] :: Vector3
+	if math.abs(lobbySpawnPos.X - center.X) < size.X / 2
+		and math.abs(lobbySpawnPos.Z - center.Z) < size.Z / 2 then
+		warn("[BPW] LobbySpawn au-dessus de", volume[1], lobbySpawnPos)
+	end
+end
 
 return GameConfig
