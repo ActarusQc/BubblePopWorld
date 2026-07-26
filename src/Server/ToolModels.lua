@@ -247,7 +247,8 @@ function ToolModels.AttachWings(character: Model)
 	anchor.Massless = true
 	anchor.CastShadow = false
 	anchor.Anchored = false
-	anchor.CFrame = torso.CFrame * CFrame.new(0, 0.15, 0.85)
+	-- Plus haut et plus en arrière que le sac à dos (BPW_Backpack) pour rester visibles.
+	anchor.CFrame = torso.CFrame * CFrame.new(0, 0.5, 1.05)
 	anchor.Parent = folder
 
 	local weldAnchor = Instance.new("WeldConstraint")
@@ -272,7 +273,7 @@ function ToolModels.AttachWings(character: Model)
 		mesh.Scale = Vector3.new(0.3, 1.05, 1.35)
 		mesh.Parent = w
 		w.CFrame = anchor.CFrame
-			* CFrame.new(side * 0.95, 0.15, 0.15)
+			* CFrame.new(side * 1.05, 0.25, 0.2)
 			* CFrame.Angles(math.rad(-8), side * math.rad(28), side * math.rad(12))
 		w.Parent = folder
 		local ww = Instance.new("WeldConstraint")
@@ -288,7 +289,7 @@ function ToolModels.AttachWings(character: Model)
 		tip.Transparency = 0.3
 		tip.CanCollide = false
 		tip.Massless = true
-		tip.CFrame = anchor.CFrame * CFrame.new(side * 1.55, -0.05, -0.55)
+		tip.CFrame = anchor.CFrame * CFrame.new(side * 1.7, 0.1, -0.45)
 		tip.Parent = folder
 		local tw = Instance.new("WeldConstraint")
 		tw.Part0 = anchor
@@ -307,7 +308,7 @@ function ToolModels.AttachWings(character: Model)
 	gem.Material = Enum.Material.Neon
 	gem.CanCollide = false
 	gem.Massless = true
-	gem.CFrame = anchor.CFrame * CFrame.new(0, 0.15, 0.05)
+	gem.CFrame = anchor.CFrame * CFrame.new(0, 0.2, 0.05)
 	gem.Parent = folder
 	local gw = Instance.new("WeldConstraint")
 	gw.Part0 = anchor

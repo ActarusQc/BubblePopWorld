@@ -9,7 +9,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local Remotes = require(Shared.Remotes)
 
-local store = DataStoreService:GetDataStore("BPW_PlayerData_v1")
+local store = DataStoreService:GetDataStore(Config.PlayerStoreName())
 
 local DataService = {}
 local profiles: { [Player]: any } = {}
@@ -109,7 +109,7 @@ end
 
 function DataService.Load(player: Player)
 	local ok, saved = retry(function()
-		return store:GetAsync("player_" .. player.UserId)
+		return store:GetAsync(Config.PlayerKey(player.UserId))
 	end)
 
 	local data = if ok and type(saved) == "table" then reconcile(saved, TEMPLATE) else deepCopy(TEMPLATE)
@@ -154,13 +154,42 @@ function DataService.Save(player: Player)
 	payload.__loaded, payload.__joinClock, payload.__dirty = nil, nil, nil
 
 	retry(function()
-		store:SetAsync("player_" .. player.UserId, payload)
+		store:SetAsync(Config.PlayerKey(player.UserId), payload)
 	end)
 end
 
 function DataService.Release(player: Player)
 	DataService.Save(player)
 	profiles[player] = nil
+end
+
+function DataService.StoreName(): string
+	return Config.PlayerStoreName()
+end
+
+-- Remet le profil en mémoire au TEMPLATE. À appeler sous le verrou de mutation du sac
+-- (voir BackpackService.ResetSession) : sinon un pop concurrent réinjecte des bulles.
+function DataService.ResetProfile(player: Player): boolean
+	if not profiles[player] then
+		return false
+	end
+	local fresh = deepCopy(TEMPLATE)
+	fresh.__loaded = true
+	fresh.__joinClock = os.clock()
+	fresh.__dirty = true
+	profiles[player] = fresh
+	DataService.ApplyCharacterStats(player)
+	DataService.Push(player)
+	return true
+end
+
+-- Efface la clé persistée d'un joueur hors ligne : au prochain chargement il repart du
+-- TEMPLATE. S'il est connecté sur un autre serveur, sa sauvegarde de sortie annulera ceci.
+function DataService.ResetStoredProfile(userId: number): boolean
+	local ok = retry(function()
+		store:RemoveAsync(Config.PlayerKey(userId))
+	end)
+	return ok == true
 end
 
 -- Envoie au client un résumé (jamais le profil complet).

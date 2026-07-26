@@ -215,8 +215,29 @@ function BubbleService.BuildWorld(worldDef)
 	worldFolder.Name = "BubbleWorld"
 	worldFolder.Parent = workspace
 
-	-- Aucun plancher continu sous la grille (spec §8.6) : la chute entre les cases
-	-- vides est voulue ; ZoneService gère les barrières latérales et le FallReset.
+	-- Plateau de support discret : les bulles restent la surface principale quand
+	-- elles sont intactes ; une fois éclatées, le joueur reste sur ce sol (plus de chute).
+	do
+		local halfX = (G.SizeX * G.Spacing) / 2 + 2
+		local halfZ = (G.SizeZ * G.Spacing) / 2 + 2
+		local thickness = 1.2
+		-- Dessous du volume des bulles : petit écart pour ne pas masquer le look.
+		local floorTopY = G.Origin.Y - G.BubbleSize.Y * 0.35
+		local floor = Instance.new("Part")
+		floor.Name = "PlayFloor"
+		floor.Anchored = true
+		floor.CanCollide = true
+		floor.CanQuery = false
+		floor.CanTouch = false
+		floor.CastShadow = false
+		floor.Material = Enum.Material.SmoothPlastic
+		floor.Color = Color3.fromRGB(18, 32, 58)
+		floor.Transparency = 0.4
+		floor.Size = Vector3.new(halfX * 2, thickness, halfZ * 2)
+		floor.CFrame = CFrame.new(G.Origin.X, floorTopY - thickness / 2, G.Origin.Z)
+		floor:SetAttribute("GeneratedByCode", true)
+		floor.Parent = worldFolder
+	end
 
 	for x = 1, G.SizeX do
 		grid[x] = {}

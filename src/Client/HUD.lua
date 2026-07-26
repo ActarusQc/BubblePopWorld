@@ -52,15 +52,24 @@ local function findSellValueLabel(): TextLabel?
 		return nil
 	end
 	local decor = lobby:FindFirstChild("LobbyDecor")
-	local board = (decor and decor:FindFirstChild("SellValueBoard")) or lobby:FindFirstChild("SellValueBoard", true)
+	local kiosk = lobby:FindFirstChild("SellKiosk")
+	local board = (decor and decor:FindFirstChild("SellValueBoard"))
+		or (kiosk and kiosk:FindFirstChild("SellValueBoard", true))
+		or (kiosk and kiosk:FindFirstChild("ValueDisplaySurface", true))
+		or lobby:FindFirstChild("SellValueBoard", true)
 	if not (board and board:IsA("BasePart")) then
 		return nil
 	end
 	local gui = board:FindFirstChild("SellValueGui")
-	if not (gui and gui:IsA("BillboardGui")) then
+		or board:FindFirstChildWhichIsA("SurfaceGui")
+		or board:FindFirstChildWhichIsA("BillboardGui")
+	if not gui then
 		return nil
 	end
-	local textLabel = gui:FindFirstChild("Label")
+	if not (gui:IsA("BillboardGui") or gui:IsA("SurfaceGui")) then
+		return nil
+	end
+	local textLabel = gui:FindFirstChild("Label", true)
 	if textLabel and textLabel:IsA("TextLabel") then
 		return textLabel
 	end
@@ -224,10 +233,15 @@ function HUD.Start()
 			backpackStatus.Text = "Place disponible"
 		end
 
-		-- Valeur du sac : uniquement près de la zone de vente (monde), pas dans le HUD.
+		-- Valeur du sac : écran du kiosque (monde), pas dans le HUD.
 		local sellLabel = findSellValueLabel()
 		if sellLabel then
-			sellLabel.Text = ("Valeur du sac : %s pièces"):format(comma(pendingSellValue))
+			-- SurfaceGui du kiosque : Label = montant seul ; Billboard legacy = phrase complète.
+			if sellLabel.Parent and sellLabel.Parent:IsA("Frame") then
+				sellLabel.Text = comma(pendingSellValue)
+			else
+				sellLabel.Text = ("Valeur du sac : %s pièces"):format(comma(pendingSellValue))
+			end
 		end
 	end
 

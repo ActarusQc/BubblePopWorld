@@ -1,11 +1,12 @@
 --!strict
--- Lobby, salle de bulles, téléports serveur, barrières de sécurité et chute (FallReset).
--- Monde additif idempotent : les objets existants (décor Studio ou déjà créés) ne sont
--- jamais déplacés, redimensionnés ni détruits, sauf `Config.World.RebuildGeneratedLayout`
--- qui ne reconstruit que les objets marqués `GeneratedByCode` (jamais BubbleWorld).
+-- Lobby, salle de bulles, passage physique, barrières et chute (FallReset).
+-- Lobby ↔ salle : déplacement à pied uniquement (aucun téléport de zone).
+-- Téléports réservés au spawn initial et au FallReset (sécurité).
+-- Monde additif idempotent : `RebuildGeneratedLayout` ne reconstruit que `GeneratedByCode`.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -13,6 +14,7 @@ local Config = require(Shared.GameConfig)
 
 local DataService = require(script.Parent.DataService)
 local BackpackService = require(script.Parent.BackpackService)
+local LobbyEditingPreview = require(Shared.LobbyEditingPreview)
 
 local ZoneService = {}
 
@@ -40,6 +42,57 @@ local function ensureFolder(parent: Instance, name: string): Folder
 	folder.Name = name
 	folder.Parent = parent
 	return folder
+end
+
+-- Lobby canonique : évite un 2e "Lobby" si l'import Studio est un Model nommé Lobby
+-- (ensureFolder ne matche que Folder → créait un doublon Folder + Model).
+local function ensureLobby(worldRoot: Instance): Folder
+	local folders: { Folder } = {}
+	local models: { Model } = {}
+	for _, child in ipairs(worldRoot:GetChildren()) do
+		if child.Name == "Lobby" then
+			if child:IsA("Folder") then
+				table.insert(folders, child)
+			elseif child:IsA("Model") then
+				table.insert(models, child)
+			end
+		end
+	end
+
+	local function hasStudioKiosk(inst: Instance): boolean
+		local k = inst:FindFirstChild("SellKiosk")
+		return k ~= nil and k:IsA("Model")
+	end
+
+	-- 1) Folder qui contient déjà le SellKiosk Studio
+	for _, f in ipairs(folders) do
+		if hasStudioKiosk(f) then
+			return f
+		end
+	end
+
+	-- 2) Convertir un Model Lobby (imports) en Folder
+	for _, m in ipairs(models) do
+		if hasStudioKiosk(m) or #folders == 0 then
+			local f = Instance.new("Folder")
+			f.Name = "Lobby"
+			f.Parent = worldRoot
+			for _, nested in ipairs(m:GetChildren()) do
+				nested.Parent = f
+			end
+			print(("[ZoneService] Lobby Model converti en Folder (%d enfants)"):format(#f:GetChildren()))
+			m:Destroy()
+			return f
+		end
+	end
+
+	-- 3) Premier Folder Lobby existant
+	if #folders > 0 then
+		return folders[1]
+	end
+
+	-- 4) Création
+	return ensureFolder(worldRoot, "Lobby")
 end
 
 local function markGenerated(inst: Instance)
@@ -145,32 +198,6 @@ local function ensureDecorFolder(parent: Instance, name: string): Folder
 	markGenerated(folder)
 	folder.Parent = parent
 	return folder
-end
-
-local function addBillboard(part: BasePart, name: string, text: string, size: Vector2, studsOffset: Vector3, textSize: number?): BillboardGui
-	local gui = Instance.new("BillboardGui")
-	gui.Name = name
-	gui.Size = UDim2.fromOffset(size.X, size.Y)
-	gui.StudsOffset = studsOffset
-	gui.AlwaysOnTop = true
-	gui.MaxDistance = 80
-	gui.Parent = part
-
-	local label = Instance.new("TextLabel")
-	label.Name = "Label"
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Text = text
-	label.TextColor3 = PALETTE.White
-	label.Font = Enum.Font.GothamBold
-	label.TextScaled = textSize == nil
-	if textSize then
-		label.TextSize = textSize
-	end
-	label.TextStrokeTransparency = 0.4
-	label.TextStrokeColor3 = Color3.fromRGB(10, 20, 40)
-	label.Parent = gui
-	return gui
 end
 
 local function addSurfaceSign(part: BasePart, face: Enum.NormalId, text: string, textSize: number?)
@@ -376,8 +403,8 @@ local function buildLobbyRailings(decor: Folder, root: Vector3, floorSize: Vecto
 		{ "RailWest", Vector3.new(t, h, floorSize.Z), Vector3.new(-(halfX - t / 2), 0, 0) },
 	}
 
-	-- Ouverture nord pour l'entrée (trou central)
-	local entranceGap = 20
+	-- Ouverture nord pour l'entrée (passage praticable, bas seuil au sol)
+	local entranceGap = 18
 	for _, seg in ipairs(segments) do
 		local name, size, offset = seg[1] :: string, seg[2] :: Vector3, seg[3] :: Vector3
 		if name == "RailNorth" then
@@ -402,6 +429,17 @@ local function buildLobbyRailings(decor: Folder, root: Vector3, floorSize: Vecto
 				})
 				right.Parent = decor
 			end
+			-- Seuil bas dans l'ouverture (pas de trou vers le vide).
+			local threshold = makePart({
+				Name = "RailNorthThreshold",
+				Size = Vector3.new(entranceGap, 1.2, t + 1),
+				CFrame = CFrame.new(root + Vector3.new(0, 0.6, offset.Z)),
+				Color = PALETTE.Cyan,
+				Material = Enum.Material.Neon,
+				Transparency = 0.5,
+				CanCollide = true,
+			})
+			threshold.Parent = decor
 		else
 			local rail = makePart({
 				Name = name,
@@ -423,6 +461,27 @@ local function buildEntranceArch(decor: Folder, root: Vector3)
 	local pillarW = 2.5
 	local gap = 14
 	local lintelH = 2.5
+
+	-- Seuil / rampe continue (plus de trou devant l'arche).
+	local sill = makePart({
+		Name = "EntranceSill",
+		Size = Vector3.new(gap + 4, 1.2, 14),
+		CFrame = CFrame.new(pos.X, root.Y + 0.1, pos.Z + 1),
+		Color = PALETTE.FloorAccent,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = true,
+	})
+	sill.Parent = decor
+
+	local ramp = makePart({
+		Name = "EntranceRamp",
+		Size = Vector3.new(gap + 2, 1, 10),
+		CFrame = CFrame.new(pos.X, root.Y + 0.05, pos.Z - 4),
+		Color = Color3.fromRGB(48, 70, 120),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = true,
+	})
+	ramp.Parent = decor
 
 	local left = makePart({
 		Name = "EntrancePillarLeft",
@@ -455,106 +514,953 @@ local function buildEntranceArch(decor: Folder, root: Vector3)
 
 	local glow = makePart({
 		Name = "EntranceGlow",
-		Size = Vector3.new(gap - 1, 0.4, 8),
-		CFrame = CFrame.new(pos + Vector3.new(0, 0.3, 2)),
+		Size = Vector3.new(gap - 1, 0.35, gap),
+		CFrame = CFrame.new(pos.X, root.Y + 0.35, pos.Z),
 		Color = PALETTE.Cyan,
 		Material = Enum.Material.Neon,
-		Transparency = 0.35,
+		Transparency = 0.45,
 		CanCollide = false,
 		CanQuery = false,
 	})
 	glow.Parent = decor
+
+	local hint = makePart({
+		Name = "EntranceHint",
+		Size = Vector3.new(10, 1.2, 0.3),
+		CFrame = CFrame.new(pos + Vector3.new(0, 8.2, 1.8)),
+		Color = Color3.fromRGB(30, 45, 80),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	hint.Parent = decor
+	addSurfaceSign(hint, Enum.NormalId.Front, "Escaliers →")
+end
+
+--------------------------------------------------------------------
+-- Kiosque de vente (assemblage code, restauré depuis l'ancienne version)
+--------------------------------------------------------------------
+-- CFrame local du kiosque : origine au centre, façade initiale vers +Z, puis yaw config.
+local function sellBoothBaseCF(root: Vector3): CFrame
+	local L = Config.Lobby
+	local booth = L.SellBooth
+	local origin = root + booth.OriginOffset
+	return CFrame.new(origin) * CFrame.Angles(0, math.rad(booth.YawDegrees), 0)
+end
+
+local function sellLocalCF(base: CFrame, localPos: Vector3, localRot: CFrame?): CFrame
+	local cf = base * CFrame.new(localPos)
+	if localRot then
+		return cf * localRot
+	end
+	return cf
+end
+
+local SELL_NAVY = Color3.fromRGB(18, 28, 62)
+local SELL_NAVY_DEEP = Color3.fromRGB(10, 16, 40)
+local SELL_VIOLET = Color3.fromRGB(155, 70, 255)
+local SELL_CYAN = Color3.fromRGB(55, 220, 255)
+local SELL_CYAN_SOFT = Color3.fromRGB(90, 200, 255)
+local SELL_TOP = Color3.fromRGB(210, 220, 235)
+
+local function attachPart(parent: Folder, props: {
+	Name: string,
+	Size: Vector3,
+	CFrame: CFrame,
+	Color: Color3?,
+	Material: Enum.Material?,
+	Transparency: number?,
+	CanCollide: boolean?,
+	CanQuery: boolean?,
+	Shape: Enum.PartType?,
+	Reflectance: number?,
+}): Part
+	local p = makePart({
+		Name = props.Name,
+		Size = props.Size,
+		CFrame = props.CFrame,
+		Color = props.Color,
+		Material = props.Material,
+		Transparency = props.Transparency,
+		CanCollide = props.CanCollide,
+		CanQuery = props.CanQuery,
+		Shape = props.Shape,
+	})
+	if props.Reflectance then
+		p.Reflectance = props.Reflectance
+	end
+	p.Parent = parent
+	return p
+end
+
+local function addSellValueScreen(board: BasePart)
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "SellValueGui"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 50
+	gui.LightInfluence = 0
+	gui.Brightness = 1.2
+	gui.Parent = board
+
+	local frame = Instance.new("Frame")
+	frame.Name = "Panel"
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = Color3.fromRGB(8, 16, 38)
+	frame.BackgroundTransparency = 0.05
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = SELL_CYAN
+	stroke.Thickness = 3
+	stroke.Transparency = 0.15
+	stroke.Parent = frame
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0.1, 0)
+	pad.PaddingBottom = UDim.new(0.1, 0)
+	pad.PaddingLeft = UDim.new(0.08, 0)
+	pad.PaddingRight = UDim.new(0.08, 0)
+	pad.Parent = frame
+
+	local caption = Instance.new("TextLabel")
+	caption.Name = "Caption"
+	caption.Size = UDim2.new(1, 0, 0.28, 0)
+	caption.BackgroundTransparency = 1
+	caption.Text = "Valeur du sac :"
+	caption.TextColor3 = PALETTE.White
+	caption.Font = Enum.Font.GothamBold
+	caption.TextScaled = true
+	caption.Parent = frame
+
+	local row = Instance.new("Frame")
+	row.Name = "ValueRow"
+	row.Size = UDim2.new(1, 0, 0.62, 0)
+	row.Position = UDim2.new(0, 0, 0.34, 0)
+	row.BackgroundTransparency = 1
+	row.Parent = frame
+
+	local amount = Instance.new("TextLabel")
+	amount.Name = "Label"
+	amount.Size = UDim2.new(0.62, 0, 1, 0)
+	amount.BackgroundTransparency = 1
+	amount.Text = "0"
+	amount.TextColor3 = SELL_CYAN
+	amount.Font = Enum.Font.GothamBold
+	amount.TextScaled = true
+	amount.TextXAlignment = Enum.TextXAlignment.Right
+	amount.Parent = row
+
+	local unit = Instance.new("TextLabel")
+	unit.Name = "Unit"
+	unit.Size = UDim2.new(0.34, 0, 0.55, 0)
+	unit.Position = UDim2.new(0.64, 0, 0.28, 0)
+	unit.BackgroundTransparency = 1
+	unit.Text = "pièces"
+	unit.TextColor3 = PALETTE.White
+	unit.Font = Enum.Font.Gotham
+	unit.TextScaled = true
+	unit.TextXAlignment = Enum.TextXAlignment.Left
+	unit.Parent = row
+end
+
+local function addSellTitleGui(sign: BasePart)
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "SignGui"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.LightInfluence = 0
+	gui.Brightness = 1.4
+	gui.Parent = sign
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = Color3.fromRGB(22, 18, 55)
+	frame.BackgroundTransparency = 0.08
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+
+	local line1 = Instance.new("TextLabel")
+	line1.Size = UDim2.new(1, -24, 0.42, 0)
+	line1.Position = UDim2.new(0, 12, 0.1, 0)
+	line1.BackgroundTransparency = 1
+	line1.Text = "VENDRE LES"
+	line1.TextColor3 = PALETTE.White
+	line1.Font = Enum.Font.GothamBold
+	line1.TextScaled = true
+	line1.Parent = frame
+
+	local line2 = Instance.new("TextLabel")
+	line2.Size = UDim2.new(1, -24, 0.42, 0)
+	line2.Position = UDim2.new(0, 12, 0.5, 0)
+	line2.BackgroundTransparency = 1
+	line2.Text = "BULLES"
+	line2.TextColor3 = PALETTE.White
+	line2.Font = Enum.Font.GothamBold
+	line2.TextScaled = true
+	line2.Parent = frame
+end
+
+local function startSellTankBubbleAnims(parent: Folder, tankWorldCF: CFrame, radius: number, height: number, count: number)
+	local colors = {
+		SELL_CYAN_SOFT,
+		Color3.fromRGB(160, 120, 255),
+		Color3.fromRGB(100, 235, 255),
+		Color3.fromRGB(200, 150, 255),
+		Color3.fromRGB(80, 210, 255),
+	}
+	for i = 1, count do
+		local diameter = 0.55 + (i % 5) * 0.22
+		local bubble = attachPart(parent, {
+			Name = "SellTankBubble" .. tostring(i),
+			Size = Vector3.new(diameter, diameter, diameter),
+			CFrame = tankWorldCF,
+			Color = colors[((i - 1) % #colors) + 1],
+			Material = Enum.Material.Glass,
+			Transparency = 0.22,
+			Shape = Enum.PartType.Ball,
+			CanCollide = false,
+			CanQuery = false,
+			Reflectance = 0.22,
+		})
+
+		task.spawn(function()
+			local phase = (i - 1) / count
+			while bubble.Parent do
+				local x = math.noise(i * 1.7, phase * 3, 0.2) * radius * 0.9
+				local z = math.noise(0.3, i * 2.1, phase * 3) * radius * 0.9
+				local startY = -height * 0.4
+				local endY = height * 0.4
+				local driftX = (math.random() - 0.5) * radius * 0.4
+				local driftZ = (math.random() - 0.5) * radius * 0.4
+				local duration = 2.4 + math.random() * 2.6
+
+				bubble.CFrame = tankWorldCF * CFrame.new(x, startY, z)
+				bubble.Transparency = 0.15 + math.random() * 0.15
+
+				local tween = TweenService:Create(
+					bubble,
+					TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{ CFrame = tankWorldCF * CFrame.new(x + driftX, endY, z + driftZ), Transparency = 0.5 }
+				)
+				tween:Play()
+				tween.Completed:Wait()
+				phase += 0.19
+				task.wait(0.04 + math.random() * 0.18)
+			end
+		end)
+	end
 end
 
 local function buildSellBooth(decor: Folder, root: Vector3)
-	local L = Config.Lobby
-	local pos = root + L.SellZoneOffset
+	local booth = Config.Lobby.SellBooth
+	local base = sellBoothBaseCF(root)
+	local faceFront = CFrame.Angles(0, math.rad(180), 0)
+	local tiltFront = CFrame.Angles(math.rad(-14), math.rad(180), 0)
 
-	local counter = makePart({
-		Name = "SellCounter",
-		Size = Vector3.new(12, 3, 5),
-		CFrame = CFrame.new(pos + Vector3.new(0, 1.5, 0)),
-		Color = Color3.fromRGB(45, 55, 95),
+	--------------------------------------------------------------------
+	-- Estrade + pad de vente
+	--------------------------------------------------------------------
+	attachPart(decor, {
+		Name = "SellPlaza",
+		Size = Vector3.new(24, 0.6, 22),
+		CFrame = sellLocalCF(base, Vector3.new(0, -1.7, 0.6)),
+		Color = SELL_NAVY,
 		Material = Enum.Material.SmoothPlastic,
 	})
-	counter.Parent = decor
-
-	local top = makePart({
-		Name = "SellCounterTop",
-		Size = Vector3.new(12.5, 0.5, 5.5),
-		CFrame = CFrame.new(pos + Vector3.new(0, 3.25, 0)),
-		Color = PALETTE.CyanDeep,
-		Material = Enum.Material.SmoothPlastic,
-	})
-	top.Parent = decor
-
-	local tank = makePart({
-		Name = "SellTank",
-		Size = Vector3.new(4, 4, 4),
-		CFrame = CFrame.new(pos + Vector3.new(-3.5, 5.2, -1)),
-		Color = PALETTE.Glass,
-		Material = Enum.Material.Glass,
+	attachPart(decor, {
+		Name = "SellPlazaTrim",
+		Size = Vector3.new(24.6, 0.18, 22.6),
+		CFrame = sellLocalCF(base, Vector3.new(0, -1.35, 0.6)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
 		Transparency = 0.45,
-		Shape = Enum.PartType.Cylinder,
 		CanCollide = false,
+		CanQuery = false,
 	})
-	-- Cylinder axis is X by default; rotate to stand upright
-	tank.CFrame = CFrame.new(pos + Vector3.new(-3.5, 5.2, -1)) * CFrame.Angles(0, 0, math.rad(90))
-	tank.Parent = decor
 
-	local machine = makePart({
-		Name = "SellMachine",
-		Size = Vector3.new(3.5, 5, 3.5),
-		CFrame = CFrame.new(pos + Vector3.new(3.2, 5.5, -1)),
-		Color = PALETTE.Violet,
+	local padY = booth.PadLocalOffset.Y
+	local padZ = booth.PadLocalOffset.Z
+	attachPart(decor, {
+		Name = "SellPad",
+		Size = booth.PadSize,
+		CFrame = sellLocalCF(base, booth.PadLocalOffset),
+		Color = Color3.fromRGB(30, 90, 140),
 		Material = Enum.Material.SmoothPlastic,
+		Transparency = 0.15,
+		CanCollide = false,
+		CanQuery = false,
 	})
-	machine.Parent = decor
+	-- Bordure néon du pad (4 côtés)
+	local padW, padD = booth.PadSize.X, booth.PadSize.Z
+	attachPart(decor, {
+		Name = "SellPadBorderF",
+		Size = Vector3.new(padW + 0.4, 0.22, 0.35),
+		CFrame = sellLocalCF(base, Vector3.new(0, padY + 0.12, padZ + padD / 2)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellPadBorderB",
+		Size = Vector3.new(padW + 0.4, 0.22, 0.35),
+		CFrame = sellLocalCF(base, Vector3.new(0, padY + 0.12, padZ - padD / 2)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellPadBorderL",
+		Size = Vector3.new(0.35, 0.22, padD),
+		CFrame = sellLocalCF(base, Vector3.new(-padW / 2, padY + 0.12, padZ)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellPadBorderR",
+		Size = Vector3.new(0.35, 0.22, padD),
+		CFrame = sellLocalCF(base, Vector3.new(padW / 2, padY + 0.12, padZ)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellPadGlow",
+		Size = Vector3.new(padW - 0.8, 0.12, padD - 0.8),
+		CFrame = sellLocalCF(base, Vector3.new(0, padY + 0.08, padZ)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		Transparency = 0.55,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellPadRing",
+		Size = Vector3.new(0.18, 3.8, 3.8),
+		CFrame = sellLocalCF(base, Vector3.new(0, padY + 0.16, padZ), CFrame.Angles(0, 0, math.rad(90))),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		Transparency = 0.15,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Cylinder,
+	})
+	attachPart(decor, {
+		Name = "SellPadBubble",
+		Size = Vector3.new(1.7, 1.7, 1.7),
+		CFrame = sellLocalCF(base, Vector3.new(0, padY + 0.45, padZ)),
+		Color = SELL_CYAN_SOFT,
+		Material = Enum.Material.Glass,
+		Transparency = 0.28,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Ball,
+		Reflectance = 0.2,
+	})
+	for i, offset in ipairs({
+		Vector3.new(1.4, 0.35, 0.9),
+		Vector3.new(-1.3, 0.32, -0.8),
+		Vector3.new(0.9, 0.3, -1.2),
+		Vector3.new(-1.0, 0.34, 1.1),
+	}) do
+		attachPart(decor, {
+			Name = "SellPadSpark" .. tostring(i),
+			Size = Vector3.new(0.45, 0.45, 0.45),
+			CFrame = sellLocalCF(base, Vector3.new(offset.X, padY + offset.Y, padZ + offset.Z)),
+			Color = PALETTE.White,
+			Material = Enum.Material.Neon,
+			Transparency = 0.2,
+			CanCollide = false,
+			CanQuery = false,
+			Shape = Enum.PartType.Ball,
+		})
+	end
 
-	local coinIcon = makePart({
-		Name = "SellCoinIcon",
-		Size = Vector3.new(2.2, 2.2, 0.4),
-		CFrame = CFrame.new(pos + Vector3.new(3.2, 8.4, -1)),
+	--------------------------------------------------------------------
+	-- Colonnes massives + néons encastrés
+	--------------------------------------------------------------------
+	local pillarH = 10.5
+	local pillarY = pillarH / 2 - 1.35
+	for _, side in ipairs({ -1, 1 }) do
+		local px = side * 7.4
+		attachPart(decor, {
+			Name = if side < 0 then "SellPillarL" else "SellPillarR",
+			Size = Vector3.new(2.5, pillarH, 2.8),
+			CFrame = sellLocalCF(base, Vector3.new(px, pillarY, -1.4)),
+			Color = SELL_NAVY_DEEP,
+			Material = Enum.Material.SmoothPlastic,
+		})
+		attachPart(decor, {
+			Name = if side < 0 then "SellPillarCapL" else "SellPillarCapR",
+			Size = Vector3.new(2.8, 0.45, 3.1),
+			CFrame = sellLocalCF(base, Vector3.new(px, pillarY + pillarH / 2 - 0.1, -1.4)),
+			Color = SELL_NAVY,
+			Material = Enum.Material.SmoothPlastic,
+			CanCollide = false,
+		})
+		attachPart(decor, {
+			Name = if side < 0 then "SellPillarNeonL" else "SellPillarNeonR",
+			Size = Vector3.new(0.35, pillarH - 1.4, 0.35),
+			CFrame = sellLocalCF(base, Vector3.new(px, pillarY, 0.15)),
+			Color = SELL_CYAN,
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			CanQuery = false,
+		})
+		attachPart(decor, {
+			Name = if side < 0 then "SellPillarNeonSideL" else "SellPillarNeonSideR",
+			Size = Vector3.new(0.22, pillarH - 2.2, 0.22),
+			CFrame = sellLocalCF(base, Vector3.new(px + side * 1.15, pillarY, -1.4)),
+			Color = SELL_VIOLET,
+			Material = Enum.Material.Neon,
+			Transparency = 0.15,
+			CanCollide = false,
+			CanQuery = false,
+		})
+	end
+
+	-- Pièce dorée sur la colonne gauche
+	local coin = attachPart(decor, {
+		Name = "SellPillarCoin",
+		Size = Vector3.new(0.28, 1.5, 1.5),
+		CFrame = sellLocalCF(base, Vector3.new(-7.4, 3.4, 0.2), CFrame.Angles(0, math.rad(90), 0)),
 		Color = PALETTE.Gold,
 		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Cylinder,
+	})
+	local coinGui = Instance.new("SurfaceGui")
+	coinGui.Name = "CoinGui"
+	coinGui.Face = Enum.NormalId.Right
+	coinGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	coinGui.PixelsPerStud = 40
+	coinGui.LightInfluence = 0
+	coinGui.Parent = coin
+	local coinLabel = Instance.new("TextLabel")
+	coinLabel.Size = UDim2.fromScale(1, 1)
+	coinLabel.BackgroundTransparency = 1
+	coinLabel.Text = "$"
+	coinLabel.TextColor3 = Color3.fromRGB(80, 50, 0)
+	coinLabel.Font = Enum.Font.GothamBold
+	coinLabel.TextScaled = true
+	coinLabel.Parent = coinGui
+
+	--------------------------------------------------------------------
+	-- Comptoir profond + plateau clair + façade écran
+	--------------------------------------------------------------------
+	local counterSize = booth.CounterSize
+	attachPart(decor, {
+		Name = "SellCounter",
+		Size = counterSize,
+		CFrame = sellLocalCF(base, Vector3.new(0, 0.55, -0.8)),
+		Color = SELL_NAVY,
+		Material = Enum.Material.SmoothPlastic,
+	})
+	attachPart(decor, {
+		Name = "SellCounterSkirt",
+		Size = Vector3.new(counterSize.X + 0.6, 0.7, 1.2),
+		CFrame = sellLocalCF(base, Vector3.new(0, -1.05, 2.0)),
+		Color = SELL_NAVY_DEEP,
+		Material = Enum.Material.SmoothPlastic,
+	})
+	attachPart(decor, {
+		Name = "SellCounterTop",
+		Size = Vector3.new(counterSize.X + 0.7, 0.5, counterSize.Z + 0.9),
+		CFrame = sellLocalCF(base, Vector3.new(0, 2.85, -0.55)),
+		Color = SELL_TOP,
+		Material = Enum.Material.SmoothPlastic,
+		Reflectance = 0.08,
+	})
+	attachPart(decor, {
+		Name = "SellCounterTopEdge",
+		Size = Vector3.new(counterSize.X + 0.85, 0.18, 0.28),
+		CFrame = sellLocalCF(base, Vector3.new(0, 2.7, 2.55)),
+		Color = SELL_VIOLET,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellCounterSideNeonL",
+		Size = Vector3.new(0.2, counterSize.Y + 0.3, counterSize.Z + 0.2),
+		CFrame = sellLocalCF(base, Vector3.new(-counterSize.X / 2 - 0.05, 0.55, -0.8)),
+		Color = SELL_VIOLET,
+		Material = Enum.Material.Neon,
+		Transparency = 0.2,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellCounterSideNeonR",
+		Size = Vector3.new(0.2, counterSize.Y + 0.3, counterSize.Z + 0.2),
+		CFrame = sellLocalCF(base, Vector3.new(counterSize.X / 2 + 0.05, 0.55, -0.8)),
+		Color = SELL_VIOLET,
+		Material = Enum.Material.Neon,
+		Transparency = 0.2,
+		CanCollide = false,
+		CanQuery = false,
+	})
+
+	-- Façade avant + écran digital incliné
+	attachPart(decor, {
+		Name = "SellFrontPanel",
+		Size = Vector3.new(counterSize.X - 1.2, 3.2, 0.55),
+		CFrame = sellLocalCF(base, Vector3.new(0, 0.7, 2.35), CFrame.Angles(math.rad(-12), 0, 0)),
+		Color = SELL_NAVY_DEEP,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	local valueBoard = attachPart(decor, {
+		Name = "SellValueBoard",
+		Size = Vector3.new(9.2, 2.55, 0.22),
+		CFrame = sellLocalCF(base, Vector3.new(0.3, 0.85, 2.65), tiltFront),
+		Color = Color3.fromRGB(6, 14, 34),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	attachPart(decor, {
+		Name = "SellValueBoardFrame",
+		Size = Vector3.new(9.7, 2.95, 0.14),
+		CFrame = sellLocalCF(base, Vector3.new(0.3, 0.85, 2.78), tiltFront),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	addSellValueScreen(valueBoard)
+	attachPart(decor, {
+		Name = "SellValueCoin",
+		Size = Vector3.new(0.22, 1.05, 1.05),
+		CFrame = sellLocalCF(base, Vector3.new(-3.9, 0.7, 2.95), CFrame.Angles(math.rad(-14), math.rad(90), 0)),
+		Color = PALETTE.Gold,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Cylinder,
+	})
+
+	--------------------------------------------------------------------
+	-- Auvent multi-couches
+	--------------------------------------------------------------------
+	local canopy = booth.CanopySize
+	attachPart(decor, {
+		Name = "SellCanopy",
+		Size = canopy,
+		CFrame = sellLocalCF(base, Vector3.new(0, 7.55, 0.8)),
+		Color = SELL_NAVY_DEEP,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	attachPart(decor, {
+		Name = "SellCanopyMid",
+		Size = Vector3.new(canopy.X - 1.2, 0.55, canopy.Z - 1.4),
+		CFrame = sellLocalCF(base, Vector3.new(0, 8.25, 0.5)),
+		Color = SELL_NAVY,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	attachPart(decor, {
+		Name = "SellCanopyLip",
+		Size = Vector3.new(canopy.X + 0.4, 0.7, 1.4),
+		CFrame = sellLocalCF(base, Vector3.new(0, 7.2, canopy.Z / 2 + 0.3)),
+		Color = SELL_NAVY,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	attachPart(decor, {
+		Name = "SellCanopyFrontNeon",
+		Size = Vector3.new(canopy.X + 0.3, 0.32, 0.32),
+		CFrame = sellLocalCF(base, Vector3.new(0, 7.05, canopy.Z / 2 + 0.95)),
+		Color = SELL_VIOLET,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellCanopyUnderNeon",
+		Size = Vector3.new(canopy.X - 2, 0.18, 0.18),
+		CFrame = sellLocalCF(base, Vector3.new(0, 6.95, 2.2)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		Transparency = 0.1,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellCanopyCornerL",
+		Size = Vector3.new(0.4, 0.4, 2.2),
+		CFrame = sellLocalCF(base, Vector3.new(-canopy.X / 2 + 0.2, 7.35, canopy.Z / 2 - 0.4)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellCanopyCornerR",
+		Size = Vector3.new(0.4, 0.4, 2.2),
+		CFrame = sellLocalCF(base, Vector3.new(canopy.X / 2 - 0.2, 7.35, canopy.Z / 2 - 0.4)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+
+	--------------------------------------------------------------------
+	-- Enseigne massive « VENDRE LES / BULLES »
+	--------------------------------------------------------------------
+	local signSize = booth.SignSize
+	local sign = attachPart(decor, {
+		Name = "SellSign",
+		Size = signSize,
+		CFrame = sellLocalCF(base, Vector3.new(0, 10.0, 0.9), faceFront),
+		Color = Color3.fromRGB(28, 22, 70),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	attachPart(decor, {
+		Name = "SellSignBack",
+		Size = Vector3.new(signSize.X + 0.8, signSize.Y + 0.7, 0.55),
+		CFrame = sellLocalCF(base, Vector3.new(0, 10.0, 0.45)),
+		Color = SELL_NAVY_DEEP,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	attachPart(decor, {
+		Name = "SellSignFrame",
+		Size = Vector3.new(signSize.X + 0.55, signSize.Y + 0.55, 0.18),
+		CFrame = sellLocalCF(base, Vector3.new(0, 10.0, 1.55), faceFront),
+		Color = SELL_VIOLET,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(decor, {
+		Name = "SellSignTopNeon",
+		Size = Vector3.new(signSize.X + 0.2, 0.22, 0.22),
+		CFrame = sellLocalCF(base, Vector3.new(0, 10.0 + signSize.Y / 2 + 0.15, 1.35)),
+		Color = SELL_VIOLET,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	addSellTitleGui(sign)
+
+	local bubbleDecors: { { pos: Vector3, size: number } } = {
+		{ pos = Vector3.new(-6.4, 10.55, 1.7), size = 1.15 },
+		{ pos = Vector3.new(-5.5, 9.45, 1.65), size = 0.75 },
+		{ pos = Vector3.new(-6.9, 9.7, 1.55), size = 0.55 },
+		{ pos = Vector3.new(6.3, 10.5, 1.7), size = 1.2 },
+		{ pos = Vector3.new(5.4, 9.5, 1.65), size = 0.7 },
+		{ pos = Vector3.new(6.8, 9.75, 1.55), size = 0.5 },
+		{ pos = Vector3.new(-4.2, 10.9, 1.5), size = 0.45 },
+		{ pos = Vector3.new(4.3, 10.85, 1.5), size = 0.4 },
+	}
+	for i, info in ipairs(bubbleDecors) do
+		local d = info.size
+		attachPart(decor, {
+			Name = "SellSignBubble" .. tostring(i),
+			Size = Vector3.new(d, d, d),
+			CFrame = sellLocalCF(base, info.pos),
+			Color = if i % 2 == 0 then SELL_CYAN else SELL_CYAN_SOFT,
+			Material = Enum.Material.Glass,
+			Transparency = 0.2,
+			CanCollide = false,
+			CanQuery = false,
+			Shape = Enum.PartType.Ball,
+			Reflectance = 0.25,
+		})
+	end
+
+	--------------------------------------------------------------------
+	-- Bocal central (élément principal)
+	--------------------------------------------------------------------
+	local tankLocal = Vector3.new(0, 5.15, -0.55)
+	local tankH, tankD = 5.4, 4.0
+	attachPart(decor, {
+		Name = "SellTank",
+		Size = Vector3.new(tankH, tankD, tankD),
+		CFrame = sellLocalCF(base, tankLocal, CFrame.Angles(0, 0, math.rad(90))),
+		Color = Color3.fromRGB(120, 210, 255),
+		Material = Enum.Material.Glass,
+		Transparency = 0.42,
 		Shape = Enum.PartType.Cylinder,
 		CanCollide = false,
+		Reflectance = 0.28,
 	})
-	coinIcon.CFrame = CFrame.new(pos + Vector3.new(3.2, 8.4, -1)) * CFrame.Angles(0, 0, math.rad(90))
-	coinIcon.Parent = decor
+	-- Anneaux base / sommet
+	attachPart(decor, {
+		Name = "SellTankBase",
+		Size = Vector3.new(0.55, tankD + 0.5, tankD + 0.5),
+		CFrame = sellLocalCF(base, tankLocal + Vector3.new(0, -tankH / 2 - 0.05, 0), CFrame.Angles(0, 0, math.rad(90))),
+		Color = SELL_VIOLET,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Cylinder,
+	})
+	attachPart(decor, {
+		Name = "SellTankBasePlate",
+		Size = Vector3.new(0.35, tankD + 0.1, tankD + 0.1),
+		CFrame = sellLocalCF(base, tankLocal + Vector3.new(0, -tankH / 2 + 0.35, 0), CFrame.Angles(0, 0, math.rad(90))),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Cylinder,
+	})
+	attachPart(decor, {
+		Name = "SellTankTop",
+		Size = Vector3.new(0.45, tankD + 0.35, tankD + 0.35),
+		CFrame = sellLocalCF(base, tankLocal + Vector3.new(0, tankH / 2 + 0.05, 0), CFrame.Angles(0, 0, math.rad(90))),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Cylinder,
+	})
+	attachPart(decor, {
+		Name = "SellTankCoreGlow",
+		Size = Vector3.new(tankH - 0.8, tankD * 0.55, tankD * 0.55),
+		CFrame = sellLocalCF(base, tankLocal, CFrame.Angles(0, 0, math.rad(90))),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		Transparency = 0.72,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Cylinder,
+	})
+	local tankBaseLightPart = attachPart(decor, {
+		Name = "SellTankLightHost",
+		Size = Vector3.new(1, 1, 1),
+		CFrame = sellLocalCF(base, tankLocal + Vector3.new(0, -1.2, 0)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Neon,
+		Transparency = 1,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	local tankLight = Instance.new("PointLight")
+	tankLight.Name = "SellTankLight"
+	tankLight.Brightness = 2.0
+	tankLight.Range = 16
+	tankLight.Color = SELL_CYAN
+	tankLight.Parent = tankBaseLightPart
 
-	local crate = makePart({
-		Name = "SellCrate",
-		Size = Vector3.new(3, 2.2, 3),
-		CFrame = CFrame.new(pos + Vector3.new(0, 4.3, -2.5)),
-		Color = Color3.fromRGB(70, 90, 140),
+	startSellTankBubbleAnims(decor, sellLocalCF(base, tankLocal), 1.25, tankH - 1.2, booth.TankBubbleCount)
+
+	--------------------------------------------------------------------
+	-- Terminal secondaire (droite, plus grand)
+	--------------------------------------------------------------------
+	attachPart(decor, {
+		Name = "SellTerminal",
+		Size = Vector3.new(2.6, 3.8, 1.6),
+		CFrame = sellLocalCF(base, Vector3.new(5.1, 4.85, -1.1)),
+		Color = Color3.fromRGB(32, 24, 72),
 		Material = Enum.Material.SmoothPlastic,
 	})
-	crate.Parent = decor
-
-	local sign = makePart({
-		Name = "SellSign",
-		Size = Vector3.new(10, 3, 0.6),
-		CFrame = CFrame.new(pos + Vector3.new(0, 9.5, 0)),
-		Color = Color3.fromRGB(35, 50, 90),
+	attachPart(decor, {
+		Name = "SellTerminalFrame",
+		Size = Vector3.new(2.85, 4.05, 0.2),
+		CFrame = sellLocalCF(base, Vector3.new(5.1, 4.9, -0.2), faceFront),
+		Color = SELL_VIOLET,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	local terminalScreen = attachPart(decor, {
+		Name = "SellTerminalScreen",
+		Size = Vector3.new(2.35, 3.5, 0.16),
+		CFrame = sellLocalCF(base, Vector3.new(5.1, 4.9, -0.1), faceFront),
+		Color = Color3.fromRGB(8, 14, 32),
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
 	})
-	sign.Parent = decor
-	addSurfaceSign(sign, Enum.NormalId.Front, "VENDRE LES BULLES")
-	addSurfaceSign(sign, Enum.NormalId.Back, "VENDRE LES BULLES")
 
-	local valueBoard = makePart({
-		Name = "SellValueBoard",
-		Size = Vector3.new(8, 2, 0.4),
-		CFrame = CFrame.new(pos + Vector3.new(0, 7.2, 2.2)),
-		Color = Color3.fromRGB(25, 35, 60),
+	local termGui = Instance.new("SurfaceGui")
+	termGui.Name = "TerminalGui"
+	termGui.Face = Enum.NormalId.Front
+	termGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	termGui.PixelsPerStud = 40
+	termGui.LightInfluence = 0
+	termGui.Brightness = 1.15
+	termGui.Parent = terminalScreen
+
+	local termFrame = Instance.new("Frame")
+	termFrame.Size = UDim2.fromScale(1, 1)
+	termFrame.BackgroundColor3 = Color3.fromRGB(6, 12, 30)
+	termFrame.BorderSizePixel = 0
+	termFrame.Parent = termGui
+
+	local termStroke = Instance.new("UIStroke")
+	termStroke.Color = SELL_CYAN
+	termStroke.Thickness = 3
+	termStroke.Parent = termFrame
+
+	local termLabel = Instance.new("TextLabel")
+	termLabel.Size = UDim2.new(1, -16, 0.42, 0)
+	termLabel.Position = UDim2.new(0, 8, 0.06, 0)
+	termLabel.BackgroundTransparency = 1
+	termLabel.Text = "Transforme tes bulles en pièces !"
+	termLabel.TextColor3 = PALETTE.White
+	termLabel.Font = Enum.Font.GothamBold
+	termLabel.TextScaled = true
+	termLabel.TextWrapped = true
+	termLabel.Parent = termFrame
+
+	local iconLabel = Instance.new("TextLabel")
+	iconLabel.Size = UDim2.new(1, -16, 0.42, 0)
+	iconLabel.Position = UDim2.new(0, 8, 0.5, 0)
+	iconLabel.BackgroundTransparency = 1
+	iconLabel.Text = "▼  $"
+	iconLabel.TextColor3 = SELL_CYAN
+	iconLabel.Font = Enum.Font.GothamBold
+	iconLabel.TextScaled = true
+	iconLabel.Parent = termFrame
+
+	-- Pictogramme 3D sous le texte (sac + bulle)
+	attachPart(decor, {
+		Name = "SellTerminalBagIcon",
+		Size = Vector3.new(1.15, 1.25, 0.7),
+		CFrame = sellLocalCF(base, Vector3.new(5.1, 3.55, 0.15)),
+		Color = PALETTE.Gold,
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
+		CanQuery = false,
 	})
-	valueBoard.Parent = decor
-	local gui = addBillboard(valueBoard, "SellValueGui", "Valeur du sac : 0 pièces", Vector2.new(280, 48), Vector3.new(0, 0, 0))
-	gui.MaxDistance = 60
+	attachPart(decor, {
+		Name = "SellTerminalDropBubble",
+		Size = Vector3.new(0.85, 0.85, 0.85),
+		CFrame = sellLocalCF(base, Vector3.new(5.1, 4.45, 0.2)),
+		Color = SELL_CYAN,
+		Material = Enum.Material.Glass,
+		Transparency = 0.25,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Ball,
+		Reflectance = 0.2,
+	})
+end
+
+local SellKioskBuilder = require(script.Parent.SellKioskBuilder)
+
+local function buildLeaderboardBoard(decor: Folder, root: Vector3)
+	local boardPos = root + Vector3.new(36, 9, 0)
+
+	local frame = makePart({
+		Name = "LeaderboardBoard",
+		Size = Vector3.new(0.6, 16, 12),
+		CFrame = CFrame.new(boardPos) * CFrame.Angles(0, math.rad(-90), 0),
+		Color = Color3.fromRGB(22, 30, 55),
+		Material = Enum.Material.SmoothPlastic,
+	})
+	frame.Parent = decor
+
+	local header = makePart({
+		Name = "LeaderboardHeader",
+		Size = Vector3.new(0.5, 2.5, 12.2),
+		CFrame = CFrame.new(boardPos + Vector3.new(0, 7.2, 0)) * CFrame.Angles(0, math.rad(-90), 0),
+		Color = PALETTE.Violet,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	})
+	header.Parent = decor
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "LeaderboardGui"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 25
+	gui.Parent = frame
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.new(1, -16, 0, 44)
+	title.Position = UDim2.new(0, 8, 0, 8)
+	title.BackgroundTransparency = 1
+	title.Text = "TOP 10 JOUEURS"
+	title.TextColor3 = PALETTE.White
+	title.Font = Enum.Font.GothamBold
+	title.TextScaled = true
+	title.Parent = gui
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Name = "Subtitle"
+	subtitle.Size = UDim2.new(1, -16, 0, 24)
+	subtitle.Position = UDim2.new(0, 8, 0, 52)
+	subtitle.BackgroundTransparency = 1
+	subtitle.Text = "Classement richesse (pièces)"
+	subtitle.TextColor3 = PALETTE.Cyan
+	subtitle.Font = Enum.Font.Gotham
+	subtitle.TextScaled = true
+	subtitle.Parent = gui
+
+	local list = Instance.new("Frame")
+	list.Name = "List"
+	list.Size = UDim2.new(1, -16, 1, -90)
+	list.Position = UDim2.new(0, 8, 0, 82)
+	list.BackgroundTransparency = 1
+	list.Parent = gui
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = list
+
+	for i = 1, 10 do
+		local row = Instance.new("Frame")
+		row.Name = "Row" .. tostring(i)
+		row.Size = UDim2.new(1, 0, 0, 28)
+		row.BackgroundColor3 = if i % 2 == 0 then Color3.fromRGB(30, 42, 72) else Color3.fromRGB(26, 36, 62)
+		row.BackgroundTransparency = 0.15
+		row.BorderSizePixel = 0
+		row.LayoutOrder = i
+		row.Parent = list
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 6)
+		corner.Parent = row
+
+		local rank = Instance.new("TextLabel")
+		rank.Name = "Rank"
+		rank.Size = UDim2.new(0, 44, 1, 0)
+		rank.BackgroundTransparency = 1
+		rank.Text = "#" .. tostring(i)
+		rank.TextColor3 = PALETTE.Gold
+		rank.Font = Enum.Font.GothamBold
+		rank.TextScaled = true
+		rank.Parent = row
+
+		local name = Instance.new("TextLabel")
+		name.Name = "Name"
+		name.Size = UDim2.new(0.5, 0, 1, 0)
+		name.Position = UDim2.new(0, 48, 0, 0)
+		name.BackgroundTransparency = 1
+		name.Text = "—"
+		name.TextColor3 = PALETTE.White
+		name.Font = Enum.Font.Gotham
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.TextScaled = true
+		name.Parent = row
+
+		local value = Instance.new("TextLabel")
+		value.Name = "Value"
+		value.Size = UDim2.new(0.35, 0, 1, 0)
+		value.Position = UDim2.new(0.62, 0, 0, 0)
+		value.BackgroundTransparency = 1
+		value.Text = "—"
+		value.TextColor3 = PALETTE.Cyan
+		value.Font = Enum.Font.GothamBold
+		value.TextXAlignment = Enum.TextXAlignment.Right
+		value.TextScaled = true
+		value.Parent = row
+	end
 end
 
 local function buildSpawnRing(decor: Folder, root: Vector3)
@@ -623,23 +1529,31 @@ local function buildLobby(lobby: Folder)
 		return p
 	end)
 
-	-- Bande centrale (chemin vers l'entrée)
+	local codeBooth = L.SellBooth.Mode ~= "StudioModel"
+	if codeBooth and lobby:FindFirstChild("SellKiosk") then
+		warn("[ZoneService] SellKiosk Studio présent alors que SellBooth.Mode = \"Code\" — "
+			.. "supprime-le pour éviter deux kiosques superposés.")
+	end
+
+	-- Bande centrale (chemin praticable vers l'entrée)
 	local decor = ensureDecorFolder(lobby, "LobbyDecor")
 	if #decor:GetChildren() == 0 then
 		local path = makePart({
 			Name = "LobbyPath",
-			Size = Vector3.new(14, 0.3, 50),
-			CFrame = CFrame.new(root + Vector3.new(0, 0.2, 12)),
+			Size = Vector3.new(16, 1.5, 56),
+			CFrame = CFrame.new(root + Vector3.new(0, 0.15, 10)),
 			Color = PALETTE.FloorAccent,
 			Material = Enum.Material.SmoothPlastic,
-			CanCollide = false,
-			CanQuery = false,
+			CanCollide = true,
 		})
 		path.Parent = decor
 
 		buildLobbyRailings(decor, root, L.FloorSize)
 		buildEntranceArch(decor, root)
-		buildSellBooth(decor, root)
+		if codeBooth then
+			buildSellBooth(decor, root)
+		end
+		buildLeaderboardBoard(decor, root)
 		buildSpawnRing(decor, root)
 		buildGuideSign(decor, root)
 	end
@@ -657,30 +1571,63 @@ local function buildLobby(lobby: Folder)
 	end)
 	lobbySpawnPart = spawn
 
-	-- Trigger technique invisible (intégré au comptoir)
-	local sellZone = ensurePart(lobby, "SellZone", function()
-		local p = Instance.new("Part")
-		p.Anchored = true
-		p.CanCollide = false
-		p.CanQuery = true
-		p.CanTouch = false
-		p.Transparency = 1
-		p.Size = L.SellZoneSize
-		p.CFrame = CFrame.new(L.SellPosition)
-		return p
-	end)
+	-- Trigger technique invisible (pad de vente devant le kiosque)
+	local sellZone: BasePart
+	if codeBooth then
+		sellZone = ensurePart(lobby, "SellZone", function()
+			local p = Instance.new("Part")
+			p.Anchored = true
+			p.CanCollide = false
+			p.CanQuery = true
+			p.CanTouch = false
+			p.Transparency = 1
+			p.Size = L.SellZoneSize
+			p.CFrame = sellBoothBaseCF(root) * CFrame.new(L.SellBooth.PadLocalOffset)
+			return p
+		end)
+	else
+		-- Mode "StudioModel" : priorité au Part dans SellKiosk ; sinon fallback config.
+		SellKioskBuilder.Bind(lobby)
+		local bound = SellKioskBuilder.GetSellZone(lobby)
+		if bound then
+			sellZone = bound
+		else
+			sellZone = ensurePart(lobby, "SellZone", function()
+				local p = Instance.new("Part")
+				p.Anchored = true
+				p.CanCollide = false
+				p.CanQuery = true
+				p.CanTouch = false
+				p.Transparency = 1
+				p.Size = L.SellZoneSize
+				p.CFrame = SellKioskBuilder.GetPadWorldCFrame(root, lobby)
+				markGenerated(p)
+				return p
+			end)
+			warn("[ZoneService] SellZone fallback lobby — place SellPad/SellZone dans SellKiosk Studio.")
+		end
+	end
 
+	-- Marqueur logique uniquement (plus de téléport / prompt).
 	local entrance = ensurePart(lobby, "GameEntrance", function()
 		local p = Instance.new("Part")
 		p.Anchored = true
 		p.CanCollide = false
-		p.CanQuery = true
+		p.CanQuery = false
 		p.CanTouch = false
 		p.Transparency = 1
 		p.Size = L.EntranceSize
 		p.CFrame = CFrame.new(L.EntrancePosition)
 		return p
 	end)
+	entrance.CanTouch = false
+	entrance.CanQuery = false
+	entrance.Transparency = 1
+	for _, child in ipairs(entrance:GetChildren()) do
+		if child:IsA("ProximityPrompt") then
+			child:Destroy()
+		end
+	end
 
 	local sellPrompt = ensurePrompt(sellZone, "SellPrompt", "Vendre mes bulles", "VENDRE LES BULLES", Config.World.SellMaxDistance)
 	connectOnce(sellPrompt, "_wiredSell", function(player: Player)
@@ -693,11 +1640,6 @@ local function buildLobby(lobby: Folder)
 			return
 		end
 		BackpackService.Sell(player)
-	end)
-
-	local entrancePrompt = ensurePrompt(entrance, "EntrancePrompt", "Entrer dans la salle de bulles", "SALLE DE BULLES", 12)
-	connectOnce(entrancePrompt, "_wiredEntrance", function(player: Player)
-		ZoneService.TeleportToGameRoom(player)
 	end)
 end
 
@@ -734,8 +1676,114 @@ local function buildExitArch(decor: Folder, exitPos: Vector3, groundY: number)
 		Material = Enum.Material.Neon,
 	})
 	lintel.Parent = decor
-	addSurfaceSign(lintel, Enum.NormalId.Front, "Retour au lobby")
-	addSurfaceSign(lintel, Enum.NormalId.Back, "Retour au lobby")
+	addSurfaceSign(lintel, Enum.NormalId.Front, "← Lobby")
+	addSurfaceSign(lintel, Enum.NormalId.Back, "← Lobby")
+end
+
+--------------------------------------------------------------------
+-- Passage physique lobby ↔ salle (escalier + palier, aucun téléport)
+--------------------------------------------------------------------
+local function buildPhysicalConnection(parent: Folder)
+	local connection = ensureFolder(parent, "Connection")
+	clearGeneratedChildren(connection)
+
+	local decor = ensureDecorFolder(connection, "ConnectionDecor")
+	if #decor:GetChildren() > 0 then
+		return
+	end
+
+	local L = Config.Lobby
+	local R = Config.GameRoom
+	local G = Config.Grid
+	local root = L.RootOffset
+	local lobbyTopY = root.Y
+	local roomTopY = G.Origin.Y
+	local rise = roomTopY - lobbyTopY
+	local width = 16
+
+	local exitSouthZ = R.ExitPosition.Z - R.ExitPadSize.Z / 2
+	local spawnNorthZ = R.SpawnPadPosition.Z + R.PadSize.Z / 2
+
+	-- Escalier : démarre sous l'arche, finit pile à la face sud du ExitPad (hauteur salle).
+	local stepCount = math.max(6, math.ceil(rise / 1.0))
+	local stepRise = rise / stepCount
+	local stepDepth = 3.0
+	local stepThickness = math.max(1.15, stepRise + 0.25)
+	local stairsEndZ = exitSouthZ
+	local stairsStartZ = stairsEndZ - stepCount * stepDepth
+
+	-- 1) Pont d'approche lobby → pied de l'escalier (comble le trou).
+	local approachStartZ = math.min(L.EntrancePosition.Z - 4, stairsStartZ - 2)
+	local approachEndZ = stairsStartZ + 0.5
+	local approachLen = math.max(4, approachEndZ - approachStartZ)
+	local approach = makePart({
+		Name = "ApproachDeck",
+		Size = Vector3.new(width, 1.5, approachLen),
+		CFrame = CFrame.new(0, lobbyTopY + 0.15, (approachStartZ + approachEndZ) / 2),
+		Color = PALETTE.FloorAccent,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = true,
+	})
+	approach.Parent = decor
+
+	-- 2) Marches montantes (+Z).
+	for i = 1, stepCount do
+		local topY = lobbyTopY + stepRise * i
+		local centerZ = stairsStartZ + (i - 0.5) * stepDepth
+		local step = makePart({
+			Name = "StairStep" .. tostring(i),
+			Size = Vector3.new(width, stepThickness, stepDepth + 0.2),
+			CFrame = CFrame.new(0, topY - stepThickness / 2, centerZ),
+			Color = if i % 2 == 0 then Color3.fromRGB(48, 75, 130) else Color3.fromRGB(40, 65, 115),
+			Material = Enum.Material.SmoothPlastic,
+			CanCollide = true,
+		})
+		step.Parent = decor
+	end
+
+	-- 3) Palier haut continu ExitPad → SpawnPad (niveau salle).
+	local landingStartZ = stairsEndZ - 1
+	local landingEndZ = spawnNorthZ
+	local landingLen = math.max(8, landingEndZ - landingStartZ)
+	local landing = makePart({
+		Name = "UpperLanding",
+		Size = Vector3.new(width + 6, 2, landingLen),
+		CFrame = CFrame.new(0, roomTopY - 1, (landingStartZ + landingEndZ) / 2),
+		Color = R.PadColor,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = true,
+	})
+	landing.Parent = decor
+
+	-- Garde-corps latéraux sur le parcours.
+	local railHeight = rise + 5
+	local totalPathStart = approachStartZ
+	local totalPathEnd = landingEndZ
+	local totalLen = totalPathEnd - totalPathStart
+	local midZ = (totalPathStart + totalPathEnd) / 2
+	for _, side in ipairs({ -1, 1 }) do
+		local rail = makePart({
+			Name = if side < 0 then "ConnRailLeft" else "ConnRailRight",
+			Size = Vector3.new(0.9, railHeight, totalLen),
+			CFrame = CFrame.new(side * (width / 2 + 0.2), lobbyTopY + railHeight / 2, midZ),
+			Color = PALETTE.CyanDeep,
+			Material = Enum.Material.Glass,
+			Transparency = 0.35,
+			CanCollide = true,
+		})
+		rail.Parent = decor
+	end
+
+	for _, side in ipairs({ -1, 1 }) do
+		local post = makePart({
+			Name = if side < 0 then "ConnPostLeft" else "ConnPostRight",
+			Size = Vector3.new(1.4, 7, 1.4),
+			CFrame = CFrame.new(side * (width / 2 - 0.5), roomTopY + 3.5, stairsEndZ),
+			Color = PALETTE.Violet,
+			Material = Enum.Material.SmoothPlastic,
+		})
+		post.Parent = decor
+	end
 end
 
 local function buildGameRoom(gameRoom: Folder)
@@ -836,22 +1884,26 @@ local function buildGameRoom(gameRoom: Folder)
 	end)
 	gameRoomSpawnPart = spawn
 
+	-- Ancien trigger de téléport : désactivé (marqueur décoratif invisible seulement).
 	local exitZone = ensurePart(gameRoom, "ExitZone", function()
 		local p = Instance.new("Part")
 		p.Anchored = true
 		p.CanCollide = false
-		p.CanQuery = true
+		p.CanQuery = false
 		p.CanTouch = false
 		p.Transparency = 1
 		p.Size = R.ExitSize
 		p.CFrame = CFrame.new(exitPos)
 		return p
 	end)
-
-	local exitPrompt = ensurePrompt(exitZone, "ExitPrompt", "Retourner au lobby", "Retour au lobby", 12)
-	connectOnce(exitPrompt, "_wiredExit", function(player: Player)
-		ZoneService.TeleportToLobby(player)
-	end)
+	exitZone.CanTouch = false
+	exitZone.CanQuery = false
+	exitZone.Transparency = 1
+	for _, child in ipairs(exitZone:GetChildren()) do
+		if child:IsA("ProximityPrompt") then
+			child:Destroy()
+		end
+	end
 
 	buildSafetyBorders(gameRoom)
 end
@@ -862,22 +1914,38 @@ end
 function ZoneService.EnsureWorld(): Folder
 	disableStudioBaseplate()
 
+	-- Jamais utiliser la prévisualisation d'édition Studio en Play.
+	LobbyEditingPreview.RemoveLobbyEditingPreview()
+
 	local root = ensureFolder(workspace, "BubblePopWorld")
-	local lobby = ensureFolder(root, "Lobby")
+	local lobby = ensureLobby(root)
 	local gameRoom = ensureFolder(root, "GameRoom")
 
-	-- Migration dev : supprimer uniquement GeneratedByCode (jamais BubbleWorld / grille).
+	-- Migration dev : supprimer uniquement GeneratedByCode (jamais le SellKiosk Studio).
 	clearGeneratedChildren(lobby)
 	clearGeneratedChildren(gameRoom)
+	local connectionFolder = ensureFolder(root, "Connection")
+	clearGeneratedChildren(connectionFolder)
 
 	buildLobby(lobby)
 	buildGameRoom(gameRoom)
+	buildPhysicalConnection(root)
+
+	-- Remplit le panneau Top 10 dès que le décor lobby est prêt.
+	task.defer(function()
+		local ok, leaderboard = pcall(function()
+			return require(script.Parent.LeaderboardService)
+		end)
+		if ok and leaderboard and leaderboard.RefreshWorldBoard then
+			leaderboard.RefreshWorldBoard()
+		end
+	end)
 
 	return root
 end
 
 --------------------------------------------------------------------
--- Téléports serveur uniquement
+-- Téléports : spawn initial + FallReset uniquement (jamais lobby ↔ salle)
 --------------------------------------------------------------------
 local teleportLast: { [Player]: number } = {}
 
@@ -930,6 +1998,7 @@ local function doTeleport(player: Player, targetPos: Vector3, area: string, bypa
 	return true
 end
 
+-- Spawn initial / FallReset lobby uniquement.
 function ZoneService.TeleportToLobby(player: Player, bypassCooldown: boolean?): boolean
 	if not lobbySpawnPart then
 		return false
@@ -937,6 +2006,7 @@ function ZoneService.TeleportToLobby(player: Player, bypassCooldown: boolean?): 
 	return doTeleport(player, lobbySpawnPart.Position + Vector3.new(0, 3, 0), "Lobby", bypassCooldown)
 end
 
+-- FallReset salle uniquement (plus aucun passage lobby ↔ salle).
 function ZoneService.TeleportToGameRoom(player: Player, bypassCooldown: boolean?): boolean
 	if not gameRoomSpawnPart then
 		return false
@@ -944,8 +2014,16 @@ function ZoneService.TeleportToGameRoom(player: Player, bypassCooldown: boolean?
 	return doTeleport(player, gameRoomSpawnPart.Position + Vector3.new(0, 3, 0), "GameRoom", bypassCooldown)
 end
 
+local function resolveAreaFromPosition(pos: Vector3): string
+	local split = Config.World.AreaSplitZ
+	if pos.Z < split then
+		return "Lobby"
+	end
+	return "GameRoom"
+end
+
 --------------------------------------------------------------------
--- Spawn initial (debounce) + FallReset
+-- Spawn initial (debounce) + PlayerArea + FallReset
 --------------------------------------------------------------------
 local spawningInProgress: { [Player]: boolean } = {}
 
@@ -959,6 +2037,7 @@ local function onCharacterAdded(player: Player)
 		while not DataService.Get(player) and os.clock() < deadline do
 			task.wait()
 		end
+		-- Seul téléport de gameplay : apparition initiale dans le lobby.
 		ZoneService.TeleportToLobby(player, true)
 		spawningInProgress[player] = nil
 	end)
@@ -966,13 +2045,33 @@ end
 
 local fallResetGuard: { [Player]: boolean } = {}
 
--- Un joueur tombé du lobby revient au lobby ; dans la salle, on suit
--- FallResetDestination (par défaut le pad de la salle).
 local function fallResetToLobby(player: Player): boolean
 	if player:GetAttribute("PlayerArea") == "Lobby" then
 		return true
 	end
 	return Config.World.FallResetDestination == "Lobby"
+end
+
+-- Met à jour PlayerArea par position (sans téléporter).
+local function watchPlayerArea()
+	local accum = 0
+	RunService.Heartbeat:Connect(function(dt)
+		accum += dt
+		if accum < 0.2 then
+			return
+		end
+		accum = 0
+		for _, player in ipairs(Players:GetPlayers()) do
+			local char = player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp and hrp:IsA("BasePart") then
+				local area = resolveAreaFromPosition(hrp.Position)
+				if player:GetAttribute("PlayerArea") ~= area then
+					player:SetAttribute("PlayerArea", area)
+				end
+			end
+		end
+	end)
 end
 
 local function watchFallReset()
@@ -1012,7 +2111,6 @@ function ZoneService.Start()
 
 	Players.PlayerAdded:Connect(bindPlayer)
 
-	-- Joueurs déjà connectés quand le service démarre (Rojo sync / hot reload Studio).
 	for _, player in ipairs(Players:GetPlayers()) do
 		bindPlayer(player)
 	end
@@ -1023,6 +2121,7 @@ function ZoneService.Start()
 		fallResetGuard[player] = nil
 	end)
 
+	watchPlayerArea()
 	watchFallReset()
 end
 

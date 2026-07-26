@@ -38,9 +38,11 @@ GameConfig.World = {
 	FallResetY = -25,
 	FallResetDestination = "GameRoom",
 	-- Dev : true une fois pour reconstruire le layout GeneratedByCode, puis false.
-	RebuildGeneratedLayout = false,
+	RebuildGeneratedLayout = true,
 	TeleportCooldown = 1.5,
 	SellMaxDistance = 16,
+	-- Z < AreaSplitZ → Lobby ; sinon GameRoom (détection sans téléport).
+	AreaSplitZ = -198,
 	-- Legacy (collision invisible) — préférer InvisibleCollisionHeight.
 	BorderHeight = 22,
 	BorderThickness = 2,
@@ -57,6 +59,12 @@ GameConfig.World = {
 local lobbyRoot = Vector3.new(0, 0, -240)
 local lobbySellOffset = Vector3.new(-34, 2, 6)
 local lobbyEntranceOffset = Vector3.new(0, 3, 36)
+-- Yaw 90° = façade tournée à droite (vers le spawn / +X local après rotation).
+local sellBoothYawDegrees = 90
+local sellPadLocalOffset = Vector3.new(0, 0.15, 6.8)
+local sellBoothOrigin = lobbyRoot + lobbySellOffset
+local sellBoothCF = CFrame.new(sellBoothOrigin) * CFrame.Angles(0, math.rad(sellBoothYawDegrees), 0)
+local sellPadWorld = (sellBoothCF * CFrame.new(sellPadLocalOffset)).Position
 
 GameConfig.Lobby = {
 	RootOffset = lobbyRoot,
@@ -66,8 +74,28 @@ GameConfig.Lobby = {
 	VioletAccent = Color3.fromRGB(160, 110, 255),
 	SpawnOffset = Vector3.new(0, 4, 0),
 	SellZoneOffset = lobbySellOffset,
-	SellZoneSize = Vector3.new(14, 6, 12),
-	SellPosition = lobbyRoot + lobbySellOffset,
+	SellZoneSize = Vector3.new(12, 7, 10),
+	SellPosition = sellPadWorld,
+	SellBooth = {
+		-- "Code" : kiosque assemblé par ZoneService.buildSellBooth.
+		-- "StudioModel" : kiosque = Model manuel Lobby.SellKiosk, branché par SellKioskBuilder.
+		Mode = "Code",
+		YawDegrees = sellBoothYawDegrees,
+		OriginOffset = lobbySellOffset,
+		PadLocalOffset = sellPadLocalOffset,
+		TankBubbleCount = 10,
+		CounterSize = Vector3.new(16.5, 4.2, 6.2),
+		CanopySize = Vector3.new(18.5, 1.1, 10.5),
+		SignSize = Vector3.new(15.5, 4.0, 1.15),
+		PadSize = Vector3.new(11, 0.4, 9),
+	},
+	-- Utilisé uniquement quand SellBooth.Mode == "StudioModel".
+	SellKiosk = {
+		MainSignGuiFace = "Back",
+		ValueDisplayGuiFace = "Back",
+		FrontDisplayGuiFace = "Back", -- alias legacy
+		TerminalGuiFace = "Back",
+	},
 	EntranceOffset = lobbyEntranceOffset,
 	EntrancePosition = lobbyRoot + lobbyEntranceOffset,
 	EntranceSize = Vector3.new(16, 10, 6),
@@ -210,6 +238,39 @@ GameConfig.Global = {
 	Target = 1_000_000_000,      -- objectif communautaire
 	FlushInterval = 30,          -- écriture DataStore groupée
 	Topic = "BPW_Global",        -- canal MessagingService
+}
+
+-- Persistance. Roblox ne permet pas d'énumérer de façon fiable toutes les clés d'un
+-- DataStore : la seule réinitialisation globale sûre est le changement de version.
+-- Passer StoreVersion à "v2" crée un namespace vierge (tout le monde repart du TEMPLATE)
+-- sans rien détruire ; remettre "v1" restaure intégralement les anciens profils.
+GameConfig.Data = {
+	PlayerStorePrefix = "BPW_PlayerData_",
+	PlayerKeyPrefix = "player_",
+	StoreVersion = "v2",
+	LeaderboardPrefix = "BPW_LB_",
+	LeaderboardVersion = "v2",
+}
+
+function GameConfig.PlayerStoreName(): string
+	return GameConfig.Data.PlayerStorePrefix .. GameConfig.Data.StoreVersion
+end
+
+function GameConfig.PlayerKey(userId: number): string
+	return GameConfig.Data.PlayerKeyPrefix .. tostring(userId)
+end
+
+function GameConfig.LeaderboardStoreName(boardId: string): string
+	return GameConfig.Data.LeaderboardPrefix .. boardId .. "_" .. GameConfig.Data.LeaderboardVersion
+end
+
+-- Commandes d'administration (chat serveur uniquement, aucun Remote exposé).
+-- Le propriétaire de l'expérience est admin d'office ; UserIds ajoute des comptes.
+GameConfig.Admin = {
+	UserIds = {},
+	AllowPlaceOwner = true,
+	CommandPrefix = "/bpwreset",
+	ConfirmTimeout = 30,
 }
 
 -- Mondes (le monde 1 est généré par défaut ; les autres réutilisent le même

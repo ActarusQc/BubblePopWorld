@@ -300,6 +300,21 @@ function BackpackService.Sell(player: Player): (number?, number?, string?)
 	return nil, nil, err
 end
 
+-- Réinitialisation admin : remet le profil au TEMPLATE sous le verrou et invalide les
+-- transactions en cours, pour qu'un rollback périmé ne recrédite pas un sac remis à zéro.
+function BackpackService.ResetSession(player: Player): boolean
+	local locked, ok = runLocked(player, function()
+		bumpGen(player)
+		return DataService.ResetProfile(player)
+	end)
+	lastFullNotify[player] = nil
+	if not locked then
+		warn("[BackpackService] réinitialisation ignorée pour " .. player.Name .. " : verrou occupé")
+		return false
+	end
+	return ok == true
+end
+
 function BackpackService.Start()
 	DataService.SetMutationWaiter(BackpackService.WaitUnlocked)
 

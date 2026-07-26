@@ -16,7 +16,9 @@ local services = {
 	require(script.DropService),
 	require(script.ChestService),
 	require(script.ShopService),
+	require(script.BubbleShopBuilder),
 	require(script.LeaderboardService),
+	require(script.AdminService),
 }
 
 for _, service in ipairs(services) do

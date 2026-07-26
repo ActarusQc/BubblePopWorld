@@ -12,6 +12,7 @@ local Remotes = require(Shared.Remotes)
 local BubbleService = require(script.Parent.BubbleService)
 local DataService = require(script.Parent.DataService)
 local ToolModels = require(script.Parent.ToolModels)
+local BackpackVisual = require(script.Parent.BackpackVisual)
 
 local ToolService = {}
 local cooldowns: { [Player]: { [string]: number } } = {}
@@ -75,6 +76,7 @@ local function setWingsEquipped(player: Player, equipped: boolean)
 	else
 		ToolModels.DetachWings(char)
 	end
+	BackpackVisual.Refresh(char)
 end
 
 local function toggleWings(player: Player)
@@ -281,10 +283,12 @@ function ToolService.Start()
 	end)
 
 	local function onCharacter(player: Player, char: Model)
+		BackpackVisual.Attach(char)
 		if player:GetAttribute("OwnsWings") == true then
 			ensureWingToggleTool(player)
 			if player:GetAttribute("HasWings") == true then
 				ToolModels.AttachWings(char)
+				BackpackVisual.Refresh(char)
 			else
 				ToolModels.DetachWings(char)
 			end
@@ -315,6 +319,7 @@ function ToolService.Start()
 			ensureWingToggleTool(player)
 			if player.Character and player:GetAttribute("HasWings") == true then
 				ToolModels.AttachWings(player.Character)
+				BackpackVisual.Refresh(player.Character)
 			end
 		end
 	end
