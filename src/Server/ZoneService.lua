@@ -507,12 +507,14 @@ local function sellLocalCF(base: CFrame, localPos: Vector3, localRot: CFrame?): 
 	return cf
 end
 
-local SELL_NAVY = Color3.fromRGB(18, 28, 62)
-local SELL_NAVY_DEEP = Color3.fromRGB(10, 16, 40)
-local SELL_VIOLET = Color3.fromRGB(155, 70, 255)
-local SELL_CYAN = Color3.fromRGB(55, 220, 255)
-local SELL_CYAN_SOFT = Color3.fromRGB(90, 200, 255)
+local SELL_NAVY = Color3.fromRGB(18, 32, 85)
+local SELL_NAVY_DEEP = Color3.fromRGB(8, 22, 65)
+local SELL_BLUE = Color3.fromRGB(28, 105, 255)
+local SELL_CYAN = Color3.fromRGB(80, 230, 255)
+local SELL_CYAN_SOFT = Color3.fromRGB(160, 240, 255)
+local SELL_GOLD = Color3.fromRGB(255, 185, 60) -- coins / money accents only
 local SELL_TOP = Color3.fromRGB(210, 220, 235)
+local SELL_PANEL = Color3.fromRGB(10, 26, 72)
 
 local function attachPart(parent: Folder, props: {
 	Name: string,
@@ -548,10 +550,13 @@ local function addSellValueScreen(board: BasePart)
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "SellValueGui"
 	gui.Face = Enum.NormalId.Front
+	gui.Enabled = true
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	gui.PixelsPerStud = 50
 	gui.LightInfluence = 0
 	gui.Brightness = 1.2
+	-- Never AlwaysOnTop: otherwise this counter screen draws over the player when they stand on the pad.
+	gui.AlwaysOnTop = false
 	gui.Parent = board
 
 	local frame = Instance.new("Frame")
@@ -616,39 +621,113 @@ local function addSellValueScreen(board: BasePart)
 	unit.Parent = row
 end
 
+-- Cadre ouvert (4 bords) dans le plan local d'un écran — jamais de plaque pleine devant le GUI.
+local function attachOpenBorder(
+	parent: Folder,
+	name: string,
+	planeCF: CFrame,
+	width: number,
+	height: number,
+	border: number,
+	depth: number,
+	color: Color3,
+	transparency: number?
+)
+	local t = transparency or 0.15
+	local halfW = width / 2
+	local halfH = height / 2
+	local inset = border / 2
+
+	attachPart(parent, {
+		Name = name .. "_Top",
+		Size = Vector3.new(width, border, depth),
+		CFrame = planeCF * CFrame.new(0, halfH - inset, 0),
+		Color = color,
+		Material = Enum.Material.Neon,
+		Transparency = t,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(parent, {
+		Name = name .. "_Bottom",
+		Size = Vector3.new(width, border, depth),
+		CFrame = planeCF * CFrame.new(0, -halfH + inset, 0),
+		Color = color,
+		Material = Enum.Material.Neon,
+		Transparency = t,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(parent, {
+		Name = name .. "_Left",
+		Size = Vector3.new(border, height - border * 2, depth),
+		CFrame = planeCF * CFrame.new(-halfW + inset, 0, 0),
+		Color = color,
+		Material = Enum.Material.Neon,
+		Transparency = t,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachPart(parent, {
+		Name = name .. "_Right",
+		Size = Vector3.new(border, height - border * 2, depth),
+		CFrame = planeCF * CFrame.new(halfW - inset, 0, 0),
+		Color = color,
+		Material = Enum.Material.Neon,
+		Transparency = t,
+		CanCollide = false,
+		CanQuery = false,
+	})
+end
+
 local function addSellTitleGui(sign: BasePart)
+	local booth = Config.Lobby.SellBooth
+	local titleText = booth.SignText or "SELL YOUR BUBBLES"
+	local taglineText = booth.TaglineText or "POP · FILL · CASH IN"
+
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "SignGui"
 	gui.Face = Enum.NormalId.Front
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 40
+	gui.PixelsPerStud = 45
 	gui.LightInfluence = 0
-	gui.Brightness = 1.4
+	gui.Brightness = 1.5
+	gui.AlwaysOnTop = false
 	gui.Parent = sign
 
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.fromScale(1, 1)
-	frame.BackgroundColor3 = Color3.fromRGB(22, 18, 55)
-	frame.BackgroundTransparency = 0.08
+	frame.BackgroundColor3 = SELL_PANEL
+	frame.BackgroundTransparency = 0.05
 	frame.BorderSizePixel = 0
 	frame.Parent = gui
 
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = SELL_CYAN
+	stroke.Thickness = 3
+	stroke.Transparency = 0.2
+	stroke.Parent = frame
+
 	local line1 = Instance.new("TextLabel")
-	line1.Size = UDim2.new(1, -24, 0.42, 0)
-	line1.Position = UDim2.new(0, 12, 0.1, 0)
+	line1.Name = "Title"
+	line1.Size = UDim2.new(1, -28, 0.52, 0)
+	line1.Position = UDim2.new(0, 14, 0.08, 0)
 	line1.BackgroundTransparency = 1
-	line1.Text = "SELL YOUR"
-	line1.TextColor3 = PALETTE.White
-	line1.Font = Enum.Font.GothamBold
+	line1.Text = titleText
+	line1.TextColor3 = Color3.fromRGB(245, 250, 255)
+	line1.Font = Enum.Font.GothamBlack
 	line1.TextScaled = true
+	line1.TextStrokeColor3 = SELL_BLUE
+	line1.TextStrokeTransparency = 0.35
 	line1.Parent = frame
 
 	local line2 = Instance.new("TextLabel")
-	line2.Size = UDim2.new(1, -24, 0.42, 0)
-	line2.Position = UDim2.new(0, 12, 0.5, 0)
+	line2.Name = "Subtitle"
+	line2.Size = UDim2.new(1, -32, 0.26, 0)
+	line2.Position = UDim2.new(0, 16, 0.64, 0)
 	line2.BackgroundTransparency = 1
-	line2.Text = "BUBBLES"
-	line2.TextColor3 = PALETTE.White
+	line2.Text = taglineText
+	line2.TextColor3 = SELL_CYAN_SOFT
 	line2.Font = Enum.Font.GothamBold
 	line2.TextScaled = true
 	line2.Parent = frame
@@ -657,9 +736,9 @@ end
 local function startSellTankBubbleAnims(parent: Folder, tankWorldCF: CFrame, radius: number, height: number, count: number)
 	local colors = {
 		SELL_CYAN_SOFT,
-		Color3.fromRGB(160, 120, 255),
+		SELL_CYAN,
 		Color3.fromRGB(100, 235, 255),
-		Color3.fromRGB(200, 150, 255),
+		SELL_BLUE,
 		Color3.fromRGB(80, 210, 255),
 	}
 	for i = 1, count do
@@ -712,19 +791,19 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 	local tiltFront = CFrame.Angles(math.rad(-14), math.rad(180), 0)
 
 	--------------------------------------------------------------------
-	-- Estrade + pad de vente
+	-- Estrade + pad de vente (bas de plaza légèrement enfoncé dans le sol lobby)
 	--------------------------------------------------------------------
 	attachPart(decor, {
 		Name = "SellPlaza",
-		Size = Vector3.new(24, 0.6, 22),
-		CFrame = sellLocalCF(base, Vector3.new(0, -1.7, 0.6)),
+		Size = Vector3.new(24, 1.2, 22),
+		CFrame = sellLocalCF(base, Vector3.new(0, -1.6, 0.6)),
 		Color = SELL_NAVY,
 		Material = Enum.Material.SmoothPlastic,
 	})
 	attachPart(decor, {
 		Name = "SellPlazaTrim",
 		Size = Vector3.new(24.6, 0.18, 22.6),
-		CFrame = sellLocalCF(base, Vector3.new(0, -1.35, 0.6)),
+		CFrame = sellLocalCF(base, Vector3.new(0, -0.95, 0.6)),
 		Color = SELL_CYAN,
 		Material = Enum.Material.Neon,
 		Transparency = 0.45,
@@ -869,7 +948,7 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 			Name = if side < 0 then "SellPillarNeonSideL" else "SellPillarNeonSideR",
 			Size = Vector3.new(0.22, pillarH - 2.2, 0.22),
 			CFrame = sellLocalCF(base, Vector3.new(px + side * 1.15, pillarY, -1.4)),
-			Color = SELL_VIOLET,
+			Color = SELL_CYAN,
 			Material = Enum.Material.Neon,
 			Transparency = 0.15,
 			CanCollide = false,
@@ -877,12 +956,12 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		})
 	end
 
-	-- Pièce dorée sur la colonne gauche
+	-- Pièce dorée sur la colonne gauche (accent money uniquement)
 	local coin = attachPart(decor, {
 		Name = "SellPillarCoin",
 		Size = Vector3.new(0.28, 1.5, 1.5),
 		CFrame = sellLocalCF(base, Vector3.new(-7.4, 3.4, 0.2), CFrame.Angles(0, math.rad(90), 0)),
-		Color = PALETTE.Gold,
+		Color = SELL_GOLD,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 		CanQuery = false,
@@ -934,7 +1013,7 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Name = "SellCounterTopEdge",
 		Size = Vector3.new(counterSize.X + 0.85, 0.18, 0.28),
 		CFrame = sellLocalCF(base, Vector3.new(0, 2.7, 2.55)),
-		Color = SELL_VIOLET,
+		Color = SELL_CYAN,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 		CanQuery = false,
@@ -943,9 +1022,9 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Name = "SellCounterSideNeonL",
 		Size = Vector3.new(0.2, counterSize.Y + 0.3, counterSize.Z + 0.2),
 		CFrame = sellLocalCF(base, Vector3.new(-counterSize.X / 2 - 0.05, 0.55, -0.8)),
-		Color = SELL_VIOLET,
+		Color = SELL_BLUE,
 		Material = Enum.Material.Neon,
-		Transparency = 0.2,
+		Transparency = 0.25,
 		CanCollide = false,
 		CanQuery = false,
 	})
@@ -953,9 +1032,9 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Name = "SellCounterSideNeonR",
 		Size = Vector3.new(0.2, counterSize.Y + 0.3, counterSize.Z + 0.2),
 		CFrame = sellLocalCF(base, Vector3.new(counterSize.X / 2 + 0.05, 0.55, -0.8)),
-		Color = SELL_VIOLET,
+		Color = SELL_BLUE,
 		Material = Enum.Material.Neon,
-		Transparency = 0.2,
+		Transparency = 0.25,
 		CanCollide = false,
 		CanQuery = false,
 	})
@@ -977,21 +1056,15 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
 	})
-	attachPart(decor, {
-		Name = "SellValueBoardFrame",
-		Size = Vector3.new(9.7, 2.95, 0.14),
-		CFrame = sellLocalCF(base, Vector3.new(0.3, 0.85, 2.78), tiltFront),
-		Color = SELL_CYAN,
-		Material = Enum.Material.Neon,
-		CanCollide = false,
-		CanQuery = false,
-	})
+	-- Cadre ouvert devant l'écran (pas de plaque pleine qui masque le SurfaceGui de près).
+	local valueBorderCF = sellLocalCF(base, Vector3.new(0.3, 0.85, 2.82), tiltFront)
+	attachOpenBorder(decor, "SellValueBorder", valueBorderCF, 9.7, 2.95, 0.28, 0.12, SELL_CYAN, 0.12)
 	addSellValueScreen(valueBoard)
 	attachPart(decor, {
 		Name = "SellValueCoin",
 		Size = Vector3.new(0.22, 1.05, 1.05),
 		CFrame = sellLocalCF(base, Vector3.new(-3.9, 0.7, 2.95), CFrame.Angles(math.rad(-14), math.rad(90), 0)),
-		Color = PALETTE.Gold,
+		Color = SELL_GOLD,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 		CanQuery = false,
@@ -1030,7 +1103,7 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Name = "SellCanopyFrontNeon",
 		Size = Vector3.new(canopy.X + 0.3, 0.32, 0.32),
 		CFrame = sellLocalCF(base, Vector3.new(0, 7.05, canopy.Z / 2 + 0.95)),
-		Color = SELL_VIOLET,
+		Color = SELL_CYAN,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 		CanQuery = false,
@@ -1065,14 +1138,14 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 	})
 
 	--------------------------------------------------------------------
-	-- Enseigne massive « VENDRE LES / BULLES »
+	-- Enseigne « SELL YOUR BUBBLES »
 	--------------------------------------------------------------------
 	local signSize = booth.SignSize
 	local sign = attachPart(decor, {
 		Name = "SellSign",
 		Size = signSize,
 		CFrame = sellLocalCF(base, Vector3.new(0, 10.0, 0.9), faceFront),
-		Color = Color3.fromRGB(28, 22, 70),
+		Color = SELL_PANEL,
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
 	})
@@ -1084,20 +1157,13 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
 	})
-	attachPart(decor, {
-		Name = "SellSignFrame",
-		Size = Vector3.new(signSize.X + 0.55, signSize.Y + 0.55, 0.18),
-		CFrame = sellLocalCF(base, Vector3.new(0, 10.0, 1.55), faceFront),
-		Color = SELL_VIOLET,
-		Material = Enum.Material.Neon,
-		CanCollide = false,
-		CanQuery = false,
-	})
+	local signBorderCF = sellLocalCF(base, Vector3.new(0, 10.0, 1.58), faceFront)
+	attachOpenBorder(decor, "SellSignBorder", signBorderCF, signSize.X + 0.55, signSize.Y + 0.55, 0.28, 0.14, SELL_CYAN, 0.12)
 	attachPart(decor, {
 		Name = "SellSignTopNeon",
 		Size = Vector3.new(signSize.X + 0.2, 0.22, 0.22),
 		CFrame = sellLocalCF(base, Vector3.new(0, 10.0 + signSize.Y / 2 + 0.15, 1.35)),
-		Color = SELL_VIOLET,
+		Color = SELL_BLUE,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 		CanQuery = false,
@@ -1151,7 +1217,7 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Name = "SellTankBase",
 		Size = Vector3.new(0.55, tankD + 0.5, tankD + 0.5),
 		CFrame = sellLocalCF(base, tankLocal + Vector3.new(0, -tankH / 2 - 0.05, 0), CFrame.Angles(0, 0, math.rad(90))),
-		Color = SELL_VIOLET,
+		Color = SELL_BLUE,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 		CanQuery = false,
@@ -1183,7 +1249,7 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		CFrame = sellLocalCF(base, tankLocal, CFrame.Angles(0, 0, math.rad(90))),
 		Color = SELL_CYAN,
 		Material = Enum.Material.Neon,
-		Transparency = 0.72,
+		Transparency = 0.78,
 		CanCollide = false,
 		CanQuery = false,
 		Shape = Enum.PartType.Cylinder,
@@ -1200,8 +1266,8 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 	})
 	local tankLight = Instance.new("PointLight")
 	tankLight.Name = "SellTankLight"
-	tankLight.Brightness = 2.0
-	tankLight.Range = 16
+	tankLight.Brightness = 1.1
+	tankLight.Range = 12
 	tankLight.Color = SELL_CYAN
 	tankLight.Parent = tankBaseLightPart
 
@@ -1214,18 +1280,20 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Name = "SellTerminal",
 		Size = Vector3.new(2.6, 3.8, 1.6),
 		CFrame = sellLocalCF(base, Vector3.new(5.1, 4.85, -1.1)),
-		Color = Color3.fromRGB(32, 24, 72),
+		Color = SELL_NAVY_DEEP,
 		Material = Enum.Material.SmoothPlastic,
 	})
-	attachPart(decor, {
-		Name = "SellTerminalFrame",
-		Size = Vector3.new(2.85, 4.05, 0.2),
-		CFrame = sellLocalCF(base, Vector3.new(5.1, 4.9, -0.2), faceFront),
-		Color = SELL_VIOLET,
-		Material = Enum.Material.Neon,
-		CanCollide = false,
-		CanQuery = false,
-	})
+	attachOpenBorder(
+		decor,
+		"SellTerminalBorder",
+		sellLocalCF(base, Vector3.new(5.1, 4.9, -0.05), faceFront),
+		2.85,
+		4.05,
+		0.22,
+		0.12,
+		SELL_CYAN,
+		0.15
+	)
 	local terminalScreen = attachPart(decor, {
 		Name = "SellTerminalScreen",
 		Size = Vector3.new(2.35, 3.5, 0.16),
@@ -1238,10 +1306,12 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 	local termGui = Instance.new("SurfaceGui")
 	termGui.Name = "TerminalGui"
 	termGui.Face = Enum.NormalId.Front
+	termGui.Enabled = true
 	termGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	termGui.PixelsPerStud = 40
 	termGui.LightInfluence = 0
 	termGui.Brightness = 1.15
+	termGui.AlwaysOnTop = false
 	termGui.Parent = terminalScreen
 
 	local termFrame = Instance.new("Frame")
@@ -1281,7 +1351,7 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 		Name = "SellTerminalBagIcon",
 		Size = Vector3.new(1.15, 1.25, 0.7),
 		CFrame = sellLocalCF(base, Vector3.new(5.1, 3.55, 0.15)),
-		Color = PALETTE.Gold,
+		Color = SELL_GOLD,
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
 		CanQuery = false,

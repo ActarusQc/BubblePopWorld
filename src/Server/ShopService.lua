@@ -15,7 +15,8 @@ local function getShopData(player: Player)
 	local out = {}
 	for _, id in ipairs(Config.UpgradeOrder) do
 		local def = Config.Upgrades[id]
-		local level = profile.Upgrades[id] or 0
+		local stored = profile.Upgrades[id] or 0
+		local level = Config.EffectiveUpgradeLevel(id, stored)
 		table.insert(out, {
 			Id = id,
 			Label = def.Label,
@@ -36,13 +37,15 @@ local function buyUpgrade(player: Player, id: any)
 	local profile = DataService.Get(player)
 	if not profile then return false, "Profile not loaded" end
 
-	local level = profile.Upgrades[id] or 0
+	local stored = profile.Upgrades[id] or 0
+	local level = Config.EffectiveUpgradeLevel(id, stored)
 	if level >= def.Max then return false, "Max level reached" end
 
 	local cost = Config.UpgradeCost(id, level)
 	if profile.Coins < cost then return false, "Not enough coins" end
 
 	profile.Coins -= cost
+	-- Incrémente le niveau effectif (si stocké > Max, déjà bloqué ci-dessus).
 	profile.Upgrades[id] = level + 1
 	DataService.ApplyCharacterStats(player)
 	DataService.Push(player)

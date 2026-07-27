@@ -85,8 +85,9 @@ function HUD.Start()
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	-- Panneau unique (stats + sac) — hors zone chat Roblox (bas-gauche).
+	-- Hauteur calée juste après la barre / statut du sac (plus de bouton Shop HUD).
 	local panel = Instance.new("Frame")
-	panel.Size = UDim2.new(0, 270, 0, 148)
+	panel.Size = UDim2.new(0, 270, 0, 142)
 	panel.Position = UDim2.new(0, 16, 0, 16)
 	panel.BackgroundColor3 = BG
 	panel.BackgroundTransparency = 0.15

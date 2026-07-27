@@ -1,9 +1,21 @@
 --!strict
 -- Sac à dos purement visuel (ne touche pas à la logique BackpackService).
 
+local Players = game:GetService("Players")
+
 local BackpackVisual = {}
 
 local BAG_NAME = "BPW_Backpack"
+local DISPLAY_NAME = "BagCountDisplay"
+local COUNT_LABEL_NAME = "Count"
+
+local COLOR_BG = Color3.fromRGB(8, 22, 65)
+local COLOR_ACCENT = Color3.fromRGB(80, 230, 255)
+local COLOR_NUMBER = Color3.fromRGB(245, 250, 255)
+local COLOR_NEAR_FULL = Color3.fromRGB(255, 210, 90)
+local COLOR_FULL = Color3.fromRGB(255, 110, 110)
+
+local displayConnections: { [Model]: { RBXScriptConnection } } = {}
 
 local function getTorso(character: Model): BasePart?
 	local upper = character:FindFirstChild("UpperTorso")
@@ -52,7 +64,131 @@ local function makePart(name: string, size: Vector3, color: Color3, material: En
 	return p
 end
 
+local function clearDisplayConnections(character: Model)
+	local list = displayConnections[character]
+	if not list then
+		return
+	end
+	for _, conn in list do
+		conn:Disconnect()
+	end
+	displayConnections[character] = nil
+end
+
+local function numberColor(current: number, capacity: number): Color3
+	if capacity <= 0 then
+		return COLOR_NUMBER
+	end
+	if current >= capacity then
+		return COLOR_FULL
+	end
+	if current / capacity >= 0.75 then
+		return COLOR_NEAR_FULL
+	end
+	return COLOR_NUMBER
+end
+
+local function readBubbleCount(player: Player?): (number, number)
+	if not player then
+		return 0, 0
+	end
+	local currentRaw = player:GetAttribute("CurrentBubbles")
+	local capacityRaw = player:GetAttribute("BackpackCapacity")
+	local current = if typeof(currentRaw) == "number" then math.max(0, math.floor(currentRaw)) else 0
+	local capacity = if typeof(capacityRaw) == "number" then math.max(0, math.floor(capacityRaw)) else 0
+	return current, capacity
+end
+
+local function applyCount(label: TextLabel, current: number, capacity: number)
+	local text = tostring(current)
+	local color = numberColor(current, capacity)
+	if label.Text ~= text then
+		label.Text = text
+	end
+	if label.TextColor3 ~= color then
+		label.TextColor3 = color
+	end
+end
+
+local function createCountDisplay(folder: Folder, body: BasePart, player: Player?)
+	-- Plaque sur la face arrière (+Z) : milieu-bas du sac pour rester sous la tête/épaules.
+	-- BagBody = 1.15×1.35×0.7 → bas local ≈ -0.675 ; plaque centrée plus bas que le milieu.
+	local plate = makePart(DISPLAY_NAME, Vector3.new(0.72, 0.38, 0.05), COLOR_BG, Enum.Material.SmoothPlastic)
+	plate.CFrame = body.CFrame * CFrame.new(0, -0.45, 0.40)
+	plate.Parent = folder
+	weld(body, plate)
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "CountGui"
+	gui.Adornee = plate
+	gui.Face = Enum.NormalId.Back -- +Z local = face arrière visible en 3e personne
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 80
+	gui.LightInfluence = 0
+	gui.Brightness = 1.2
+	gui.MaxDistance = 80
+	gui.Parent = plate
+
+	local frame = Instance.new("Frame")
+	frame.Name = "Panel"
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = COLOR_BG
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = COLOR_ACCENT
+	stroke.Thickness = 2
+	stroke.Transparency = 0.15
+	stroke.Parent = frame
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0.08, 0)
+	pad.PaddingBottom = UDim.new(0.08, 0)
+	pad.PaddingLeft = UDim.new(0.06, 0)
+	pad.PaddingRight = UDim.new(0.06, 0)
+	pad.Parent = frame
+
+	local label = Instance.new("TextLabel")
+	label.Name = COUNT_LABEL_NAME
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBlack
+	label.TextScaled = true
+	label.TextColor3 = COLOR_NUMBER
+	label.TextStrokeTransparency = 0.5
+	label.TextStrokeColor3 = Color3.fromRGB(0, 10, 40)
+	label.Text = "0"
+	label.Parent = frame
+
+	local current, capacity = readBubbleCount(player)
+	applyCount(label, current, capacity)
+
+	local character = folder.Parent
+	if not player or not character or not character:IsA("Model") then
+		return
+	end
+
+	local connections: { RBXScriptConnection } = {}
+	local function refresh()
+		if not label.Parent then
+			return
+		end
+		local cur, cap = readBubbleCount(player)
+		applyCount(label, cur, cap)
+	end
+
+	table.insert(connections, player:GetAttributeChangedSignal("CurrentBubbles"):Connect(refresh))
+	table.insert(connections, player:GetAttributeChangedSignal("BackpackCapacity"):Connect(refresh))
+	table.insert(connections, folder.Destroying:Connect(function()
+		clearDisplayConnections(character)
+	end))
+
+	displayConnections[character] = connections
+end
+
 function BackpackVisual.Detach(character: Model)
+	clearDisplayConnections(character)
 	local existing = character:FindFirstChild(BAG_NAME)
 	if existing then
 		existing:Destroy()
@@ -112,6 +248,9 @@ function BackpackVisual.Attach(character: Model)
 	strapR.CFrame = body.CFrame * CFrame.new(0.4, 0.35, 0.35)
 	strapR.Parent = folder
 	weld(body, strapR)
+
+	local player = Players:GetPlayerFromCharacter(character)
+	createCountDisplay(folder, body, player)
 end
 
 -- Réattache avec le bon offset (après équipement / retrait des ailes).

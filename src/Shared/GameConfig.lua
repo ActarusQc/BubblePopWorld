@@ -57,11 +57,16 @@ GameConfig.World = {
 -- ne doit jamais recouvrir SpawnPad / ExitPad (Z ∈ [-192, -152]).
 -- Size 40, Spacing 6 → halfZ=120, MinZ=-120.
 local lobbyRoot = Vector3.new(0, 0, -240)
-local lobbySellOffset = Vector3.new(-34, 2, 6)
+-- Layout façade ouest (yaw 90°, vue joueur vers -X) :
+--   GAUCHE (Z plus grand) = ItemShop / achat
+--   DROITE (Z plus petit) = SellBooth / vente auto
+local lobbyItemShopOffset = Vector3.new(-34, 0, 6)
+local lobbySellOffset = Vector3.new(-34, 2, -27)
 local lobbyEntranceOffset = Vector3.new(0, 3, 36)
 -- Yaw 90° = façade tournée à droite (vers le spawn / +X local après rotation).
 local sellBoothYawDegrees = 90
-local sellPadLocalOffset = Vector3.new(0, 0.15, 6.8)
+-- Pad posé sur le dessus de SellPlaza (plus de plancher avant flottant).
+local sellPadLocalOffset = Vector3.new(0, -0.8, 6.8)
 local sellBoothOrigin = lobbyRoot + lobbySellOffset
 local sellBoothCF = CFrame.new(sellBoothOrigin) * CFrame.Angles(0, math.rad(sellBoothYawDegrees), 0)
 local sellPadWorld = (sellBoothCF * CFrame.new(sellPadLocalOffset)).Position
@@ -79,6 +84,7 @@ GameConfig.Lobby = {
 	SellBooth = {
 		-- "Code" : kiosque assemblé par ZoneService.buildSellBooth.
 		-- "StudioModel" : kiosque = Model manuel Lobby.SellKiosk, branché par SellKioskBuilder.
+		-- Position DROITE du duo de kiosques (vente automatique du sac).
 		Mode = "Code",
 		YawDegrees = sellBoothYawDegrees,
 		OriginOffset = lobbySellOffset,
@@ -88,6 +94,8 @@ GameConfig.Lobby = {
 		CanopySize = Vector3.new(18.5, 1.1, 10.5),
 		SignSize = Vector3.new(15.5, 4.0, 1.15),
 		PadSize = Vector3.new(11, 0.4, 9),
+		SignText = "SELL YOUR BUBBLES",
+		TaglineText = "POP · FILL · CASH IN",
 	},
 	-- Vente automatique : entrer dans SellZone suffit, aucun ProximityPrompt.
 	AutoSell = {
@@ -95,13 +103,18 @@ GameConfig.Lobby = {
 		ExitMargin = 3,     -- hystérésis : ré-armement seulement une fois clairement sorti
 		Cooldown = 1.5,     -- délai mini entre deux ventes automatiques d'un même joueur
 	},
-	-- Boutique d'items (achats futurs) : bâtiment distinct du kiosque de vente,
-	-- purement décoratif pour l'instant (aucune logique de vente de bulles).
+	-- Boutique d'upgrades / items : bâtiment distinct du kiosque de vente.
+	-- Aucune logique de vente de bulles (SellBooth / SellZone uniquement).
+	-- Position GAUCHE du duo (même X/yaw, allée entre les plazas).
 	ItemShop = {
-		OriginOffset = Vector3.new(30, 0, 14),
-		YawDegrees = -90, -- façade tournée vers le centre du lobby (-X)
-		SignText = "SHOP",
-		TaglineText = "ITEMS · COMING SOON",
+		OriginOffset = lobbyItemShopOffset,
+		YawDegrees = 90, -- même orientation que SellBooth (façade vers +X)
+		SignText = "BUBBLE SHOP",
+		TaglineText = "BUY BUBBLES & ITEMS",
+		InteriorTagline = "Buy cool items to boost your adventure!",
+		PromptActionText = "Open Shop",
+		PromptObjectText = "Bubble Shop",
+		PromptMaxDistance = 10, -- 8–12 studs : proche du comptoir uniquement
 	},
 	-- Utilisé uniquement quand SellBooth.Mode == "StudioModel".
 	SellKiosk = {
@@ -254,11 +267,41 @@ end
 -- XPMult n'est plus vendue (l'XP ne pilote plus la progression) : la définition reste
 -- pour que les niveaux déjà achetés se rechargent sans erreur, mais elle sort de la boutique.
 GameConfig.Upgrades = {
-	Speed     = { Label = "Speed",           Max = 20, BaseCost = 150, Growth = 1.35, PerLevel = 1.5 },
-	Jump      = { Label = "Jump",            Max = 20, BaseCost = 200, Growth = 1.40, PerLevel = 2.5 },
-	Power     = { Label = "Power (radius)",  Max = 8,  BaseCost = 800, Growth = 1.75, PerLevel = 1 },
-	CoinMult  = { Label = "Coin multiplier", Max = 30, BaseCost = 300, Growth = 1.45, PerLevel = 0.10 },
-	XPMult    = { Label = "XP multiplier",   Max = 30, BaseCost = 300, Growth = 1.45, PerLevel = 0.10 },
+	Speed = {
+		Label = "Speed",
+		Max = 15,
+		BaseCost = 750,
+		Growth = 1.45,
+		PerLevel = 1.0,
+	},
+	Jump = {
+		Label = "Jump",
+		Max = 15,
+		BaseCost = 1000,
+		Growth = 1.50,
+		PerLevel = 1.5,
+	},
+	Power = {
+		Label = "Power (radius)",
+		Max = 8,
+		BaseCost = 3000,
+		Growth = 1.75,
+		PerLevel = 1,
+	},
+	CoinMult = {
+		Label = "Coin multiplier",
+		Max = 15,
+		BaseCost = 2500,
+		Growth = 1.65,
+		PerLevel = 0.05,
+	},
+	XPMult = {
+		Label = "XP multiplier",
+		Max = 30,
+		BaseCost = 300,
+		Growth = 1.45,
+		PerLevel = 0.10,
+	},
 }
 
 GameConfig.UpgradeOrder = { "Speed", "Jump", "Power", "CoinMult" }
@@ -267,6 +310,16 @@ function GameConfig.UpgradeCost(id: string, currentLevel: number): number
 	local def = GameConfig.Upgrades[id]
 	if not def then return math.huge end
 	return math.floor(def.BaseCost * (def.Growth ^ currentLevel))
+end
+
+-- Niveaux stockés peuvent dépasser Max (profils legacy) : effets + boutique clampés.
+function GameConfig.EffectiveUpgradeLevel(id: string, storedLevel: number): number
+	local def = GameConfig.Upgrades[id]
+	if not def then
+		return 0
+	end
+	local level = if type(storedLevel) == "number" then storedLevel else 0
+	return math.clamp(math.floor(level), 0, def.Max)
 end
 
 -- Déplacement du personnage. Le projet utilise JumpPower (UseJumpPower = true),

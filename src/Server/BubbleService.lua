@@ -468,7 +468,9 @@ local function onPopRequest(player: Player, x: any, z: any)
 	end
 
 	local profile = DataService.Get(player)
-	local power = profile and profile.Upgrades.Power or 0
+	local power = if profile
+		then Config.EffectiveUpgradeLevel("Power", profile.Upgrades.Power or 0)
+		else 0
 
 	local cells = { { x, z } }
 	if power > 0 then

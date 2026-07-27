@@ -291,7 +291,8 @@ end
 function DataService.Multipliers(player: Player): number
 	local d = profiles[player]
 	if not d then return 1 end
-	return 1 + d.Upgrades.CoinMult * Config.Upgrades.CoinMult.PerLevel
+	local coinLevel = Config.EffectiveUpgradeLevel("CoinMult", d.Upgrades.CoinMult or 0)
+	return 1 + coinLevel * Config.Upgrades.CoinMult.PerLevel
 end
 
 -- Vitesse et saut sont décidés par le serveur à chaque apparition du personnage.
@@ -302,11 +303,13 @@ function DataService.ApplyCharacterStats(player: Player)
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
 	local M = Config.PlayerMovement
+	local speedLevel = Config.EffectiveUpgradeLevel("Speed", d.Upgrades.Speed or 0)
+	local jumpLevel = Config.EffectiveUpgradeLevel("Jump", d.Upgrades.Jump or 0)
 	hum.WalkSpeed = math.clamp(
-		M.WalkSpeed + d.Upgrades.Speed * Config.Upgrades.Speed.PerLevel, 0, M.MaxWalkSpeed)
+		M.WalkSpeed + speedLevel * Config.Upgrades.Speed.PerLevel, 0, M.MaxWalkSpeed)
 	hum.UseJumpPower = M.UseJumpPower
 	hum.JumpPower = math.clamp(
-		M.JumpPower + d.Upgrades.Jump * Config.Upgrades.Jump.PerLevel, 0, M.MaxJumpPower)
+		M.JumpPower + jumpLevel * Config.Upgrades.Jump.PerLevel, 0, M.MaxJumpPower)
 end
 
 function DataService.Start()
