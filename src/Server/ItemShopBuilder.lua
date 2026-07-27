@@ -9,6 +9,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local L10n = require(Shared.LocalizationStrings)
 local L10nUtil = require(Shared.LocalizationUtil)
+local ShopIcons = require(Shared.ShopIcons)
 
 local MODEL_NAME = "ItemShop"
 local LEGACY_MODEL_NAME = "BubbleShop"
@@ -773,18 +774,41 @@ local function createItemsPanel(model: Model, baseCF: CFrame)
 		COLORS.AmberDeep
 	)
 
-	local lines = { L10n.ItemPotion, L10n.ItemWand, L10n.ItemBoost, L10n.ItemMegaBubble }
-	for i, line in ipairs(lines) do
-		addTextLabel(
-			gui,
-			"Line" .. tostring(i),
-			line,
-			UDim2.new(1, -20, 0.14, 0),
-			UDim2.new(0, 10, 0.24 + (i - 1) * 0.17, 0),
+	local showcase = Config.ShowcaseItems or {}
+	for i, entry in ipairs(showcase) do
+		local rowY = 0.22 + (i - 1) * 0.18
+		local row = Instance.new("Frame")
+		row.Name = "ShowcaseRow" .. tostring(i)
+		row.BackgroundTransparency = 1
+		row.Size = UDim2.new(1, -12, 0.16, 0)
+		row.Position = UDim2.new(0, 6, rowY, 0)
+		row.Parent = gui
+
+		local iconKey = if type(entry) == "table" then entry.IconKey else nil
+		local badge = ShopIcons.CreateBadge(row, "Icon", iconKey, 2)
+		badge.Size = UDim2.new(0.18, 0, 0.85, 0)
+		badge.Position = UDim2.new(0.02, 0, 0.075, 0)
+		badge.BackgroundTransparency = 0.55
+
+		local labelKey = if type(entry) == "table" then entry.LabelKey else nil
+		local labelText = L10n.ItemPotion
+		if type(labelKey) == "string" and (L10n :: any)[labelKey] ~= nil then
+			labelText = (L10n :: any)[labelKey]
+		elseif type(entry) == "table" and type(entry.Id) == "string" then
+			labelText = entry.Id
+		end
+
+		local name = addTextLabel(
+			row,
+			"Label",
+			labelText,
+			UDim2.new(0.72, 0, 0.9, 0),
+			UDim2.new(0.24, 0, 0.05, 0),
 			COLORS.White,
 			Enum.Font.GothamBold,
 			nil
 		)
+		name.TextXAlignment = Enum.TextXAlignment.Left
 	end
 end
 

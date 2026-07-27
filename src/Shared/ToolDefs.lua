@@ -4,41 +4,60 @@
 
 local ToolDefs = {}
 
+--[[
+	SupportsMobileAction : affiche le bouton tactile quand l'outil est équipé.
+	MobileActionLabel    : libellé du bouton (POP / USE / …).
+	RequiresTarget       : réticule + raycast centre écran (outils non SelfCentered).
+	IconGlyph / IconImage: icône bouton (Image prioritaire si définie).
+]]
+
 ToolDefs.List = {
 	Epingle = {
 		Name = "Pin", Rarity = "Common", Weight = 40,
 		Cooldown = 0.45, Range = 20, Shape = "Cross", Radius = 1,
 		SelfCentered = true, Consumable = true, Color = Color3.fromRGB(255, 55, 75),
+		SupportsMobileAction = true, MobileActionLabel = "POP",
+		RequiresTarget = false, IconGlyph = "📍",
 		Desc = "1 use: pops front, back, left and right. RT to use.",
 	},
 	Marteau = {
 		Name = "Hammer", Rarity = "Common", Weight = 28,
 		Cooldown = 1.0, Range = 20, Shape = "Square", Radius = 1,
 		SelfCentered = true, Consumable = true, Color = Color3.fromRGB(150, 110, 70),
+		SupportsMobileAction = true, MobileActionLabel = "USE",
+		RequiresTarget = false, IconGlyph = "🔨",
 		Desc = "1 use: crushes a 3x3 square around you.",
 	},
 	Bombe = {
 		Name = "Bomb", Rarity = "Rare", Weight = 14,
 		Cooldown = 1.0, Range = 20, Shape = "Around", Radius = 1,
 		SelfCentered = true, Consumable = true, Color = Color3.fromRGB(40, 40, 45),
+		SupportsMobileAction = true, MobileActionLabel = "USE",
+		RequiresTarget = false, IconGlyph = "💣",
 		Desc = "1 use: blows up the 8 bubbles around you.",
 	},
 	MegaRouleau = {
 		Name = "Mega roller", Rarity = "Epic", Weight = 6,
 		Cooldown = 1.0, Range = 20, Shape = "FullRow", Radius = 1,
 		SelfCentered = true, Consumable = true, Color = Color3.fromRGB(255, 140, 60),
+		SupportsMobileAction = true, MobileActionLabel = "USE",
+		RequiresTarget = false, IconGlyph = "🛞",
 		Desc = "1 use: flattens a whole row of the grid.",
 	},
 	Laser = {
 		Name = "Laser beam", Rarity = "Epic", Weight = 5,
 		Cooldown = 1.0, Range = 20, Shape = "Line", Radius = 16,
 		SelfCentered = true, Consumable = true, Color = Color3.fromRGB(255, 60, 90),
+		SupportsMobileAction = true, MobileActionLabel = "USE",
+		RequiresTarget = false, IconGlyph = "🔴",
 		Desc = "1 use: cuts straight through the bubbles ahead of you.",
 	},
 	Singularite = {
 		Name = "Singularity", Rarity = "Mythic", Weight = 1,
 		Cooldown = 1.0, Range = 20, Shape = "Disc", Radius = 9, Multiplier = 3,
 		SelfCentered = true, Consumable = true, Color = Color3.fromRGB(180, 60, 255), Announce = true,
+		SupportsMobileAction = true, MobileActionLabel = "USE",
+		RequiresTarget = false, IconGlyph = "✦",
 		Desc = "1 mythic use: massive implosion, x3 rewards.",
 	},
 	-- Permanent : boost de saut, ne se consomme pas
@@ -47,6 +66,8 @@ ToolDefs.List = {
 		Cooldown = 0, Range = 0, Shape = "Wings", Radius = 0,
 		SelfCentered = true, Consumable = false, Permanent = true,
 		WingCells = 5, Color = Color3.fromRGB(120, 210, 255),
+		SupportsMobileAction = true, MobileActionLabel = "USE",
+		RequiresTarget = false, IconGlyph = "🪽",
 		Desc = "Equip/unequip (RT): glide over 5 bubbles. Permanent.",
 	},
 }
@@ -69,6 +90,10 @@ function ToolDefs.Roll(rng: Random?): (string, any)
 		if roll <= acc then return id, def end
 	end
 	return "Epingle", ToolDefs.List.Epingle
+end
+
+function ToolDefs.Get(id: string): any?
+	return ToolDefs.List[id]
 end
 
 return ToolDefs

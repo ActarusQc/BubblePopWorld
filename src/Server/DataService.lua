@@ -330,6 +330,15 @@ function DataService.AddBubblesSold(player: Player, amount: number): boolean
 		DataService.ApplyCharacterStats(player)
 		DataService.UnlockWorlds(player)
 		Remotes.Event("Announce"):FireClient(player, ("Level %d reached!"):format(d.Level), "level")
+		-- Accès zones (collision groups) immédiat, sans respawn.
+		task.defer(function()
+			local ok, ZoneService = pcall(function()
+				return require(script.Parent.ZoneService)
+			end)
+			if ok and ZoneService and ZoneService.RefreshPlayerAccess then
+				ZoneService.RefreshPlayerAccess(player)
+			end
+		end)
 	end
 	return true
 end

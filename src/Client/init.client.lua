@@ -12,6 +12,7 @@ local modules = {
 	require(script.ToolClient),
 	require(script.ShopUI),
 	require(script.InventoryUI),
+	require(script.ZoneAmbiance),
 }
 
 for _, m in ipairs(modules) do

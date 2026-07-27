@@ -11,11 +11,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
+local ZoneDefs = require(Shared.ZoneDefs)
 local L10n = require(Shared.LocalizationStrings)
 local L10nUtil = require(Shared.LocalizationUtil)
 
 local DataService = require(script.Parent.DataService)
 local BackpackService = require(script.Parent.BackpackService)
+local ZoneAccess = require(script.Parent.ZoneAccess)
+local ZoneBuilder = require(script.Parent.ZoneBuilder)
 local LobbyEditingPreview = require(Shared.LobbyEditingPreview)
 local EnvironmentBackdropBuilder = require(Shared.EnvironmentBackdropBuilder)
 
@@ -103,8 +106,13 @@ local function markGenerated(inst: Instance)
 end
 
 -- Supprime uniquement les enfants marqués GeneratedByCode (migration dev).
--- Ne touche jamais BubbleWorld ni les objets Studio sans attribut.
+-- Ne touche jamais BubbleWorld, GameZones.BubbleBoard, ni Workspace.StudioDecoration.
 local function clearGeneratedChildren(container: Instance)
+	local studioDecor = workspace:FindFirstChild("StudioDecoration")
+	if container.Name == "StudioDecoration"
+		or (studioDecor ~= nil and container:IsDescendantOf(studioDecor)) then
+		return
+	end
 	if not Config.World.RebuildGeneratedLayout then
 		return
 	end
@@ -331,9 +339,17 @@ local function buildSafetyBorders(gameRoom: Folder)
 		Vector3.new((bubbleExtentX + t) * 2, 0, t),
 		CFrame.new(G.Origin.X, 0, G.Origin.Z + bubbleExtentZ + t / 2))
 
-	ensureBorderPair(borders, "BorderEast",
-		Vector3.new(t, 0, (bubbleExtentZ + t) * 2),
-		CFrame.new(G.Origin.X + bubbleExtentX + t / 2, 0, G.Origin.Z))
+	-- Ouverture est vers la Summer Zone (passerelle) — même largeur que le pont.
+	local eastGap = Config.GameRoom.PathSize.X + 6
+	local eastSeg = math.max(0, bubbleExtentZ + t - eastGap / 2)
+	if eastSeg > 0 then
+		ensureBorderPair(borders, "BorderEastNorth",
+			Vector3.new(t, 0, eastSeg),
+			CFrame.new(G.Origin.X + bubbleExtentX + t / 2, 0, G.Origin.Z + (eastGap / 2 + eastSeg / 2)))
+		ensureBorderPair(borders, "BorderEastSouth",
+			Vector3.new(t, 0, eastSeg),
+			CFrame.new(G.Origin.X + bubbleExtentX + t / 2, 0, G.Origin.Z - (eastGap / 2 + eastSeg / 2)))
+	end
 
 	ensureBorderPair(borders, "BorderWest",
 		Vector3.new(t, 0, (bubbleExtentZ + t) * 2),
@@ -2277,6 +2293,10 @@ function ZoneService.EnsureWorld(): Folder
 	buildGameRoom(gameRoom)
 	buildPhysicalConnection(root)
 
+	-- Zones de jeu (planches / passerelle / barrière). Ne touche jamais StudioDecoration.
+	ZoneBuilder.EnsureStudioDecoration()
+	ZoneBuilder.BuildPlayZones()
+
 	-- Décor d'horizon (montagnes) : Workspace.GeneratedWorld.EnvironmentBackdrop uniquement.
 	EnvironmentBackdropBuilder.Build()
 
@@ -2368,7 +2388,48 @@ local function resolveAreaFromPosition(pos: Vector3): string
 	if pos.Z < split then
 		return "Lobby"
 	end
+
+	local summerBounds = ZoneDefs.GetZoneBounds("SummerZone")
+	if summerBounds then
+		local margin = 12
+		if pos.X >= summerBounds.MinX - margin
+			and pos.X <= summerBounds.MaxX + margin
+			and pos.Z >= summerBounds.MinZ - margin
+			and pos.Z <= summerBounds.MaxZ + margin then
+			return "SummerZone"
+		end
+	end
+
+	-- Compat : "GameRoom" conserve le comportement existant (pads + planche classique).
 	return "GameRoom"
+end
+
+--------------------------------------------------------------------
+-- API zones (niveau / accès) — source de vérité : ZoneDefs + DataService
+--------------------------------------------------------------------
+function ZoneService.GetRequiredLevel(zoneId: string): number
+	return ZoneDefs.GetRequiredLevel(zoneId)
+end
+
+function ZoneService.CanPlayerEnter(player: Player, zoneId: string): boolean
+	return ZoneAccess.CanPlayerEnter(player, zoneId)
+end
+
+function ZoneService.GetPlayerZone(player: Player): string
+	local area = player:GetAttribute("PlayerArea")
+	if type(area) == "string" and area ~= "" then
+		return area
+	end
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp:IsA("BasePart") then
+		return resolveAreaFromPosition(hrp.Position)
+	end
+	return "Lobby"
+end
+
+function ZoneService.RefreshPlayerAccess(player: Player)
+	ZoneAccess.RefreshPlayer(player)
 end
 
 --------------------------------------------------------------------
@@ -2523,7 +2584,9 @@ local function watchFallReset()
 end
 
 function ZoneService.Start()
+	ZoneAccess.EnsureCollisionGroups()
 	ZoneService.EnsureWorld()
+	ZoneAccess.Start()
 
 	local function bindPlayer(player: Player)
 		player.CharacterAdded:Connect(function()

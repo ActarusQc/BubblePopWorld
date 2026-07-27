@@ -35,6 +35,7 @@ GameConfig.Backpack = {
 }
 
 -- Items achetables (séparés des upgrades de compétences).
+-- IconKey → Shared/ShopIcons.ByKey (Image optionnelle pour assets UI).
 GameConfig.ShopItems = {
 	BackpackGold = {
 		Label = "Gold Backpack",
@@ -42,6 +43,7 @@ GameConfig.ShopItems = {
 		Capacity = 50,
 		Cost = 10000,
 		Style = "Gold",
+		IconKey = "BackpackGold",
 	},
 	BackpackEmerald = {
 		Label = "Emerald Backpack",
@@ -49,6 +51,7 @@ GameConfig.ShopItems = {
 		Capacity = 50,
 		Cost = 10000,
 		Style = "Emerald",
+		IconKey = "BackpackEmerald",
 	},
 	BackpackNeon = {
 		Label = "Neon Backpack",
@@ -56,10 +59,26 @@ GameConfig.ShopItems = {
 		Capacity = 50,
 		Cost = 10000,
 		Style = "Neon",
+		IconKey = "BackpackNeon",
 	},
 }
 
 GameConfig.ShopItemOrder = { "BackpackGold", "BackpackEmerald", "BackpackNeon" }
+
+-- Vitrine 3D « Bubble Items » près du kiosque (affichage uniquement, pas d'achat ici).
+-- LabelKey = clé LocalizationStrings. Extensible : ajouter une entrée + IconKey dans ShopIcons.
+GameConfig.ShowcaseItems = {
+	{ Id = "Potion", LabelKey = "ItemPotion", IconKey = "Potion" },
+	{ Id = "Wand", LabelKey = "ItemWand", IconKey = "Wand" },
+	{ Id = "Boost", LabelKey = "ItemBoost", IconKey = "Boost" },
+	{ Id = "MegaBubble", LabelKey = "ItemMegaBubble", IconKey = "MegaBubble" },
+}
+
+-- Flags UI (masquer sans retirer la logique serveur / remotes).
+GameConfig.UI = {
+	-- Compteur communautaire bubbles / Target (HUD haut). Remettre true pour réafficher.
+	ShowBubbleGoalUI = false,
+}
 
 function GameConfig.BackpackCapacityFor(equippedId: string?): number
 	if type(equippedId) == "string" and equippedId ~= "" then

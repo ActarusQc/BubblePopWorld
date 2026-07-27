@@ -27,6 +27,7 @@ function InventoryUI.Start()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "BPW_Inventory"
 	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 20
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	local openBtn = Instance.new("TextButton")

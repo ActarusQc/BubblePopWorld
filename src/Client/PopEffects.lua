@@ -108,8 +108,8 @@ function PopEffects.Start()
 
 		local played = 0
 		for _, entry in ipairs(batch) do
-			local x, z, rarity = entry[1], entry[2], entry[3]
-			local pos = GridUtil.CellToWorld(x, z)
+			local x, z, rarity, zoneId = entry[1], entry[2], entry[3], entry[4]
+			local pos = GridUtil.CellToWorld(x, z, if type(zoneId) == "string" then zoneId else "ClassicZone")
 
 			-- On n'affiche que ce qui est proche du joueur : perf + lisibilité.
 			if origin and (pos - origin).Magnitude > 140 then continue end

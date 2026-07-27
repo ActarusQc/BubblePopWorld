@@ -59,6 +59,11 @@ local function ensureWingToggleTool(player: Player): Tool?
 	tool:SetAttribute("Consumable", false)
 	tool:SetAttribute("SelfCentered", true)
 	tool:SetAttribute("WingCells", def.WingCells or 5)
+	tool:SetAttribute("SupportsMobileAction", def.SupportsMobileAction == true)
+	tool:SetAttribute("RequiresTarget", false)
+	tool:SetAttribute("MobileActionLabel", def.MobileActionLabel or "USE")
+	tool:SetAttribute("IconGlyph", def.IconGlyph or "🪽")
+	tool:SetAttribute("Cooldown", def.Cooldown or 0)
 	ToolModels.Apply(tool, "Ailes", def)
 
 	local backpack = player:FindFirstChildOfClass("Backpack")
@@ -129,6 +134,13 @@ function ToolService.CreateTool(id: string): Tool?
 	tool:SetAttribute("Consumable", def.Consumable == true)
 	tool:SetAttribute("Permanent", def.Permanent == true)
 	tool:SetAttribute("WingCells", def.WingCells or 0)
+	tool:SetAttribute("SupportsMobileAction", def.SupportsMobileAction == true)
+	tool:SetAttribute("RequiresTarget", def.RequiresTarget == true)
+	tool:SetAttribute("MobileActionLabel", def.MobileActionLabel or "USE")
+	tool:SetAttribute("IconGlyph", def.IconGlyph or "✦")
+	if type(def.IconImage) == "string" then
+		tool:SetAttribute("IconImage", def.IconImage)
+	end
 
 	ToolModels.Apply(tool, id, def)
 	return tool
@@ -255,8 +267,8 @@ local function onActivate(player: Player, _toolName: any, targetPos: any)
 		return
 	end
 
-	local cx, cz = BubbleService.WorldToCell(origin)
-	if def.Shape == "Single" and not BubbleService.IsAlive(cx, cz) then
+	local cx, cz, zoneId = BubbleService.WorldToCell(origin)
+	if def.Shape == "Single" and not BubbleService.IsAlive(cx, cz, zoneId) then
 		return
 	end
 
@@ -265,7 +277,12 @@ local function onActivate(player: Player, _toolName: any, targetPos: any)
 		else (targetPos - root.Position)
 
 	local cells = resolveCells(def, cx, cz, direction)
-	local count = BubbleService.PopCells(player, cells, def.Multiplier)
+	-- Annoter chaque cellule avec la zone sous le joueur
+	local zoned: { { any } } = {}
+	for _, c in ipairs(cells) do
+		table.insert(zoned, { c[1], c[2], zoneId })
+	end
+	local count = BubbleService.PopCells(player, zoned, def.Multiplier, zoneId)
 	if count <= 0 then return end
 
 	cooldowns[player][id] = now + def.Cooldown

@@ -53,8 +53,8 @@ local function wingCellCount(): number
 	return (def and def.WingCells) or 5
 end
 
-local function cellKey(x: number, z: number): string
-	return x .. "_" .. z
+local function cellKey(zoneId: string, x: number, z: number): string
+	return zoneId .. ":" .. x .. "_" .. z
 end
 
 local function tryPopBubble(part: BasePart, state: FlightState?)
@@ -63,14 +63,19 @@ local function tryPopBubble(part: BasePart, state: FlightState?)
 	if typeof(x) ~= "number" or typeof(z) ~= "number" then return end
 	if part:GetAttribute("Alive") ~= true then return end
 
+	local zoneId = part:GetAttribute("ZoneId")
+	if typeof(zoneId) ~= "string" then
+		zoneId = "ClassicZone"
+	end
+
 	if state then
-		local key = cellKey(x, z)
+		local key = cellKey(zoneId, x, z)
 		if state.popped[key] then return end
 		state.popped[key] = true
 	end
 
 	squash(part)
-	popRequest:FireServer(x, z)
+	popRequest:FireServer(x, z, zoneId)
 end
 
 local function beginWingFlight(root: BasePart, takeoff: BasePart)

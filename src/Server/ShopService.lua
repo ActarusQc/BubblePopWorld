@@ -55,6 +55,7 @@ local function getItemRows(profile: any)
 				Capacity = def.Capacity,
 				Cost = def.Cost,
 				Style = def.Style,
+				IconKey = def.IconKey,
 				Owned = owned[id] == true,
 				Equipped = equipped == id,
 			})

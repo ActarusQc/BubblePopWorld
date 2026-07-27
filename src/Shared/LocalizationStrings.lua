@@ -77,6 +77,10 @@ local LocalizationStrings = {
 	-- Portiques / panneaux
 	BubbleRoom = "BUBBLE ROOM",
 	BackToLobby = "← Lobby",
+	ClassicZoneTitle = "CLASSIC ZONE",
+	SummerZoneTitle = "SUMMER ZONE",
+	SummerZoneUnlocksAt = "UNLOCKS AT LEVEL 5",
+	ZoneLockIcon = "🔒",
 
 	-- Notifications
 	BackpackFullSell = "Your backpack is full! Go sell your bubbles.",
@@ -88,6 +92,10 @@ local LocalizationStrings = {
 	WingsUnlocked = "Wings unlocked! Equip the Wings tool, then press RT to toggle them.",
 	LegendaryChestAppeared = "⭐ A legendary chest has appeared!",
 	ChestSuffix = " chest",
+	-- %d = required level, %d = current level, %d = required level
+	ZoneLockedFmt = "Reach Level %d to unlock the Summer Zone! Your level: %d / %d",
+	-- %s = zone display name
+	ZoneUnlockedFmt = "%s unlocked!",
 }
 
 return table.freeze(LocalizationStrings)

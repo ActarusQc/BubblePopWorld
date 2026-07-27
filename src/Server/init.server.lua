@@ -26,4 +26,15 @@ for _, service in ipairs(services) do
 	if not ok then warn("[BPW] échec du démarrage d'un service: " .. tostring(err)) end
 end
 
+-- Validations zones (dev) — n'interrompt pas le serveur.
+do
+	local Shared = ReplicatedStorage:WaitForChild("Shared")
+	local ok, tests = pcall(function()
+		return require(Shared.ZoneAccessTests)
+	end)
+	if ok and tests and tests.Run then
+		tests.Run()
+	end
+end
+
 print("[Bubble Pop World] serveur prêt.")

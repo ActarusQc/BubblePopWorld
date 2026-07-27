@@ -96,7 +96,8 @@ local function watchPops()
 		if not root then return end
 
 		for _, entry in ipairs(batch) do
-			local pos = GridUtil.CellToWorld(entry[1], entry[2])
+			local zoneId = if type(entry[4]) == "string" then entry[4] else "ClassicZone"
+			local pos = GridUtil.CellToWorld(entry[1], entry[2], zoneId)
 			local distance = (pos - root.Position).Magnitude
 			if distance > 90 then continue end
 

@@ -87,6 +87,7 @@ function HUD.Start()
 	gui.Name = "BPW_HUD"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = false
+	gui.DisplayOrder = 10
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
@@ -151,12 +152,17 @@ function HUD.Start()
 	backpackStatus.TextColor3 = ACCENT
 	backpackStatus.TextSize = 13
 
+	local showBubbleGoalUI = Config.UI ~= nil and Config.UI.ShowBubbleGoalUI == true
+
 	local globalFrame = Instance.new("Frame")
+	globalFrame.Name = "BubbleGoal"
 	globalFrame.Size = UDim2.new(0, 320, 0, 52)
 	globalFrame.Position = UDim2.new(0.5, -160, 0, 12)
 	globalFrame.BackgroundColor3 = BG
 	globalFrame.BackgroundTransparency = 0.2
 	globalFrame.BorderSizePixel = 0
+	globalFrame.Visible = showBubbleGoalUI
+	globalFrame.Active = false
 	globalFrame.Parent = gui
 	corner(globalFrame, 12)
 
@@ -182,7 +188,8 @@ function HUD.Start()
 
 	local toastHolder = Instance.new("Frame")
 	toastHolder.Size = UDim2.new(0, 460, 0, 200)
-	toastHolder.Position = UDim2.new(0.5, -230, 0, 78)
+	-- Plus haut quand le compteur mondial est masqué (évite un trou sous le haut d'écran).
+	toastHolder.Position = UDim2.new(0.5, -230, 0, if showBubbleGoalUI then 78 else 16)
 	toastHolder.BackgroundTransparency = 1
 	toastHolder.Parent = gui
 	local listLayout = Instance.new("UIListLayout")
@@ -197,6 +204,7 @@ function HUD.Start()
 		item = Color3.fromRGB(120, 200, 255),
 		sell = Color3.fromRGB(255, 220, 100),
 		backpack_full = Color3.fromRGB(255, 140, 100),
+		zone_locked = Color3.fromRGB(255, 200, 90),
 	}
 
 	local FIXED_TOAST_KINDS = {
