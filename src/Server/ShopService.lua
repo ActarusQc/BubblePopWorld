@@ -49,6 +49,7 @@ local function buyUpgrade(player: Player, id: any)
 	profile.Upgrades[id] = level + 1
 	DataService.ApplyCharacterStats(player)
 	DataService.Push(player)
+	DataService.NotifyCoinsChanged(player)
 	return true, ("%s level %d"):format(def.Label, level + 1)
 end
 

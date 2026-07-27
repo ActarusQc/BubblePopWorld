@@ -15,6 +15,26 @@ local store = DataStoreService:GetDataStore(Config.PlayerStoreName())
 local DataService = {}
 local profiles: { [Player]: any } = {}
 local mutationWaiter: ((Player, number) -> boolean)? = nil
+local coinsChangedListeners: { (Player, number) -> () } = {}
+
+local function notifyCoinsChanged(player: Player)
+	local d = profiles[player]
+	if not d then
+		return
+	end
+	local coins = d.Coins
+	for _, listener in ipairs(coinsChangedListeners) do
+		task.spawn(listener, player, coins)
+	end
+end
+
+function DataService.OnCoinsChanged(listener: (Player, number) -> ())
+	table.insert(coinsChangedListeners, listener)
+end
+
+function DataService.NotifyCoinsChanged(player: Player)
+	notifyCoinsChanged(player)
+end
 
 -- XP : champ hérité, conservé pour ne pas perdre les anciens profils, mais gelé —
 -- il ne pilote plus le niveau (voir TotalBubblesSold) et n'est plus incrémenté ni affiché.
@@ -139,6 +159,9 @@ function DataService.Load(player: Player)
 	ls.Parent = player
 
 	DataService.Push(player)
+	if data.__loaded then
+		notifyCoinsChanged(player)
+	end
 	return data
 end
 
@@ -192,6 +215,7 @@ function DataService.ResetProfile(player: Player): boolean
 	profiles[player] = fresh
 	DataService.ApplyCharacterStats(player)
 	DataService.Push(player)
+	notifyCoinsChanged(player)
 	return true
 end
 
@@ -252,6 +276,7 @@ function DataService.AddCoins(player: Player, amount: number, source: string?): 
 	end
 	d.Coins = math.max(0, d.Coins + amount)
 	d.__dirty = true
+	notifyCoinsChanged(player)
 	return true
 end
 

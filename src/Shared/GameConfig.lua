@@ -376,6 +376,10 @@ GameConfig.Data = {
 	StoreVersion = "v2",
 	LeaderboardPrefix = "BPW_LB_",
 	LeaderboardVersion = "v2",
+	-- Classement mondial Coins (OrderedDataStore dédié, indépendant des LB legacy).
+	GlobalCoinsLeaderboardStore = "GlobalCoinsLeaderboard_v1",
+	LeaderboardWriteThrottle = 45, -- secondes entre écritures OrderedDataStore / joueur
+	LeaderboardRefreshInterval = 60, -- secondes entre rafraîchissements du panneau
 	-- Délai mini entre deux sauvegardes déclenchées par une vente : la progression
 	-- est persistée vite sans épuiser le budget d'écriture DataStore.
 	SaveAfterSellThrottle = 30,

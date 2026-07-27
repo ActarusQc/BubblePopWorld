@@ -1373,115 +1373,41 @@ end
 local SellKioskBuilder = require(script.Parent.SellKioskBuilder)
 
 local function buildLeaderboardBoard(decor: Folder, root: Vector3)
+	-- Panneau physique inchangé (position / taille / orientation). L'UI SurfaceGui
+	-- est posée par LeaderboardService sur la face avant.
 	local boardPos = root + Vector3.new(36, 9, 0)
 
-	local frame = makePart({
-		Name = "LeaderboardBoard",
-		Size = Vector3.new(0.6, 16, 12),
-		CFrame = CFrame.new(boardPos) * CFrame.Angles(0, math.rad(-90), 0),
-		Color = Color3.fromRGB(22, 30, 55),
-		Material = Enum.Material.SmoothPlastic,
-	})
-	frame.Parent = decor
+	local existing = decor:FindFirstChild("GlobalLeaderboardBoard")
+		or decor:FindFirstChild("LeaderboardBoard")
+	local frame: BasePart
+	if existing and existing:IsA("BasePart") then
+		frame = existing
+		frame.Name = "GlobalLeaderboardBoard"
+		-- Ne pas déplacer / redimensionner / réorienter un panneau déjà en place.
+	else
+		frame = makePart({
+			Name = "GlobalLeaderboardBoard",
+			Size = Vector3.new(0.6, 16, 12),
+			CFrame = CFrame.new(boardPos) * CFrame.Angles(0, math.rad(-90), 0),
+			Color = Color3.fromRGB(22, 30, 55),
+			Material = Enum.Material.SmoothPlastic,
+		})
+		frame.Parent = decor
+	end
+	frame:SetAttribute("BPW_DisplaySurface", true)
+	frame:SetAttribute("GeneratedByCode", true)
 
-	local header = makePart({
-		Name = "LeaderboardHeader",
-		Size = Vector3.new(0.5, 2.5, 12.2),
-		CFrame = CFrame.new(boardPos + Vector3.new(0, 7.2, 0)) * CFrame.Angles(0, math.rad(-90), 0),
-		Color = PALETTE.Violet,
-		Material = Enum.Material.Neon,
-		CanCollide = false,
-	})
-	header.Parent = decor
-
-	local gui = Instance.new("SurfaceGui")
-	gui.Name = "LeaderboardGui"
-	gui.Face = Enum.NormalId.Front
-	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 25
-	gui.Parent = frame
-
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.Size = UDim2.new(1, -16, 0, 44)
-	title.Position = UDim2.new(0, 8, 0, 8)
-	title.BackgroundTransparency = 1
-	title.Text = "TOP 10 PLAYERS"
-	title.TextColor3 = PALETTE.White
-	title.Font = Enum.Font.GothamBold
-	title.TextScaled = true
-	title.Parent = gui
-
-	local subtitle = Instance.new("TextLabel")
-	subtitle.Name = "Subtitle"
-	subtitle.Size = UDim2.new(1, -16, 0, 24)
-	subtitle.Position = UDim2.new(0, 8, 0, 52)
-	subtitle.BackgroundTransparency = 1
-	subtitle.Text = "Wealth leaderboard (coins)"
-	subtitle.TextColor3 = PALETTE.Cyan
-	subtitle.Font = Enum.Font.Gotham
-	subtitle.TextScaled = true
-	subtitle.Parent = gui
-
-	local list = Instance.new("Frame")
-	list.Name = "List"
-	list.Size = UDim2.new(1, -16, 1, -90)
-	list.Position = UDim2.new(0, 8, 0, 82)
-	list.BackgroundTransparency = 1
-	list.Parent = gui
-
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 4)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = list
-
-	for i = 1, 10 do
-		local row = Instance.new("Frame")
-		row.Name = "Row" .. tostring(i)
-		row.Size = UDim2.new(1, 0, 0, 28)
-		row.BackgroundColor3 = if i % 2 == 0 then Color3.fromRGB(30, 42, 72) else Color3.fromRGB(26, 36, 62)
-		row.BackgroundTransparency = 0.15
-		row.BorderSizePixel = 0
-		row.LayoutOrder = i
-		row.Parent = list
-
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 6)
-		corner.Parent = row
-
-		local rank = Instance.new("TextLabel")
-		rank.Name = "Rank"
-		rank.Size = UDim2.new(0, 44, 1, 0)
-		rank.BackgroundTransparency = 1
-		rank.Text = "#" .. tostring(i)
-		rank.TextColor3 = PALETTE.Gold
-		rank.Font = Enum.Font.GothamBold
-		rank.TextScaled = true
-		rank.Parent = row
-
-		local name = Instance.new("TextLabel")
-		name.Name = "Name"
-		name.Size = UDim2.new(0.5, 0, 1, 0)
-		name.Position = UDim2.new(0, 48, 0, 0)
-		name.BackgroundTransparency = 1
-		name.Text = "—"
-		name.TextColor3 = PALETTE.White
-		name.Font = Enum.Font.Gotham
-		name.TextXAlignment = Enum.TextXAlignment.Left
-		name.TextScaled = true
-		name.Parent = row
-
-		local value = Instance.new("TextLabel")
-		value.Name = "Value"
-		value.Size = UDim2.new(0.35, 0, 1, 0)
-		value.Position = UDim2.new(0.62, 0, 0, 0)
-		value.BackgroundTransparency = 1
-		value.Text = "—"
-		value.TextColor3 = PALETTE.Cyan
-		value.Font = Enum.Font.GothamBold
-		value.TextXAlignment = Enum.TextXAlignment.Right
-		value.TextScaled = true
-		value.Parent = row
+	local headerInst = decor:FindFirstChild("LeaderboardHeader")
+	if not (headerInst and headerInst:IsA("BasePart")) then
+		local header = makePart({
+			Name = "LeaderboardHeader",
+			Size = Vector3.new(0.5, 2.5, 12.2),
+			CFrame = CFrame.new(boardPos + Vector3.new(0, 7.2, 0)) * CFrame.Angles(0, math.rad(-90), 0),
+			Color = PALETTE.Violet,
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+		})
+		header.Parent = decor
 	end
 end
 
@@ -1575,10 +1501,12 @@ local function buildLobby(lobby: Folder)
 		if codeBooth then
 			buildSellBooth(decor, root)
 		end
-		buildLeaderboardBoard(decor, root)
 		buildSpawnRing(decor, root)
 		buildGuideSign(decor, root)
 	end
+
+	-- Toujours (ré)attacher le panneau Top Coins sans le déplacer s'il existe déjà.
+	buildLeaderboardBoard(decor, root)
 
 	-- Décor hérité : le panonceau "Escaliers" n'existe plus.
 	local staleHint = decor:FindFirstChild("EntranceHint")
