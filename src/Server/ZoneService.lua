@@ -1372,42 +1372,103 @@ end
 
 local SellKioskBuilder = require(script.Parent.SellKioskBuilder)
 
-local function buildLeaderboardBoard(decor: Folder, root: Vector3)
-	-- Panneau physique inchangé (position / taille / orientation). L'UI SurfaceGui
-	-- est posée par LeaderboardService sur la face avant.
-	local boardPos = root + Vector3.new(36, 9, 0)
+-- Face avant (-Z local) orientée vers le spawn (à hauteur du panneau).
+local function boardCFrameFacingSpawn(boardPos: Vector3, spawnPos: Vector3): CFrame
+	local target = Vector3.new(spawnPos.X, boardPos.Y, spawnPos.Z)
+	if (target - boardPos).Magnitude < 0.05 then
+		return CFrame.new(boardPos)
+	end
+	return CFrame.lookAt(boardPos, target)
+end
 
-	local existing = decor:FindFirstChild("GlobalLeaderboardBoard")
-		or decor:FindFirstChild("LeaderboardBoard")
+local function clearSurfaceGuis(part: BasePart)
+	for _, child in ipairs(part:GetChildren()) do
+		if child:IsA("SurfaceGui") then
+			child:Destroy()
+		end
+	end
+end
+
+local function upsertBoardPart(
+	decor: Folder,
+	names: { string },
+	canonicalName: string,
+	size: Vector3,
+	cf: CFrame,
+	color: Color3,
+	canCollide: boolean?
+): BasePart
+	local existing: Instance? = nil
+	for _, name in ipairs(names) do
+		existing = decor:FindFirstChild(name)
+		if existing then
+			break
+		end
+	end
+
 	local frame: BasePart
 	if existing and existing:IsA("BasePart") then
 		frame = existing
-		frame.Name = "GlobalLeaderboardBoard"
-		-- Ne pas déplacer / redimensionner / réorienter un panneau déjà en place.
+		frame.Name = canonicalName
+		frame.Size = size
+		frame.CFrame = cf
+		frame.Color = color
+		frame.Material = Enum.Material.SmoothPlastic
+		if canCollide ~= nil then
+			frame.CanCollide = canCollide
+		end
+		markGenerated(frame)
 	else
 		frame = makePart({
-			Name = "GlobalLeaderboardBoard",
-			Size = Vector3.new(0.6, 16, 12),
-			CFrame = CFrame.new(boardPos) * CFrame.Angles(0, math.rad(-90), 0),
-			Color = Color3.fromRGB(22, 30, 55),
+			Name = canonicalName,
+			Size = size,
+			CFrame = cf,
+			Color = color,
 			Material = Enum.Material.SmoothPlastic,
+			CanCollide = canCollide,
 		})
 		frame.Parent = decor
 	end
+	return frame
+end
+
+local function buildLeaderboardBoard(decor: Folder, root: Vector3)
+	-- Panneau est (mur +X), face vers le spawn. SurfaceGui Front via LeaderboardService.
+	local L = Config.Lobby
+	local spawnPos = root + L.SpawnOffset
+	local size = Vector3.new(12, 14, 0.6)
+	local wallInset = 3.2
+	-- Est, légèrement au sud du centre : visible en tournant à gauche depuis le spawn (-Z).
+	local boardPos = root + Vector3.new(L.FloorSize.X / 2 - wallInset, size.Y / 2, -8)
+	local cf = boardCFrameFacingSpawn(boardPos, spawnPos)
+
+	local frame = upsertBoardPart(
+		decor,
+		{ "GlobalLeaderboardBoard", "LeaderboardBoard" },
+		"GlobalLeaderboardBoard",
+		size,
+		cf,
+		Color3.fromRGB(22, 30, 55),
+		true
+	)
 	frame:SetAttribute("BPW_DisplaySurface", true)
 	frame:SetAttribute("GeneratedByCode", true)
 
+	local headerSize = Vector3.new(12.2, 1.8, 0.5)
+	local headerPos = boardPos + Vector3.new(0, size.Y / 2 + headerSize.Y / 2 + 0.12, 0)
+	local headerCF = boardCFrameFacingSpawn(headerPos, spawnPos)
+	upsertBoardPart(
+		decor,
+		{ "LeaderboardHeader" },
+		"LeaderboardHeader",
+		headerSize,
+		headerCF,
+		PALETTE.Violet,
+		false
+	)
 	local headerInst = decor:FindFirstChild("LeaderboardHeader")
-	if not (headerInst and headerInst:IsA("BasePart")) then
-		local header = makePart({
-			Name = "LeaderboardHeader",
-			Size = Vector3.new(0.5, 2.5, 12.2),
-			CFrame = CFrame.new(boardPos + Vector3.new(0, 7.2, 0)) * CFrame.Angles(0, math.rad(-90), 0),
-			Color = PALETTE.Violet,
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-		})
-		header.Parent = decor
+	if headerInst and headerInst:IsA("BasePart") then
+		headerInst.Material = Enum.Material.Neon
 	end
 end
 
@@ -1440,18 +1501,27 @@ local function buildSpawnRing(decor: Folder, root: Vector3)
 	pad.Parent = decor
 end
 
-local function buildGuideSign(decor: Folder, root: Vector3)
+-- Panneau d'instructions (sud-est), face vers le spawn — visible dès l'apparition.
+local function buildInstructionBoard(decor: Folder, root: Vector3)
 	local L = Config.Lobby
-	local board = makePart({
-		Name = "GuideSign",
-		Size = Vector3.new(12, 7, 0.6),
-		CFrame = CFrame.new(root + Vector3.new(30, 5, -10)),
-		Color = Color3.fromRGB(30, 42, 75),
-		Material = Enum.Material.SmoothPlastic,
-	})
-	board.Parent = decor
+	local spawnPos = root + L.SpawnOffset
+	local size = Vector3.new(14, 8, 0.6)
+	local wallInset = 3.2
+	-- Mur sud (+ légèrement à l'est) : dans le champ de vision au spawn (facing -Z).
+	local boardPos = root + Vector3.new(20, size.Y / 2, -(L.FloorSize.Z / 2 - wallInset))
+	local cf = boardCFrameFacingSpawn(boardPos, spawnPos)
+
+	local board = upsertBoardPart(
+		decor,
+		{ "InstructionBoard", "GuideSign" },
+		"InstructionBoard",
+		size,
+		cf,
+		Color3.fromRGB(30, 42, 75),
+		true
+	)
+	clearSurfaceGuis(board)
 	addSurfaceSign(board, Enum.NormalId.Front, L.SignText)
-	addSurfaceSign(board, Enum.NormalId.Back, L.SignText)
 end
 
 --------------------------------------------------------------------
@@ -1502,13 +1572,17 @@ local function buildLobby(lobby: Folder)
 			buildSellBooth(decor, root)
 		end
 		buildSpawnRing(decor, root)
-		buildGuideSign(decor, root)
 	end
 
-	-- Toujours (ré)attacher le panneau Top Coins sans le déplacer s'il existe déjà.
+	-- Panneaux lobby : toujours (ré)alignés face au spawn (idempotent).
+	buildInstructionBoard(decor, root)
 	buildLeaderboardBoard(decor, root)
 
-	-- Décor hérité : le panonceau "Escaliers" n'existe plus.
+	-- Décor hérité : anciens noms / indices obsolètes.
+	local staleGuide = decor:FindFirstChild("GuideSign")
+	if staleGuide and staleGuide.Name ~= "InstructionBoard" then
+		staleGuide:Destroy()
+	end
 	local staleHint = decor:FindFirstChild("EntranceHint")
 	if staleHint then
 		staleHint:Destroy()
