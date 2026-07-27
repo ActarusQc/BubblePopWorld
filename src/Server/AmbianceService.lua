@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
+local EnvironmentBackdropBuilder = require(Shared.EnvironmentBackdropBuilder)
 
 local AmbianceService = {}
 
@@ -17,23 +18,10 @@ end
 
 function AmbianceService.Apply(worldDef)
 	Lighting.ClockTime = 14.5
-	Lighting.Brightness = 2.0
-	Lighting.EnvironmentDiffuseScale = 0.5
-	Lighting.EnvironmentSpecularScale = 0.25
 	Lighting.GlobalShadows = true
-	Lighting.OutdoorAmbient = worldDef.Sky
-	Lighting.Ambient = Color3.fromRGB(70, 75, 90)
-	Lighting.FogEnd = 900
 
-	clear("Atmosphere")
-	local atmos = Instance.new("Atmosphere")
-	atmos.Density = 0.28
-	atmos.Offset = 0.2
-	atmos.Color = worldDef.Sky
-	atmos.Decay = worldDef.Ground
-	atmos.Glare = 0.15
-	atmos.Haze = 1.0
-	atmos.Parent = Lighting
+	-- Atmosphère / profondeur d'horizon via le décor montagneux (préserve le Sky existant).
+	EnvironmentBackdropBuilder.ApplyAtmosphere(worldDef.Sky)
 
 	clear("BloomEffect")
 	local bloom = Instance.new("BloomEffect")

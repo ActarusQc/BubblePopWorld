@@ -9,6 +9,8 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local Remotes = require(Shared.Remotes)
+local L10n = require(Shared.LocalizationStrings)
+local L10nUtil = require(Shared.LocalizationUtil)
 local DataService = require(script.Parent.DataService)
 
 local ORDERED_STORE_NAME = Config.Data.GlobalCoinsLeaderboardStore or "GlobalCoinsLeaderboard_v1"
@@ -147,7 +149,7 @@ local function ensureTextConstraint(label: TextLabel, minSize: number, maxSize: 
 	constraint.Parent = label
 end
 
-local function makeLabel(parent: Instance, name: string, props: { [string]: any }): TextLabel
+local function makeLabel(parent: Instance, name: string, props: { [string]: any }, localize: boolean?): TextLabel
 	local label = Instance.new("TextLabel")
 	label.Name = name
 	label.BackgroundTransparency = 1
@@ -159,6 +161,11 @@ local function makeLabel(parent: Instance, name: string, props: { [string]: any 
 		(label :: any)[key] = value
 	end
 	label.Parent = parent
+	if localize == false then
+		L10nUtil.markNoLocalize(label)
+	else
+		label.AutoLocalize = true
+	end
 	return label
 end
 
@@ -245,7 +252,7 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 		local title = makeLabel(header, "Title", {
 			Size = UDim2.new(1, -16, 0, 38),
 			Position = UDim2.new(0, 8, 0, 6),
-			Text = "TOP COIN COLLECTORS",
+			Text = L10n.TopCoinCollectors,
 			Font = Enum.Font.GothamBlack,
 			TextColor3 = COLORS.Text,
 			ZIndex = 2,
@@ -255,7 +262,7 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 		local subtitle = makeLabel(header, "Subtitle", {
 			Size = UDim2.new(1, -16, 0, 22),
 			Position = UDim2.new(0, 8, 0, 42),
-			Text = "GLOBAL LEADERBOARD",
+			Text = L10n.GlobalLeaderboard,
 			Font = Enum.Font.GothamMedium,
 			TextColor3 = COLORS.Accent,
 			ZIndex = 2,
@@ -271,7 +278,7 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 
 		local rankHeader = makeLabel(columnHeader, "RankHeader", {
 			Size = UDim2.new(0, 56, 1, 0),
-			Text = "RANK",
+			Text = L10n.Rank,
 			TextColor3 = COLORS.Muted,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			Font = Enum.Font.GothamBold,
@@ -282,7 +289,7 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 		local playerHeader = makeLabel(columnHeader, "PlayerHeader", {
 			Size = UDim2.new(1, -190, 1, 0),
 			Position = UDim2.new(0, 60, 0, 0),
-			Text = "PLAYER",
+			Text = L10n.Player,
 			TextColor3 = COLORS.Muted,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			Font = Enum.Font.GothamBold,
@@ -293,7 +300,7 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 		local coinsHeader = makeLabel(columnHeader, "CoinsHeader", {
 			Size = UDim2.new(0, 120, 1, 0),
 			Position = UDim2.new(1, -120, 0, 0),
-			Text = "COINS",
+			Text = L10n.Coins,
 			TextColor3 = COLORS.Muted,
 			TextXAlignment = Enum.TextXAlignment.Right,
 			Font = Enum.Font.GothamBold,
@@ -349,7 +356,7 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 				TextXAlignment = Enum.TextXAlignment.Left,
 				Font = Enum.Font.GothamBlack,
 				ZIndex = 3,
-			})
+			}, false)
 			ensureTextConstraint(rank, 12, 20)
 
 			local player = makeLabel(row, "Player", {
@@ -361,7 +368,7 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 				TextTruncate = Enum.TextTruncate.AtEnd,
 				Font = Enum.Font.GothamMedium,
 				ZIndex = 3,
-			})
+			}, false)
 			ensureTextConstraint(player, 11, 18)
 
 			local coins = makeLabel(row, "Coins", {
@@ -372,13 +379,13 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 				TextXAlignment = Enum.TextXAlignment.Right,
 				Font = Enum.Font.GothamBold,
 				ZIndex = 3,
-			})
+			}, false)
 			ensureTextConstraint(coins, 11, 18)
 		end
 
 		local status = makeLabel(root, "StatusLabel", {
 			Size = UDim2.new(1, 0, 0, 22),
-			Text = "Loading leaderboard...",
+			Text = L10n.LoadingLeaderboard,
 			TextColor3 = COLORS.Muted,
 			Font = Enum.Font.Gotham,
 			LayoutOrder = 4,
@@ -392,7 +399,7 @@ local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
 	if not (statusLabel and statusLabel:IsA("TextLabel")) then
 		statusLabel = makeLabel(rootFrame, "StatusLabel", {
 			Size = UDim2.new(1, 0, 0, 22),
-			Text = "Loading leaderboard...",
+			Text = L10n.LoadingLeaderboard,
 			TextColor3 = COLORS.Muted,
 			Font = Enum.Font.Gotham,
 			LayoutOrder = 4,
@@ -407,16 +414,16 @@ end
 local function setStatus(statusLabel: TextLabel, mode: StatusMode, detail: string?)
 	statusMode = mode
 	if mode == "loading" then
-		statusLabel.Text = "Loading leaderboard..."
+		L10nUtil.localize(statusLabel, L10n.LoadingLeaderboard)
 		statusLabel.TextColor3 = COLORS.Muted
 	elseif mode == "empty" then
-		statusLabel.Text = "No rankings yet"
+		L10nUtil.localize(statusLabel, L10n.NoRankingsYet)
 		statusLabel.TextColor3 = COLORS.Muted
 	elseif mode == "unavailable" then
-		statusLabel.Text = detail or "Leaderboard temporarily unavailable"
+		L10nUtil.localize(statusLabel, detail or L10n.LeaderboardUnavailable)
 		statusLabel.TextColor3 = COLORS.Bronze
 	else
-		statusLabel.Text = ""
+		L10nUtil.dynamic(statusLabel, "")
 		statusLabel.TextColor3 = COLORS.Muted
 	end
 end
@@ -445,28 +452,28 @@ local function paintRows(root: Frame, entries: { BoardEntry }?, showPlaceholders
 
 		if entry then
 			if rankLabel and rankLabel:IsA("TextLabel") then
-				rankLabel.Text = tostring(entry.Rank)
+				L10nUtil.dynamic(rankLabel, tostring(entry.Rank))
 				rankLabel.TextColor3 = rankAccent(entry.Rank)
 			end
 			if playerLabel and playerLabel:IsA("TextLabel") then
-				playerLabel.Text = entry.Name
+				L10nUtil.dynamic(playerLabel, entry.Name)
 				playerLabel.TextColor3 = COLORS.Text
 			end
 			if coinsLabel and coinsLabel:IsA("TextLabel") then
-				coinsLabel.Text = comma(entry.Value)
+				L10nUtil.dynamic(coinsLabel, comma(entry.Value))
 				coinsLabel.TextColor3 = if entry.Rank <= 3 then rankAccent(entry.Rank) else COLORS.Accent
 			end
 		elseif showPlaceholders then
 			if rankLabel and rankLabel:IsA("TextLabel") then
-				rankLabel.Text = tostring(i)
+				L10nUtil.dynamic(rankLabel, tostring(i))
 				rankLabel.TextColor3 = rankAccent(i)
 			end
 			if playerLabel and playerLabel:IsA("TextLabel") then
-				playerLabel.Text = "—"
+				L10nUtil.dynamic(playerLabel, "—")
 				playerLabel.TextColor3 = COLORS.Muted
 			end
 			if coinsLabel and coinsLabel:IsA("TextLabel") then
-				coinsLabel.Text = "—"
+				L10nUtil.dynamic(coinsLabel, "—")
 				coinsLabel.TextColor3 = COLORS.Muted
 			end
 		end

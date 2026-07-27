@@ -52,6 +52,8 @@ local TEMPLATE = {
 	Cosmetics = {},
 	Titles = {},
 	EquippedTitle = "",
+	OwnedItems = {},
+	EquippedBackpack = "",
 	CurrentBubbles = 0,
 	BackpackCapacity = Config.Backpack.DefaultCapacity,
 	PendingSellValue = 0,
@@ -85,6 +87,32 @@ local function finiteNumber(value: any, fallback: number): number
 		return fallback
 	end
 	return numberValue
+end
+
+local function reconcileOwnedItems(data)
+	if type(data.OwnedItems) ~= "table" then
+		data.OwnedItems = {}
+	end
+	local cleaned: { [string]: boolean } = {}
+	for id, owned in pairs(data.OwnedItems) do
+		if type(id) == "string" and owned == true and Config.ShopItems[id] ~= nil then
+			cleaned[id] = true
+		end
+	end
+	data.OwnedItems = cleaned
+
+	local equipped = data.EquippedBackpack
+	if type(equipped) ~= "string" then
+		equipped = ""
+	end
+	if equipped ~= "" then
+		local def = Config.ShopItems[equipped]
+		if not cleaned[equipped] or not def or def.Kind ~= "Backpack" then
+			equipped = ""
+		end
+	end
+	data.EquippedBackpack = equipped
+	data.BackpackCapacity = Config.BackpackCapacityFor(equipped)
 end
 
 local function reconcileBackpack(data)
@@ -144,6 +172,7 @@ function DataService.Load(player: Player)
 	end)
 
 	local data = if ok and type(saved) == "table" then reconcile(saved, TEMPLATE) else deepCopy(TEMPLATE)
+	reconcileOwnedItems(data)
 	reconcileBackpack(data)
 	reconcileProgression(data)
 	data.__loaded = ok            -- si false : on ne sauvegarde PAS (évite d'écraser)
@@ -237,6 +266,7 @@ function DataService.Push(player: Player)
 	player:SetAttribute("BackpackCapacity", d.BackpackCapacity)
 	player:SetAttribute("PendingSellValue", d.PendingSellValue)
 	player:SetAttribute("TotalBubblesSold", d.TotalBubblesSold)
+	player:SetAttribute("EquippedBackpack", d.EquippedBackpack or "")
 	local ls = player:FindFirstChild("leaderstats")
 	if ls then
 		(ls:FindFirstChild("Coins") :: IntValue).Value = math.min(d.Coins, 2^31 - 1)
@@ -254,6 +284,8 @@ function DataService.Push(player: Player)
 		NextLevelAt = if nextLevel <= Config.Progression.MaxLevel then Config.BubblesForLevel(nextLevel) else nil,
 		Upgrades = d.Upgrades,
 		Worlds = d.Worlds,
+		OwnedItems = d.OwnedItems,
+		EquippedBackpack = d.EquippedBackpack or "",
 	})
 end
 

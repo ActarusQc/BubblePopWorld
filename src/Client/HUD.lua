@@ -8,6 +8,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local Remotes = require(Shared.Remotes)
+local L10n = require(Shared.LocalizationStrings)
+local L10nUtil = require(Shared.LocalizationUtil)
 
 local player = Players.LocalPlayer
 local HUD = {}
@@ -22,17 +24,21 @@ local function corner(parent: Instance, radius: number?)
 	return c
 end
 
-local function label(parent: Instance, text: string, size: UDim2, pos: UDim2, scaled: boolean?)
+local function label(parent: Instance, text: string, size: UDim2, pos: UDim2, scaled: boolean?, localize: boolean?)
 	local l = Instance.new("TextLabel")
 	l.Size = size
 	l.Position = pos
 	l.BackgroundTransparency = 1
-	l.Text = text
 	l.TextColor3 = Color3.new(1, 1, 1)
 	l.Font = Enum.Font.GothamBold
 	l.TextScaled = scaled ~= false
 	l.TextXAlignment = Enum.TextXAlignment.Left
 	l.Parent = parent
+	if localize == false then
+		L10nUtil.dynamic(l, text)
+	else
+		L10nUtil.localize(l, text)
+	end
 	return l
 end
 
@@ -84,8 +90,6 @@ function HUD.Start()
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Panneau unique (stats + sac) — hors zone chat Roblox (bas-gauche).
-	-- Hauteur calée juste après la barre / statut du sac (plus de bouton Shop HUD).
 	local panel = Instance.new("Frame")
 	panel.Size = UDim2.new(0, 270, 0, 142)
 	panel.Position = UDim2.new(0, 16, 0, 16)
@@ -95,12 +99,18 @@ function HUD.Start()
 	panel.Parent = gui
 	corner(panel, 14)
 
-	local coinsLabel = label(panel, "0 coins", UDim2.new(1, -20, 0, 28), UDim2.new(0, 12, 0, 6))
-	coinsLabel.TextColor3 = Color3.fromRGB(255, 210, 80)
+	local coinsValue = label(panel, "0", UDim2.new(0.55, 0, 0, 28), UDim2.new(0, 12, 0, 6), true, false)
+	coinsValue.TextColor3 = Color3.fromRGB(255, 210, 80)
+	coinsValue.TextXAlignment = Enum.TextXAlignment.Left
+	local coinsUnit = label(panel, L10n.CoinsUnit, UDim2.new(0.4, 0, 0, 28), UDim2.new(0.55, 0, 0, 6), true, true)
+	coinsUnit.TextColor3 = Color3.fromRGB(255, 210, 80)
 
-	local levelLabel = label(panel, "Level 1 — 0 / 125 bubbles sold", UDim2.new(1, -20, 0, 20), UDim2.new(0, 12, 0, 36))
-	levelLabel.TextSize = 14
-	levelLabel.TextScaled = false
+	local levelCaption = label(panel, L10n.Level, UDim2.new(0.28, 0, 0, 20), UDim2.new(0, 12, 0, 36), false, true)
+	levelCaption.TextSize = 14
+	local levelValue = label(panel, "1", UDim2.new(0.12, 0, 0, 20), UDim2.new(0.28, 0, 0, 36), false, false)
+	levelValue.TextSize = 14
+	local levelDetail = label(panel, "— 0 / 125", UDim2.new(0.55, -12, 0, 20), UDim2.new(0.4, 0, 0, 36), false, false)
+	levelDetail.TextSize = 14
 
 	local xpBack = Instance.new("Frame")
 	xpBack.Size = UDim2.new(1, -24, 0, 8)
@@ -117,8 +127,10 @@ function HUD.Start()
 	xpFill.Parent = xpBack
 	corner(xpFill, 4)
 
-	local backpackLabel = label(panel, "Backpack: 0 / 0", UDim2.new(1, -24, 0, 22), UDim2.new(0, 12, 0, 72))
-	backpackLabel.TextColor3 = ACCENT
+	local backpackCaption = label(panel, L10n.Backpack, UDim2.new(0.42, 0, 0, 22), UDim2.new(0, 12, 0, 72), true, true)
+	backpackCaption.TextColor3 = ACCENT
+	local backpackValue = label(panel, "0 / 0", UDim2.new(0.55, -12, 0, 22), UDim2.new(0.42, 0, 0, 72), true, false)
+	backpackValue.TextColor3 = ACCENT
 
 	local backpackBack = Instance.new("Frame")
 	backpackBack.Size = UDim2.new(1, -24, 0, 14)
@@ -135,11 +147,10 @@ function HUD.Start()
 	backpackFill.Parent = backpackBack
 	corner(backpackFill, 7)
 
-	local backpackStatus = label(panel, "Room available", UDim2.new(1, -24, 0, 18), UDim2.new(0, 12, 0, 118), false)
+	local backpackStatus = label(panel, L10n.RoomAvailable, UDim2.new(1, -24, 0, 18), UDim2.new(0, 12, 0, 118), false, true)
 	backpackStatus.TextColor3 = ACCENT
 	backpackStatus.TextSize = 13
 
-	-- Compteur mondial
 	local globalFrame = Instance.new("Frame")
 	globalFrame.Size = UDim2.new(0, 320, 0, 52)
 	globalFrame.Position = UDim2.new(0.5, -160, 0, 12)
@@ -149,8 +160,10 @@ function HUD.Start()
 	globalFrame.Parent = gui
 	corner(globalFrame, 12)
 
-	local globalLabel = label(globalFrame, "Global goal…", UDim2.new(1, -20, 0, 22), UDim2.new(0, 10, 0, 5))
-	globalLabel.TextXAlignment = Enum.TextXAlignment.Center
+	local globalValue = label(globalFrame, "0 / 0", UDim2.new(0.62, 0, 0, 22), UDim2.new(0, 10, 0, 5), true, false)
+	globalValue.TextXAlignment = Enum.TextXAlignment.Right
+	local globalUnit = label(globalFrame, L10n.BubblesUnit, UDim2.new(0.32, 0, 0, 22), UDim2.new(0.64, 0, 0, 5), true, true)
+	globalUnit.TextXAlignment = Enum.TextXAlignment.Left
 
 	local goalBack = Instance.new("Frame")
 	goalBack.Size = UDim2.new(1, -20, 0, 12)
@@ -167,7 +180,6 @@ function HUD.Start()
 	goalFill.Parent = goalBack
 	corner(goalFill, 6)
 
-	-- Bannières d'annonce (centre haut, hors chat)
 	local toastHolder = Instance.new("Frame")
 	toastHolder.Size = UDim2.new(0, 460, 0, 200)
 	toastHolder.Position = UDim2.new(0.5, -230, 0, 78)
@@ -187,6 +199,14 @@ function HUD.Start()
 		backpack_full = Color3.fromRGB(255, 140, 100),
 	}
 
+	local FIXED_TOAST_KINDS = {
+		backpack_full = true,
+		sell = true,
+		legendary = true,
+		item = true,
+		admin = true,
+	}
+
 	local function toast(text: string, kind: string?)
 		local frame = Instance.new("Frame")
 		frame.Size = UDim2.new(1, 0, 0, 36)
@@ -196,7 +216,8 @@ function HUD.Start()
 		frame.Parent = toastHolder
 		corner(frame, 8)
 
-		local l = label(frame, text, UDim2.new(1, -16, 1, 0), UDim2.new(0, 8, 0, 0))
+		local localize = FIXED_TOAST_KINDS[kind or ""] == true
+		local l = label(frame, text, UDim2.new(1, -16, 1, 0), UDim2.new(0, 8, 0, 0), true, localize)
 		l.TextXAlignment = Enum.TextXAlignment.Center
 		l.TextColor3 = TOAST_COLORS[kind or ""] or Color3.new(1, 1, 1)
 
@@ -219,50 +240,48 @@ function HUD.Start()
 		local pendingSellValue = math.max(0, attributeNumber("PendingSellValue"))
 		local ratio = if capacity > 0 then math.clamp(current / capacity, 0, 1) else 0
 
-		backpackLabel.Text = ("Backpack: %s / %s"):format(comma(current), comma(capacity))
+		L10nUtil.dynamic(backpackValue, ("%s / %s"):format(comma(current), comma(capacity)))
 		backpackFill.Size = UDim2.new(ratio, 0, 1, 0)
 
 		if ratio >= 1 then
 			backpackFill.BackgroundColor3 = Color3.fromRGB(255, 90, 90)
 			backpackStatus.TextColor3 = Color3.fromRGB(255, 120, 120)
-			backpackStatus.Text = "Backpack full!"
+			L10nUtil.localize(backpackStatus, L10n.BackpackFull)
 		elseif ratio >= Config.Backpack.NearlyFullRatio then
 			backpackFill.BackgroundColor3 = Color3.fromRGB(255, 190, 70)
 			backpackStatus.TextColor3 = Color3.fromRGB(255, 210, 90)
-			backpackStatus.Text = "Backpack almost full"
+			L10nUtil.localize(backpackStatus, L10n.BackpackAlmostFull)
 		else
 			backpackFill.BackgroundColor3 = ACCENT
 			backpackStatus.TextColor3 = ACCENT
-			backpackStatus.Text = "Room available"
+			L10nUtil.localize(backpackStatus, L10n.RoomAvailable)
 		end
 
-		-- Valeur du sac : écran du kiosque (monde), pas dans le HUD.
 		local sellLabel = findSellValueLabel()
 		if sellLabel then
-			-- SurfaceGui du kiosque : Label = montant seul ; Billboard legacy = phrase complète.
 			if sellLabel.Parent and sellLabel.Parent:IsA("Frame") then
-				sellLabel.Text = comma(pendingSellValue)
+				L10nUtil.dynamic(sellLabel, comma(pendingSellValue))
 			else
-				sellLabel.Text = ("Bag value: %s coins"):format(comma(pendingSellValue))
+				-- Legacy billboard : phrase fixe + nombre — on n'envoie que le nombre au Label dynamique.
+				L10nUtil.dynamic(sellLabel, comma(pendingSellValue))
 			end
 		end
 	end
 
-	-- Progression = bulles vendues au kiosque, jamais les bulles encore dans le sac.
 	Remotes.Event("StatsUpdate").OnClientEvent:Connect(function(stats)
-		coinsLabel.Text = comma(stats.Coins) .. " coins"
+		L10nUtil.dynamic(coinsValue, comma(stats.Coins))
 
 		local sold = stats.BubblesSold or 0
 		local levelStart = stats.LevelStart or 0
 		local nextAt = stats.NextLevelAt
 		local ratio = 0
+		L10nUtil.dynamic(levelValue, tostring(stats.Level))
 		if nextAt then
-			levelLabel.Text = ("Level %d — %s / %s bubbles sold")
-				:format(stats.Level, comma(sold), comma(nextAt))
+			L10nUtil.dynamic(levelDetail, ("— %s / %s"):format(comma(sold), comma(nextAt)))
 			local span = nextAt - levelStart
 			ratio = if span > 0 then math.clamp((sold - levelStart) / span, 0, 1) else 1
 		else
-			levelLabel.Text = ("Level %d — MAX (%s bubbles sold)"):format(stats.Level, comma(sold))
+			L10nUtil.dynamic(levelDetail, ("— %s (%s)"):format(L10n.LevelMax, comma(sold)))
 			ratio = 1
 		end
 		TweenService:Create(xpFill, TweenInfo.new(0.25), { Size = UDim2.new(ratio, 0, 1, 0) }):Play()
@@ -273,7 +292,6 @@ function HUD.Start()
 	end
 	refreshBackpack()
 
-	-- Le panneau vente peut apparaître après le HUD (sync Rojo / EnsureWorld).
 	task.spawn(function()
 		for _ = 1, 40 do
 			if findSellValueLabel() then
@@ -285,7 +303,7 @@ function HUD.Start()
 	end)
 
 	Remotes.Event("GlobalCounter").OnClientEvent:Connect(function(total, target)
-		globalLabel.Text = ("%s / %s bubbles"):format(comma(total), comma(target))
+		L10nUtil.dynamic(globalValue, ("%s / %s"):format(comma(total), comma(target)))
 		goalFill.Size = UDim2.new(math.clamp(total / target, 0, 1), 0, 1, 0)
 	end)
 

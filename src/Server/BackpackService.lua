@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local Remotes = require(Shared.Remotes)
+local L10n = require(Shared.LocalizationStrings)
 
 local DataService = require(script.Parent.DataService)
 
@@ -158,7 +159,7 @@ function BackpackService.NotifyFull(player: Player)
 		return
 	end
 	lastFullNotify[player] = now
-	Remotes.Event("Announce"):FireClient(player, "Your backpack is full! Go sell your bubbles.", "backpack_full")
+	Remotes.Event("Announce"):FireClient(player, L10n.BackpackFullSell, "backpack_full")
 end
 
 -- Doit être appelé sous le verrou (voir AddBubbles).
@@ -309,7 +310,7 @@ function BackpackService.Sell(player: Player): (number?, number?, string?)
 	end
 
 	if err == "empty" then
-		Remotes.Event("Announce"):FireClient(player, "Your backpack is empty, nothing to sell.", "sell")
+		Remotes.Event("Announce"):FireClient(player, L10n.BackpackEmpty, "sell")
 	end
 	return nil, nil, err
 end

@@ -2,6 +2,11 @@
 -- Sac à dos purement visuel (ne touche pas à la logique BackpackService).
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.GameConfig)
+local L10nUtil = require(Shared.LocalizationUtil)
 
 local BackpackVisual = {}
 
@@ -9,8 +14,55 @@ local BAG_NAME = "BPW_Backpack"
 local DISPLAY_NAME = "BagCountDisplay"
 local COUNT_LABEL_NAME = "Count"
 
-local COLOR_BG = Color3.fromRGB(8, 22, 65)
-local COLOR_ACCENT = Color3.fromRGB(80, 230, 255)
+type BagStyle = {
+	body: Color3,
+	lid: Color3,
+	pocket: Color3,
+	bubble: Color3,
+	strap: Color3,
+	plateBg: Color3,
+	accent: Color3,
+}
+
+local STYLES: { [string]: BagStyle } = {
+	Default = {
+		body = Color3.fromRGB(55, 120, 210),
+		lid = Color3.fromRGB(130, 90, 230),
+		pocket = Color3.fromRGB(80, 200, 255),
+		bubble = Color3.fromRGB(160, 230, 255),
+		strap = Color3.fromRGB(40, 60, 110),
+		plateBg = Color3.fromRGB(8, 22, 65),
+		accent = Color3.fromRGB(80, 230, 255),
+	},
+	Gold = {
+		body = Color3.fromRGB(210, 160, 40),
+		lid = Color3.fromRGB(255, 230, 150),
+		pocket = Color3.fromRGB(255, 210, 90),
+		bubble = Color3.fromRGB(255, 240, 180),
+		strap = Color3.fromRGB(110, 80, 30),
+		plateBg = Color3.fromRGB(58, 42, 8),
+		accent = Color3.fromRGB(232, 196, 90),
+	},
+	Emerald = {
+		body = Color3.fromRGB(30, 160, 90),
+		lid = Color3.fromRGB(240, 193, 74),
+		pocket = Color3.fromRGB(100, 255, 180),
+		bubble = Color3.fromRGB(180, 255, 210),
+		strap = Color3.fromRGB(20, 70, 45),
+		plateBg = Color3.fromRGB(10, 36, 24),
+		accent = Color3.fromRGB(46, 204, 113),
+	},
+	Neon = {
+		body = Color3.fromRGB(28, 28, 40),
+		lid = Color3.fromRGB(255, 78, 200),
+		pocket = Color3.fromRGB(255, 100, 220),
+		bubble = Color3.fromRGB(255, 180, 240),
+		strap = Color3.fromRGB(18, 10, 28),
+		plateBg = Color3.fromRGB(18, 8, 20),
+		accent = Color3.fromRGB(255, 78, 200),
+	},
+}
+
 local COLOR_NUMBER = Color3.fromRGB(245, 250, 255)
 local COLOR_NEAR_FULL = Color3.fromRGB(255, 210, 90)
 local COLOR_FULL = Color3.fromRGB(255, 110, 110)
@@ -33,8 +85,6 @@ local function hasWings(character: Model): boolean
 	return character:FindFirstChild("BPW_Wings") ~= nil
 end
 
--- Offset local torso : plus bas / plus près du corps si ailes présentes
--- pour laisser les ailes au-dessus et à l'extérieur du sac.
 local function bagOffset(character: Model): CFrame
 	if hasWings(character) then
 		return CFrame.new(0, -0.4, 0.42) * CFrame.Angles(math.rad(-6), 0, 0)
@@ -99,21 +149,34 @@ local function readBubbleCount(player: Player?): (number, number)
 	return current, capacity
 end
 
+local function resolveStyle(player: Player?): BagStyle
+	if not player then
+		return STYLES.Default
+	end
+	local equippedRaw = player:GetAttribute("EquippedBackpack")
+	local equipped = if typeof(equippedRaw) == "string" then equippedRaw else ""
+	if equipped ~= "" then
+		local def = Config.ShopItems[equipped]
+		if def and type(def.Style) == "string" and STYLES[def.Style] then
+			return STYLES[def.Style]
+		end
+	end
+	return STYLES.Default
+end
+
 local function applyCount(label: TextLabel, current: number, capacity: number)
 	local text = tostring(current)
 	local color = numberColor(current, capacity)
 	if label.Text ~= text then
-		label.Text = text
+		L10nUtil.dynamic(label, text)
 	end
 	if label.TextColor3 ~= color then
 		label.TextColor3 = color
 	end
 end
 
-local function createCountDisplay(folder: Folder, body: BasePart, player: Player?)
-	-- Plaque sur la face arrière (+Z) : milieu-bas du sac pour rester sous la tête/épaules.
-	-- BagBody = 1.15×1.35×0.7 → bas local ≈ -0.675 ; plaque centrée plus bas que le milieu.
-	local plate = makePart(DISPLAY_NAME, Vector3.new(0.72, 0.38, 0.05), COLOR_BG, Enum.Material.SmoothPlastic)
+local function createCountDisplay(folder: Folder, body: BasePart, player: Player?, style: BagStyle)
+	local plate = makePart(DISPLAY_NAME, Vector3.new(0.72, 0.38, 0.05), style.plateBg, Enum.Material.SmoothPlastic)
 	plate.CFrame = body.CFrame * CFrame.new(0, -0.45, 0.40)
 	plate.Parent = folder
 	weld(body, plate)
@@ -121,7 +184,7 @@ local function createCountDisplay(folder: Folder, body: BasePart, player: Player
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "CountGui"
 	gui.Adornee = plate
-	gui.Face = Enum.NormalId.Back -- +Z local = face arrière visible en 3e personne
+	gui.Face = Enum.NormalId.Back
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	gui.PixelsPerStud = 80
 	gui.LightInfluence = 0
@@ -132,12 +195,12 @@ local function createCountDisplay(folder: Folder, body: BasePart, player: Player
 	local frame = Instance.new("Frame")
 	frame.Name = "Panel"
 	frame.Size = UDim2.fromScale(1, 1)
-	frame.BackgroundColor3 = COLOR_BG
+	frame.BackgroundColor3 = style.plateBg
 	frame.BorderSizePixel = 0
 	frame.Parent = gui
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = COLOR_ACCENT
+	stroke.Color = style.accent
 	stroke.Thickness = 2
 	stroke.Transparency = 0.15
 	stroke.Parent = frame
@@ -158,8 +221,8 @@ local function createCountDisplay(folder: Folder, body: BasePart, player: Player
 	label.TextColor3 = COLOR_NUMBER
 	label.TextStrokeTransparency = 0.5
 	label.TextStrokeColor3 = Color3.fromRGB(0, 10, 40)
-	label.Text = "0"
 	label.Parent = frame
+	L10nUtil.dynamic(label, "0")
 
 	local current, capacity = readBubbleCount(player)
 	applyCount(label, current, capacity)
@@ -209,51 +272,51 @@ function BackpackVisual.Attach(character: Model)
 		return
 	end
 
+	local player = Players:GetPlayerFromCharacter(character)
+	local style = resolveStyle(player)
+
 	local folder = Instance.new("Folder")
 	folder.Name = BAG_NAME
 	folder.Parent = character
 
 	local offset = bagOffset(character)
 
-	local body = makePart("BagBody", Vector3.new(1.15, 1.35, 0.7), Color3.fromRGB(55, 120, 210))
+	local body = makePart("BagBody", Vector3.new(1.15, 1.35, 0.7), style.body)
 	body.CFrame = torso.CFrame * offset
 	body.Parent = folder
 	weld(torso, body)
 
-	local lid = makePart("BagLid", Vector3.new(1.2, 0.28, 0.75), Color3.fromRGB(130, 90, 230), Enum.Material.SmoothPlastic)
+	local lid = makePart("BagLid", Vector3.new(1.2, 0.28, 0.75), style.lid, Enum.Material.SmoothPlastic)
 	lid.CFrame = body.CFrame * CFrame.new(0, 0.7, 0)
 	lid.Parent = folder
 	weld(body, lid)
 
-	local pocket = makePart("BagPocket", Vector3.new(0.85, 0.55, 0.25), Color3.fromRGB(80, 200, 255), Enum.Material.Neon)
+	local pocket = makePart("BagPocket", Vector3.new(0.85, 0.55, 0.25), style.pocket, Enum.Material.Neon)
 	pocket.Transparency = 0.15
 	pocket.CFrame = body.CFrame * CFrame.new(0, -0.15, -0.4)
 	pocket.Parent = folder
 	weld(body, pocket)
 
-	-- Bulle décorative sur le rabat
-	local bubble = makePart("BagBubble", Vector3.new(0.45, 0.45, 0.45), Color3.fromRGB(160, 230, 255), Enum.Material.Glass)
+	local bubble = makePart("BagBubble", Vector3.new(0.45, 0.45, 0.45), style.bubble, Enum.Material.Glass)
 	bubble.Transparency = 0.35
 	bubble.Shape = Enum.PartType.Ball
 	bubble.CFrame = lid.CFrame * CFrame.new(0, 0.15, -0.2)
 	bubble.Parent = folder
 	weld(lid, bubble)
 
-	local strapL = makePart("StrapL", Vector3.new(0.12, 0.9, 0.12), Color3.fromRGB(40, 60, 110))
+	local strapL = makePart("StrapL", Vector3.new(0.12, 0.9, 0.12), style.strap)
 	strapL.CFrame = body.CFrame * CFrame.new(-0.4, 0.35, 0.35)
 	strapL.Parent = folder
 	weld(body, strapL)
 
-	local strapR = makePart("StrapR", Vector3.new(0.12, 0.9, 0.12), Color3.fromRGB(40, 60, 110))
+	local strapR = makePart("StrapR", Vector3.new(0.12, 0.9, 0.12), style.strap)
 	strapR.CFrame = body.CFrame * CFrame.new(0.4, 0.35, 0.35)
 	strapR.Parent = folder
 	weld(body, strapR)
 
-	local player = Players:GetPlayerFromCharacter(character)
-	createCountDisplay(folder, body, player)
+	createCountDisplay(folder, body, player, style)
 end
 
--- Réattache avec le bon offset (après équipement / retrait des ailes).
 function BackpackVisual.Refresh(character: Model)
 	BackpackVisual.Attach(character)
 end

@@ -7,6 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
+local L10n = require(Shared.LocalizationStrings)
+local L10nUtil = require(Shared.LocalizationUtil)
 
 local MODEL_NAME = "ItemShop"
 local LEGACY_MODEL_NAME = "BubbleShop"
@@ -199,14 +201,14 @@ local function addTextLabel(
 	position: UDim2,
 	color: Color3,
 	font: Enum.Font,
-	strokeColor: Color3?
+	strokeColor: Color3?,
+	localize: boolean?
 ): TextLabel
 	local label = Instance.new("TextLabel")
 	label.Name = name
 	label.Size = size
 	label.Position = position
 	label.BackgroundTransparency = 1
-	label.Text = text
 	label.TextScaled = true
 	label.Font = font
 	label.TextColor3 = color
@@ -217,6 +219,11 @@ local function addTextLabel(
 		label.TextStrokeTransparency = 0.35
 	end
 	label.Parent = parent
+	if localize == false then
+		L10nUtil.dynamic(label, text)
+	else
+		L10nUtil.localize(label, text)
+	end
 	return label
 end
 
@@ -507,8 +514,8 @@ end
 local function createSign(model: Model, baseCF: CFrame)
 	local size = DIMS.SignSize
 	local shopConfig = Config.Lobby.ItemShop
-	local titleText = shopConfig.SignText or "BUBBLE SHOP"
-	local subtitleText = shopConfig.TaglineText or "BUY BUBBLES & ITEMS"
+	local titleText = shopConfig.SignText or L10n.BubbleShop
+	local subtitleText = shopConfig.TaglineText or L10n.BuyBubblesAndItems
 	local faceFront = CFrame.Angles(0, math.pi, 0)
 	-- Board sits so its Front face (SurfaceGui) looks toward the player (+local Z).
 	local boardZ = 1.15
@@ -666,8 +673,8 @@ local function attachOpenShopPrompt(anchor: BasePart)
 	local shopConfig = Config.Lobby.ItemShop
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "OpenShopPrompt"
-	prompt.ActionText = shopConfig.PromptActionText or "Open Shop"
-	prompt.ObjectText = shopConfig.PromptObjectText or "Bubble Shop"
+	prompt.ActionText = shopConfig.PromptActionText or L10n.OpenShop
+	prompt.ObjectText = shopConfig.PromptObjectText or L10n.ShopObject
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = shopConfig.PromptMaxDistance or 10
 	prompt.RequiresLineOfSight = false
@@ -758,7 +765,7 @@ local function createItemsPanel(model: Model, baseCF: CFrame)
 	addTextLabel(
 		gui,
 		"Title",
-		"BUBBLE ITEMS",
+		L10n.BubbleItems,
 		UDim2.new(1, -16, 0.16, 0),
 		UDim2.new(0, 8, 0.04, 0),
 		COLORS.AmberSoft,
@@ -766,7 +773,7 @@ local function createItemsPanel(model: Model, baseCF: CFrame)
 		COLORS.AmberDeep
 	)
 
-	local lines = { "Potion", "Wand", "Boost", "Mega Bubble" }
+	local lines = { L10n.ItemPotion, L10n.ItemWand, L10n.ItemBoost, L10n.ItemMegaBubble }
 	for i, line in ipairs(lines) do
 		addTextLabel(
 			gui,

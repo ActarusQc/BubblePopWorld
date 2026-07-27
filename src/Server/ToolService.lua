@@ -8,6 +8,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local ToolDefs = require(Shared.ToolDefs)
 local Remotes = require(Shared.Remotes)
+local L10n = require(Shared.LocalizationStrings)
 
 local BubbleService = require(script.Parent.BubbleService)
 local DataService = require(script.Parent.DataService)
@@ -84,16 +85,16 @@ local function toggleWings(player: Player)
 	local equipped = player:GetAttribute("HasWings") == true
 	setWingsEquipped(player, not equipped)
 	if not equipped then
-		Remotes.Event("Announce"):FireClient(player, "Wings on — jump to fly!", "item")
+		Remotes.Event("Announce"):FireClient(player, L10n.WingsOn, "item")
 	else
-		Remotes.Event("Announce"):FireClient(player, "Wings off.", "item")
+		Remotes.Event("Announce"):FireClient(player, L10n.WingsOff, "item")
 	end
 end
 
 local function grantWings(player: Player)
 	if player:GetAttribute("OwnsWings") == true then
 		ensureWingToggleTool(player)
-		Remotes.Event("Announce"):FireClient(player, "You already own Wings (use the tool to toggle them).", "item")
+		Remotes.Event("Announce"):FireClient(player, L10n.AlreadyOwnWings, "item")
 		return
 	end
 
@@ -102,7 +103,7 @@ local function grantWings(player: Player)
 	ensureWingToggleTool(player)
 	Remotes.Event("Announce"):FireClient(
 		player,
-		"Wings unlocked! Equip the Wings tool, then press RT to toggle them.",
+		L10n.WingsUnlocked,
 		"item"
 	)
 end

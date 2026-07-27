@@ -11,10 +11,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
+local L10n = require(Shared.LocalizationStrings)
+local L10nUtil = require(Shared.LocalizationUtil)
 
 local DataService = require(script.Parent.DataService)
 local BackpackService = require(script.Parent.BackpackService)
 local LobbyEditingPreview = require(Shared.LobbyEditingPreview)
+local EnvironmentBackdropBuilder = require(Shared.EnvironmentBackdropBuilder)
 
 local ZoneService = {}
 
@@ -206,12 +209,13 @@ local function addSurfaceSign(part: BasePart, face: Enum.NormalId, text: string,
 	gui.Face = face
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	gui.PixelsPerStud = 20
+	gui.AlwaysOnTop = false
+	gui.LightInfluence = 0
 	gui.Parent = part
 
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
-	label.Text = text
 	label.TextColor3 = PALETTE.White
 	label.Font = Enum.Font.GothamBold
 	label.TextScaled = textSize == nil
@@ -220,6 +224,7 @@ local function addSurfaceSign(part: BasePart, face: Enum.NormalId, text: string,
 	end
 	label.TextWrapped = true
 	label.Parent = gui
+	L10nUtil.localize(label, text)
 end
 
 local function validateOutsideGrid(pos: Vector3, margin: number, label: string)
@@ -472,8 +477,8 @@ local function buildEntranceArch(decor: Folder, root: Vector3)
 		Material = Enum.Material.Neon,
 	})
 	lintel.Parent = decor
-	addSurfaceSign(lintel, Enum.NormalId.Front, "SALLE DE BULLES")
-	addSurfaceSign(lintel, Enum.NormalId.Back, "SALLE DE BULLES")
+	addSurfaceSign(lintel, Enum.NormalId.Front, L10n.BubbleRoom)
+	addSurfaceSign(lintel, Enum.NormalId.Back, L10n.BubbleRoom)
 
 	local glow = makePart({
 		Name = "EntranceGlow",
@@ -584,11 +589,11 @@ local function addSellValueScreen(board: BasePart)
 	caption.Name = "Caption"
 	caption.Size = UDim2.new(1, 0, 0.28, 0)
 	caption.BackgroundTransparency = 1
-	caption.Text = "Bag value:"
 	caption.TextColor3 = PALETTE.White
 	caption.Font = Enum.Font.GothamBold
 	caption.TextScaled = true
 	caption.Parent = frame
+	L10nUtil.localize(caption, L10n.BagValue)
 
 	local row = Instance.new("Frame")
 	row.Name = "ValueRow"
@@ -601,24 +606,24 @@ local function addSellValueScreen(board: BasePart)
 	amount.Name = "Label"
 	amount.Size = UDim2.new(0.62, 0, 1, 0)
 	amount.BackgroundTransparency = 1
-	amount.Text = "0"
 	amount.TextColor3 = SELL_CYAN
 	amount.Font = Enum.Font.GothamBold
 	amount.TextScaled = true
 	amount.TextXAlignment = Enum.TextXAlignment.Right
 	amount.Parent = row
+	L10nUtil.dynamic(amount, "0")
 
 	local unit = Instance.new("TextLabel")
 	unit.Name = "Unit"
 	unit.Size = UDim2.new(0.34, 0, 0.55, 0)
 	unit.Position = UDim2.new(0.64, 0, 0.28, 0)
 	unit.BackgroundTransparency = 1
-	unit.Text = "coins"
 	unit.TextColor3 = PALETTE.White
 	unit.Font = Enum.Font.Gotham
 	unit.TextScaled = true
 	unit.TextXAlignment = Enum.TextXAlignment.Left
 	unit.Parent = row
+	L10nUtil.localize(unit, L10n.CoinsUnit)
 end
 
 -- Cadre ouvert (4 bords) dans le plan local d'un écran — jamais de plaque pleine devant le GUI.
@@ -682,8 +687,8 @@ end
 
 local function addSellTitleGui(sign: BasePart)
 	local booth = Config.Lobby.SellBooth
-	local titleText = booth.SignText or "SELL YOUR BUBBLES"
-	local taglineText = booth.TaglineText or "POP · FILL · CASH IN"
+	local titleText = booth.SignText or L10n.SellYourBubbles
+	local taglineText = booth.TaglineText or L10n.PopFillCashIn
 
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "SignGui"
@@ -713,24 +718,24 @@ local function addSellTitleGui(sign: BasePart)
 	line1.Size = UDim2.new(1, -28, 0.52, 0)
 	line1.Position = UDim2.new(0, 14, 0.08, 0)
 	line1.BackgroundTransparency = 1
-	line1.Text = titleText
 	line1.TextColor3 = Color3.fromRGB(245, 250, 255)
 	line1.Font = Enum.Font.GothamBlack
 	line1.TextScaled = true
 	line1.TextStrokeColor3 = SELL_BLUE
 	line1.TextStrokeTransparency = 0.35
 	line1.Parent = frame
+	L10nUtil.localize(line1, titleText)
 
 	local line2 = Instance.new("TextLabel")
 	line2.Name = "Subtitle"
 	line2.Size = UDim2.new(1, -32, 0.26, 0)
 	line2.Position = UDim2.new(0, 16, 0.64, 0)
 	line2.BackgroundTransparency = 1
-	line2.Text = taglineText
 	line2.TextColor3 = SELL_CYAN_SOFT
 	line2.Font = Enum.Font.GothamBold
 	line2.TextScaled = true
 	line2.Parent = frame
+	L10nUtil.localize(line2, taglineText)
 end
 
 local function startSellTankBubbleAnims(parent: Folder, tankWorldCF: CFrame, radius: number, height: number, count: number)
@@ -977,11 +982,11 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 	local coinLabel = Instance.new("TextLabel")
 	coinLabel.Size = UDim2.fromScale(1, 1)
 	coinLabel.BackgroundTransparency = 1
-	coinLabel.Text = "$"
 	coinLabel.TextColor3 = Color3.fromRGB(80, 50, 0)
 	coinLabel.Font = Enum.Font.GothamBold
 	coinLabel.TextScaled = true
 	coinLabel.Parent = coinGui
+	L10nUtil.dynamic(coinLabel, "$")
 
 	--------------------------------------------------------------------
 	-- Comptoir profond + plateau clair + façade écran
@@ -1329,22 +1334,22 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 	termLabel.Size = UDim2.new(1, -16, 0.42, 0)
 	termLabel.Position = UDim2.new(0, 8, 0.06, 0)
 	termLabel.BackgroundTransparency = 1
-	termLabel.Text = "Turn your bubbles into coins!"
 	termLabel.TextColor3 = PALETTE.White
 	termLabel.Font = Enum.Font.GothamBold
 	termLabel.TextScaled = true
 	termLabel.TextWrapped = true
 	termLabel.Parent = termFrame
+	L10nUtil.localize(termLabel, L10n.TurnBubblesIntoCoins)
 
 	local iconLabel = Instance.new("TextLabel")
 	iconLabel.Size = UDim2.new(1, -16, 0.42, 0)
 	iconLabel.Position = UDim2.new(0, 8, 0.5, 0)
 	iconLabel.BackgroundTransparency = 1
-	iconLabel.Text = "▼  $"
 	iconLabel.TextColor3 = SELL_CYAN
 	iconLabel.Font = Enum.Font.GothamBold
 	iconLabel.TextScaled = true
 	iconLabel.Parent = termFrame
+	L10nUtil.dynamic(iconLabel, "▼  $")
 
 	-- Pictogramme 3D sous le texte (sac + bulle)
 	attachPart(decor, {
@@ -1372,16 +1377,18 @@ end
 
 local SellKioskBuilder = require(script.Parent.SellKioskBuilder)
 
--- Face avant (-Z local) orientée vers le spawn (à hauteur du panneau).
+-- Face avant (-Z local) vers le spawn : yaw Y uniquement, jamais de pitch/roll.
 local function boardCFrameFacingSpawn(boardPos: Vector3, spawnPos: Vector3): CFrame
-	local target = Vector3.new(spawnPos.X, boardPos.Y, spawnPos.Z)
-	if (target - boardPos).Magnitude < 0.05 then
+	local lookTarget = Vector3.new(spawnPos.X, boardPos.Y, spawnPos.Z)
+	local delta = lookTarget - boardPos
+	if delta.Magnitude < 0.05 then
 		return CFrame.new(boardPos)
 	end
-	return CFrame.lookAt(boardPos, target)
+	local _, yaw = CFrame.lookAt(boardPos, lookTarget):ToOrientation()
+	return CFrame.new(boardPos) * CFrame.Angles(0, yaw, 0)
 end
 
-local function clearSurfaceGuis(part: BasePart)
+local function _clearSurfaceGuis(part: BasePart)
 	for _, child in ipairs(part:GetChildren()) do
 		if child:IsA("SurfaceGui") then
 			child:Destroy()
@@ -1501,27 +1508,341 @@ local function buildSpawnRing(decor: Folder, root: Vector3)
 	pad.Parent = decor
 end
 
--- Panneau d'instructions (sud-est), face vers le spawn — visible dès l'apparition.
+-- Panneau d'instructions (sud-est) : assemblage local + PivotTo (yaw seul).
 local function buildInstructionBoard(decor: Folder, root: Vector3)
 	local L = Config.Lobby
 	local spawnPos = root + L.SpawnOffset
-	local size = Vector3.new(14, 8, 0.6)
-	local wallInset = 3.2
-	-- Mur sud (+ légèrement à l'est) : dans le champ de vision au spawn (facing -Z).
-	local boardPos = root + Vector3.new(20, size.Y / 2, -(L.FloorSize.Z / 2 - wallInset))
-	local cf = boardCFrameFacingSpawn(boardPos, spawnPos)
 
-	local board = upsertBoardPart(
-		decor,
-		{ "InstructionBoard", "GuideSign" },
-		"InstructionBoard",
-		size,
-		cf,
-		Color3.fromRGB(30, 42, 75),
-		true
-	)
-	clearSurfaceGuis(board)
-	addSurfaceSign(board, Enum.NormalId.Front, L.SignText)
+	-- Réutiliser le Model existant (pas de doublon).
+	local group = decor:FindFirstChild("InstructionBoard")
+	if group and not group:IsA("Model") then
+		group:Destroy()
+		group = nil
+	end
+	if not group then
+		group = Instance.new("Model")
+		group.Name = "InstructionBoard"
+		markGenerated(group)
+		group.Parent = decor
+	else
+		for _, child in ipairs(group:GetChildren()) do
+			child:Destroy()
+		end
+	end
+
+	-- Décor hérité (anciennes formes).
+	for _, name in ipairs({ "GuideSign", "InstructionBoardGroup" }) do
+		local stale = decor:FindFirstChild(name)
+		if stale then
+			stale:Destroy()
+		end
+	end
+
+	local panelSize = Vector3.new(12, 7.2, 0.55)
+	local wallInset = 6.8
+	local boardPos = root + Vector3.new(18, panelSize.Y / 2 + 1.1, -(L.FloorSize.Z / 2 - wallInset))
+	local baseCF = boardCFrameFacingSpawn(boardPos, spawnPos)
+
+	local halfW, halfH = panelSize.X / 2, panelSize.Y / 2
+	local groundY = root.Y
+	local postH = boardPos.Y - halfH - groundY
+	if postH < 1.2 then
+		postH = 1.2
+	end
+	local postSize = Vector3.new(0.55, postH, 0.55)
+	local postHalfW = 4.2
+
+	local navy = Color3.fromRGB(18, 42, 88)
+	local cyan = Color3.fromRGB(70, 220, 255)
+	local lightBlue = Color3.fromRGB(140, 210, 255)
+	local pink = Color3.fromRGB(255, 130, 200)
+
+	-- Toutes les pièces : offsets locaux (origine = centre du panneau), rotation identité.
+	local function attachLocal(props: {
+		Name: string,
+		Size: Vector3,
+		LocalCF: CFrame,
+		Color: Color3?,
+		Material: Enum.Material?,
+		Transparency: number?,
+		CanCollide: boolean?,
+		CanQuery: boolean?,
+		Shape: Enum.PartType?,
+		Reflectance: number?,
+	}): Part
+		local p = makePart({
+			Name = props.Name,
+			Size = props.Size,
+			CFrame = props.LocalCF,
+			Color = props.Color,
+			Material = props.Material,
+			Transparency = props.Transparency,
+			CanCollide = props.CanCollide,
+			CanQuery = props.CanQuery,
+			Shape = props.Shape,
+		})
+		if props.Reflectance then
+			p.Reflectance = props.Reflectance
+		end
+		p.Anchored = true
+		p.Parent = group
+		return p
+	end
+
+	local borderT = 0.28
+	local frameDepth = 0.22
+	local frameZ = -panelSize.Z / 2 - frameDepth / 2
+
+	attachLocal({
+		Name = "PanelBack",
+		Size = panelSize + Vector3.new(0.35, 0.35, 0.35),
+		LocalCF = CFrame.new(0, 0, 0.28),
+		Color = Color3.fromRGB(10, 28, 62),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CanQuery = false,
+	})
+
+	local panel = attachLocal({
+		Name = "Panel",
+		Size = panelSize,
+		LocalCF = CFrame.new(),
+		Color = navy,
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CanQuery = false,
+	})
+
+	local frameSpecs = {
+		{ "FrameTop", Vector3.new(panelSize.X + borderT * 2, borderT, frameDepth), Vector3.new(0, halfH + borderT / 2, frameZ) },
+		{ "FrameBottom", Vector3.new(panelSize.X + borderT * 2, borderT, frameDepth), Vector3.new(0, -halfH - borderT / 2, frameZ) },
+		{ "FrameLeft", Vector3.new(borderT, panelSize.Y, frameDepth), Vector3.new(-halfW - borderT / 2, 0, frameZ) },
+		{ "FrameRight", Vector3.new(borderT, panelSize.Y, frameDepth), Vector3.new(halfW + borderT / 2, 0, frameZ) },
+	}
+	for _, spec in ipairs(frameSpecs) do
+		attachLocal({
+			Name = spec[1] :: string,
+			Size = spec[2] :: Vector3,
+			LocalCF = CFrame.new(spec[3] :: Vector3),
+			Color = cyan,
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			CanQuery = false,
+		})
+	end
+	for _, corner in ipairs({
+		Vector3.new(-halfW - borderT / 2, halfH + borderT / 2, frameZ),
+		Vector3.new(halfW + borderT / 2, halfH + borderT / 2, frameZ),
+		Vector3.new(-halfW - borderT / 2, -halfH - borderT / 2, frameZ),
+		Vector3.new(halfW + borderT / 2, -halfH - borderT / 2, frameZ),
+	}) do
+		attachLocal({
+			Name = "FrameCorner",
+			Size = Vector3.new(borderT * 1.35, borderT * 1.35, borderT * 1.35),
+			LocalCF = CFrame.new(corner),
+			Color = cyan,
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			CanQuery = false,
+			Shape = Enum.PartType.Ball,
+		})
+	end
+
+	local headerSize = Vector3.new(9.2, 1.55, 0.45)
+	local headerY = halfH + headerSize.Y / 2 + 0.22
+	local headerZ = -0.05
+	local headerLocal = CFrame.new(0, headerY, headerZ)
+
+	local header = attachLocal({
+		Name = "TitleHeader",
+		Size = headerSize,
+		LocalCF = headerLocal,
+		Color = Color3.fromRGB(24, 58, 110),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CanQuery = false,
+	})
+	attachLocal({
+		Name = "TitleHeaderBorder",
+		Size = headerSize + Vector3.new(0.3, 0.3, 0.12),
+		LocalCF = headerLocal * CFrame.new(0, 0, 0.12),
+		Color = cyan,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+	})
+
+	attachLocal({
+		Name = "TitleBubble",
+		Size = Vector3.new(0.85, 0.85, 0.85),
+		LocalCF = headerLocal * CFrame.new(-3.6, 0.05, -0.35),
+		Color = cyan,
+		Material = Enum.Material.Glass,
+		Transparency = 0.25,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Ball,
+		Reflectance = 0.25,
+	})
+	attachLocal({
+		Name = "TitleBubbleHighlight",
+		Size = Vector3.new(0.28, 0.28, 0.28),
+		LocalCF = headerLocal * CFrame.new(-3.75, 0.22, -0.55),
+		Color = PALETTE.White,
+		Material = Enum.Material.Neon,
+		Transparency = 0.35,
+		CanCollide = false,
+		CanQuery = false,
+		Shape = Enum.PartType.Ball,
+	})
+
+	local titleGui = Instance.new("SurfaceGui")
+	titleGui.Name = "TitleGui"
+	titleGui.Face = Enum.NormalId.Front
+	titleGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	titleGui.PixelsPerStud = 45
+	titleGui.AlwaysOnTop = false
+	titleGui.LightInfluence = 0
+	titleGui.ClipsDescendants = true
+	titleGui.Parent = header
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Name = "Title"
+	titleLabel.Size = UDim2.new(1, -36, 1, -10)
+	titleLabel.Position = UDim2.new(0, 28, 0, 5)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Font = Enum.Font.FredokaOne
+	titleLabel.TextColor3 = PALETTE.White
+	titleLabel.TextScaled = true
+	titleLabel.TextWrapped = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+	titleLabel.TextYAlignment = Enum.TextYAlignment.Center
+	titleLabel.Parent = titleGui
+	L10nUtil.localize(titleLabel, L10n.HowToPlayTitle)
+	local titleConstraint = Instance.new("UITextSizeConstraint")
+	titleConstraint.MinTextSize = 18
+	titleConstraint.MaxTextSize = 42
+	titleConstraint.Parent = titleLabel
+
+	-- Supports : verticaux, symétriques, sommet au bas du panneau.
+	for _, side in ipairs({ -postHalfW, postHalfW }) do
+		attachLocal({
+			Name = "Post",
+			Size = postSize,
+			LocalCF = CFrame.new(side, -halfH - postH / 2, 0),
+			Color = Color3.fromRGB(35, 55, 100),
+			Material = Enum.Material.SmoothPlastic,
+			CanCollide = true,
+			CanQuery = false,
+		})
+	end
+
+	local deco = {
+		{ Vector3.new(-5.8, 3.2, -0.55), 1.1, cyan, 0.35 },
+		{ Vector3.new(5.6, 2.8, -0.5), 0.9, pink, 0.4 },
+		{ Vector3.new(-5.4, -2.9, -0.45), 0.75, lightBlue, 0.45 },
+		{ Vector3.new(5.5, -3.1, -0.5), 0.85, cyan, 0.38 },
+		{ Vector3.new(0.2, 4.55, -0.4), 0.55, pink, 0.5 },
+	}
+	for i, d in ipairs(deco) do
+		attachLocal({
+			Name = "DecoBubble" .. tostring(i),
+			Size = Vector3.new(d[2] :: number, d[2] :: number, d[2] :: number),
+			LocalCF = CFrame.new(d[1] :: Vector3),
+			Color = d[3] :: Color3,
+			Material = Enum.Material.Glass,
+			Transparency = d[4] :: number,
+			CanCollide = false,
+			CanQuery = false,
+			Shape = Enum.PartType.Ball,
+			Reflectance = 0.2,
+		})
+	end
+
+	local bodyGui = Instance.new("SurfaceGui")
+	bodyGui.Name = "InstructionsGui"
+	bodyGui.Face = Enum.NormalId.Front
+	bodyGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	bodyGui.PixelsPerStud = 40
+	bodyGui.AlwaysOnTop = false
+	bodyGui.LightInfluence = 0
+	bodyGui.ClipsDescendants = true
+	bodyGui.Parent = panel
+
+	local rootFrame = Instance.new("Frame")
+	rootFrame.Name = "Root"
+	rootFrame.Size = UDim2.fromScale(1, 1)
+	rootFrame.BackgroundTransparency = 1
+	rootFrame.Parent = bodyGui
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0.06, 0)
+	pad.PaddingBottom = UDim.new(0.06, 0)
+	pad.PaddingLeft = UDim.new(0.07, 0)
+	pad.PaddingRight = UDim.new(0.07, 0)
+	pad.Parent = rootFrame
+
+	local list = Instance.new("UIListLayout")
+	list.FillDirection = Enum.FillDirection.Vertical
+	list.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	list.VerticalAlignment = Enum.VerticalAlignment.Center
+	list.Padding = UDim.new(0.028, 0)
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Parent = rootFrame
+
+	local lines = {
+		L10n.HowToPlayLine1,
+		L10n.HowToPlayLine2,
+		L10n.HowToPlayLine3,
+		L10n.HowToPlayLine4,
+		L10n.HowToPlayLine5,
+	}
+	for i, lineText in ipairs(lines) do
+		local row = Instance.new("Frame")
+		row.Name = "Line" .. tostring(i)
+		row.Size = UDim2.new(1, 0, 0.16, 0)
+		row.BackgroundTransparency = 1
+		row.LayoutOrder = i
+		row.Parent = rootFrame
+
+		local num = Instance.new("TextLabel")
+		num.Name = "Num"
+		num.Size = UDim2.new(0.12, 0, 1, 0)
+		num.BackgroundTransparency = 1
+		num.Font = Enum.Font.FredokaOne
+		num.TextColor3 = cyan
+		num.TextScaled = true
+		num.TextXAlignment = Enum.TextXAlignment.Left
+		num.TextYAlignment = Enum.TextYAlignment.Center
+		num.Parent = row
+		L10nUtil.localize(num, tostring(i) .. ".")
+		local numCap = Instance.new("UITextSizeConstraint")
+		numCap.MinTextSize = 16
+		numCap.MaxTextSize = 36
+		numCap.Parent = num
+
+		local body = Instance.new("TextLabel")
+		body.Name = "Body"
+		body.Size = UDim2.new(0.88, 0, 1, 0)
+		body.Position = UDim2.new(0.12, 0, 0, 0)
+		body.BackgroundTransparency = 1
+		body.Font = Enum.Font.GothamBold
+		body.TextColor3 = PALETTE.White
+		body.TextScaled = true
+		body.TextWrapped = true
+		body.TextXAlignment = Enum.TextXAlignment.Left
+		body.TextYAlignment = Enum.TextYAlignment.Center
+		body.Parent = row
+		local bodyOnly = (lineText:gsub("^%d+%.%s*", ""))
+		L10nUtil.localize(body, bodyOnly)
+		local bodyCap = Instance.new("UITextSizeConstraint")
+		bodyCap.MinTextSize = 14
+		bodyCap.MaxTextSize = 32
+		bodyCap.Parent = body
+	end
+
+	group.PrimaryPart = panel
+	group:PivotTo(baseCF)
 end
 
 --------------------------------------------------------------------
@@ -1580,7 +1901,7 @@ local function buildLobby(lobby: Folder)
 
 	-- Décor hérité : anciens noms / indices obsolètes.
 	local staleGuide = decor:FindFirstChild("GuideSign")
-	if staleGuide and staleGuide.Name ~= "InstructionBoard" then
+	if staleGuide then
 		staleGuide:Destroy()
 	end
 	local staleHint = decor:FindFirstChild("EntranceHint")
@@ -1701,8 +2022,8 @@ local function buildExitArch(decor: Folder, exitPos: Vector3, groundY: number)
 		Material = Enum.Material.Neon,
 	})
 	lintel.Parent = decor
-	addSurfaceSign(lintel, Enum.NormalId.Front, "← Lobby")
-	addSurfaceSign(lintel, Enum.NormalId.Back, "← Lobby")
+	addSurfaceSign(lintel, Enum.NormalId.Front, L10n.BackToLobby)
+	addSurfaceSign(lintel, Enum.NormalId.Back, L10n.BackToLobby)
 end
 
 --------------------------------------------------------------------
@@ -1955,6 +2276,9 @@ function ZoneService.EnsureWorld(): Folder
 	buildLobby(lobby)
 	buildGameRoom(gameRoom)
 	buildPhysicalConnection(root)
+
+	-- Décor d'horizon (montagnes) : Workspace.GeneratedWorld.EnvironmentBackdrop uniquement.
+	EnvironmentBackdropBuilder.Build()
 
 	-- Remplit le panneau Top 10 dès que le décor lobby est prêt.
 	task.defer(function()

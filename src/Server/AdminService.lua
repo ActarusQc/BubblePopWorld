@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local Remotes = require(Shared.Remotes)
+local L10n = require(Shared.LocalizationStrings)
 
 local DataService = require(script.Parent.DataService)
 local BackpackService = require(script.Parent.BackpackService)
@@ -76,7 +77,7 @@ local function resetUserId(userId: number): (boolean, string)
 		end
 		DataService.Save(target)
 		LeaderboardService.RemoveEntry(userId)
-		Remotes.Event("Announce"):FireClient(target, "Your progress has been reset.", "admin")
+		Remotes.Event("Announce"):FireClient(target, L10n.ProgressReset, "admin")
 		log("profil réinitialisé EN LIGNE : %s (%d)", target.Name, userId)
 		return true, ("%s réinitialisé (en ligne) et sauvegardé."):format(target.Name)
 	end

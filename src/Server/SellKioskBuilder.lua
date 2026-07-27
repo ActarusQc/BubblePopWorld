@@ -8,6 +8,9 @@ local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared").GameConfig)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local L10n = require(Shared.LocalizationStrings)
+local L10nUtil = require(Shared.LocalizationUtil)
 
 local SellKioskBuilder = {}
 local BIND_VERSION = "2026-07-26-STUDIO-BIND"
@@ -148,25 +151,25 @@ local function wireMainSign(mesh: BasePart, face: Enum.NormalId)
 	line1.Size = UDim2.new(1, -20, 0.55, 0)
 	line1.Position = UDim2.new(0, 10, 0.08, 0)
 	line1.BackgroundTransparency = 1
-	line1.Text = "SELL YOUR BUBBLES"
 	line1.TextColor3 = WHITE
 	line1.Font = Enum.Font.GothamBold
 	line1.TextScaled = true
 	line1.TextStrokeTransparency = 0.45
 	markGenerated(line1)
 	line1.Parent = panel
+	L10nUtil.localize(line1, L10n.SellYourBubbles)
 	local line2 = Instance.new("TextLabel")
 	line2.Name = "Line2"
 	line2.Size = UDim2.new(1, -20, 0.3, 0)
 	line2.Position = UDim2.new(0, 10, 0.62, 0)
 	line2.BackgroundTransparency = 1
-	line2.Text = "POP · FILL · CASH IN"
 	line2.TextColor3 = CYAN
 	line2.Font = Enum.Font.Gotham
 	line2.TextScaled = true
 	line2.TextStrokeTransparency = 0.45
 	markGenerated(line2)
 	line2.Parent = panel
+	L10nUtil.localize(line2, L10n.PopFillCashIn)
 end
 
 local function wireValueDisplay(mesh: BasePart, face: Enum.NormalId)
@@ -195,12 +198,12 @@ local function wireValueDisplay(mesh: BasePart, face: Enum.NormalId)
 	caption.Name = "Caption"
 	caption.Size = UDim2.new(1, 0, 0.28, 0)
 	caption.BackgroundTransparency = 1
-	caption.Text = "Bag value:"
 	caption.TextColor3 = WHITE
 	caption.Font = Enum.Font.GothamBold
 	caption.TextScaled = true
 	markGenerated(caption)
 	caption.Parent = panel
+	L10nUtil.localize(caption, L10n.BagValue)
 	local row = Instance.new("Frame")
 	row.Name = "ValueRow"
 	row.Size = UDim2.new(1, 0, 0.62, 0)
@@ -212,25 +215,25 @@ local function wireValueDisplay(mesh: BasePart, face: Enum.NormalId)
 	amount.Name = "Label"
 	amount.Size = UDim2.new(0.62, 0, 1, 0)
 	amount.BackgroundTransparency = 1
-	amount.Text = "0"
 	amount.TextColor3 = CYAN
 	amount.Font = Enum.Font.GothamBold
 	amount.TextScaled = true
 	amount.TextXAlignment = Enum.TextXAlignment.Right
 	markGenerated(amount)
 	amount.Parent = row
+	L10nUtil.dynamic(amount, "0")
 	local unit = Instance.new("TextLabel")
 	unit.Name = "Unit"
 	unit.Size = UDim2.new(0.34, 0, 0.55, 0)
 	unit.Position = UDim2.new(0.64, 0, 0.28, 0)
 	unit.BackgroundTransparency = 1
-	unit.Text = "coins"
 	unit.TextColor3 = WHITE
 	unit.Font = Enum.Font.Gotham
 	unit.TextScaled = true
 	unit.TextXAlignment = Enum.TextXAlignment.Left
 	markGenerated(unit)
 	unit.Parent = row
+	L10nUtil.localize(unit, L10n.CoinsUnit)
 end
 
 local function wireTerminal(mesh: BasePart, face: Enum.NormalId)
@@ -251,34 +254,34 @@ local function wireTerminal(mesh: BasePart, face: Enum.NormalId)
 	t1.Size = UDim2.new(1, -12, 0.28, 0)
 	t1.Position = UDim2.new(0, 6, 0.12, 0)
 	t1.BackgroundTransparency = 1
-	t1.Text = "TERMINAL"
 	t1.TextColor3 = CYAN
 	t1.Font = Enum.Font.GothamBold
 	t1.TextScaled = true
 	markGenerated(t1)
 	t1.Parent = panel
+	L10nUtil.localize(t1, L10n.Terminal)
 	local t2 = Instance.new("TextLabel")
 	t2.Name = "T2"
 	t2.Size = UDim2.new(1, -12, 0.22, 0)
 	t2.Position = UDim2.new(0, 6, 0.42, 0)
 	t2.BackgroundTransparency = 1
-	t2.Text = "Step on the pad"
 	t2.TextColor3 = WHITE
 	t2.Font = Enum.Font.Gotham
 	t2.TextScaled = true
 	markGenerated(t2)
 	t2.Parent = panel
+	L10nUtil.localize(t2, L10n.StepOnThePad)
 	local t3 = Instance.new("TextLabel")
 	t3.Name = "T3"
 	t3.Size = UDim2.new(1, -12, 0.22, 0)
 	t3.Position = UDim2.new(0, 6, 0.66, 0)
 	t3.BackgroundTransparency = 1
-	t3.Text = "then SELL"
 	t3.TextColor3 = WHITE
 	t3.Font = Enum.Font.Gotham
 	t3.TextScaled = true
 	markGenerated(t3)
 	t3.Parent = panel
+	L10nUtil.localize(t3, L10n.ThenSell)
 end
 
 --------------------------------------------------------------------

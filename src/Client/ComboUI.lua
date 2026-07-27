@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
+local L10nUtil = require(Shared.LocalizationUtil)
 
 local player = Players.LocalPlayer
 local ComboUI = {}
@@ -44,23 +45,23 @@ function ComboUI.Start()
 	local countLabel = Instance.new("TextLabel")
 	countLabel.Size = UDim2.new(1, 0, 0, 62)
 	countLabel.BackgroundTransparency = 1
-	countLabel.Text = "0"
 	countLabel.TextColor3 = Color3.new(1, 1, 1)
 	countLabel.TextStrokeTransparency = 0.25
 	countLabel.Font = Enum.Font.GothamBlack
 	countLabel.TextScaled = true
 	countLabel.Parent = holder
+	L10nUtil.dynamic(countLabel, "0")
 
 	local multLabel = Instance.new("TextLabel")
 	multLabel.Size = UDim2.new(1, 0, 0, 34)
 	multLabel.Position = UDim2.new(0, 0, 0, 58)
 	multLabel.BackgroundTransparency = 1
-	multLabel.Text = "x1.0"
 	multLabel.TextColor3 = Color3.new(1, 1, 1)
 	multLabel.TextStrokeTransparency = 0.35
 	multLabel.Font = Enum.Font.GothamBold
 	multLabel.TextScaled = true
 	multLabel.Parent = holder
+	L10nUtil.dynamic(multLabel, "x1.0")
 
 	local barBack = Instance.new("Frame")
 	barBack.Size = UDim2.new(0.8, 0, 0, 8)
@@ -95,9 +96,9 @@ function ComboUI.Start()
 
 		local color = tierColor(count)
 		holder.Visible = true
-		countLabel.Text = tostring(count)
+		L10nUtil.dynamic(countLabel, tostring(count))
 		countLabel.TextColor3 = color
-		multLabel.Text = ("x%.1f"):format(mult)
+		L10nUtil.dynamic(multLabel, ("x%.1f"):format(mult))
 		multLabel.TextColor3 = color
 		barFill.BackgroundColor3 = color
 		expiresAt = os.clock() + window

@@ -34,6 +34,43 @@ GameConfig.Backpack = {
 	FullNotifyCooldown = 3,
 }
 
+-- Items achetables (séparés des upgrades de compétences).
+GameConfig.ShopItems = {
+	BackpackGold = {
+		Label = "Gold Backpack",
+		Kind = "Backpack",
+		Capacity = 50,
+		Cost = 10000,
+		Style = "Gold",
+	},
+	BackpackEmerald = {
+		Label = "Emerald Backpack",
+		Kind = "Backpack",
+		Capacity = 50,
+		Cost = 10000,
+		Style = "Emerald",
+	},
+	BackpackNeon = {
+		Label = "Neon Backpack",
+		Kind = "Backpack",
+		Capacity = 50,
+		Cost = 10000,
+		Style = "Neon",
+	},
+}
+
+GameConfig.ShopItemOrder = { "BackpackGold", "BackpackEmerald", "BackpackNeon" }
+
+function GameConfig.BackpackCapacityFor(equippedId: string?): number
+	if type(equippedId) == "string" and equippedId ~= "" then
+		local def = GameConfig.ShopItems[equippedId]
+		if def and def.Kind == "Backpack" then
+			return math.clamp(def.Capacity, GameConfig.Backpack.DefaultCapacity, GameConfig.Backpack.MaxCapacity)
+		end
+	end
+	return GameConfig.Backpack.DefaultCapacity
+end
+
 GameConfig.World = {
 	FallResetY = -25,
 	FallResetDestination = "GameRoom",
@@ -128,7 +165,8 @@ GameConfig.Lobby = {
 	EntranceSize = Vector3.new(16, 10, 6),
 	ClearanceFromGrid = 40,
 	RailingHeight = 4,
-	SignText = "1. Enter the room\n2. Pop some bubbles\n3. Fill your backpack\n4. Come back and sell them",
+	SignText = "1. Enter the Bubble Room\n2. Pop bubbles to fill your backpack\n3. Return to the lobby\n4. Sell your bubbles for coins\n5. Upgrade and pop even more!",
+	HowToPlayTitle = "HOW TO PLAY",
 }
 
 local halfZ = (GameConfig.Grid.SizeZ * GameConfig.Grid.Spacing) / 2

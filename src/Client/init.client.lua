@@ -11,6 +11,7 @@ local modules = {
 	require(script.JuiceController),
 	require(script.ToolClient),
 	require(script.ShopUI),
+	require(script.InventoryUI),
 }
 
 for _, m in ipairs(modules) do

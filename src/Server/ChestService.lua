@@ -8,6 +8,8 @@ local Debris = game:GetService("Debris")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local Remotes = require(Shared.Remotes)
+local L10n = require(Shared.LocalizationStrings)
+local L10nUtil = require(Shared.LocalizationUtil)
 
 local BubbleService = require(script.Parent.BubbleService)
 local DataService = require(script.Parent.DataService)
@@ -58,16 +60,16 @@ local function spawnChest()
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
-	label.Text = tier.Label .. " chest"
 	label.TextColor3 = tier.Color
 	label.TextStrokeTransparency = 0
 	label.TextScaled = true
 	label.Font = Enum.Font.GothamBold
 	label.Parent = billboard
+	L10nUtil.localize(label, tier.Label .. L10n.ChestSuffix)
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Open"
-	prompt.ObjectText = tier.Label .. " chest"
+	prompt.ObjectText = tier.Label .. L10n.ChestSuffix
 	prompt.HoldDuration = 0.6
 	prompt.MaxActivationDistance = 12
 	prompt.Parent = chest
@@ -87,13 +89,14 @@ local function spawnChest()
 		if profile then profile.ChestsOpened += 1 end
 		DataService.Push(player)
 
+		-- Nom joueur + nombres : non localisable en bloc (toast client = AutoLocalize false).
 		Remotes.Event("Announce"):FireAllClients(
 			("%s opened a %s chest (+%d coins)"):format(player.DisplayName, tier.Label, coins), tier.Id)
 		chest:Destroy()
 	end)
 
 	if tier.Announce then
-		Remotes.Event("Announce"):FireAllClients("⭐ A legendary chest has appeared!", "legendary")
+		Remotes.Event("Announce"):FireAllClients(L10n.LegendaryChestAppeared, "legendary")
 		pcall(function()
 			MessagingService:PublishAsync(Config.Global.Topic .. "_Chest", { tier = tier.Id })
 		end)

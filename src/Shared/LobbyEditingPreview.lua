@@ -196,6 +196,14 @@ function LobbyEditingPreview.CreateLobbyEditingPreview()
 		Transparency = 0.35,
 	}).Parent = preview
 
+	-- Horizon montagneux visible aussi en preview Studio (idempotent).
+	local ok, err = pcall(function()
+		require(script.Parent.EnvironmentBackdropBuilder).Build()
+	end)
+	if not ok then
+		warn("[LobbyEditingPreview] EnvironmentBackdrop: " .. tostring(err))
+	end
+
 	print("[LobbyEditingPreview] Créé: Workspace.BubblePopWorld.LobbyEditingPreview")
 	print("[LobbyEditingPreview] Place SellKiosk dans Lobby (pas dans LobbyEditingPreview).")
 	print("[LobbyEditingPreview] Retirer: require(...LobbyEditingPreview).RemoveLobbyEditingPreview()")

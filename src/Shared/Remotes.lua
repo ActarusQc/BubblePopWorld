@@ -17,7 +17,9 @@ local EVENTS = {
 
 local FUNCTIONS = {
 	"BuyUpgrade",       -- client -> serveur : id d'amélioration
-	"GetShopData",      -- client -> serveur : coûts + niveaux
+	"BuyItem",          -- client -> serveur : id d'item boutique
+	"EquipBackpack",    -- client -> serveur : id sac ("" = défaut)
+	"GetShopData",      -- client -> serveur : upgrades + items
 }
 
 local Remotes = {}

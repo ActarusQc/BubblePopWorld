@@ -10,6 +10,7 @@ local Players = game:GetService("Players")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local BubbleTypes = require(Shared.BubbleTypes)
 local Remotes = require(Shared.Remotes)
+local L10nUtil = require(Shared.LocalizationUtil)
 local GridUtil = require(script.Parent.GridUtil)
 
 local player = Players.LocalPlayer
@@ -83,12 +84,12 @@ local function floatingText(position: Vector3, text: string, color: Color3)
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
-	label.Text = text
 	label.TextColor3 = color
 	label.TextStrokeTransparency = 0
 	label.TextScaled = true
 	label.Font = Enum.Font.GothamBlack
 	label.Parent = gui
+	L10nUtil.dynamic(label, text)
 
 	TweenService:Create(anchor, TweenInfo.new(1), { CFrame = CFrame.new(position + Vector3.new(0, 8, 0)) }):Play()
 	TweenService:Create(label, TweenInfo.new(1), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
