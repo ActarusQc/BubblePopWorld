@@ -2415,6 +2415,10 @@ function ZoneService.CanPlayerEnter(player: Player, zoneId: string): boolean
 	return ZoneAccess.CanPlayerEnter(player, zoneId)
 end
 
+function ZoneService.GetPlayerLevel(player: Player): number
+	return ZoneAccess.GetPlayerLevel(player)
+end
+
 function ZoneService.GetPlayerZone(player: Player): string
 	local area = player:GetAttribute("PlayerArea")
 	if type(area) == "string" and area ~= "" then

@@ -373,6 +373,12 @@ local function buildLevelGate(gameZones: Folder)
 	local summerFolder = gameZones:FindFirstChild("SummerZone") :: Folder
 	local gateFolder = ensureFolder(summerFolder, "LevelGate")
 	clearGenerated(gateFolder)
+	-- Supprime toute barrière résiduelle (Studio / ancien build) hors GeneratedByCode.
+	for _, child in ipairs(gateFolder:GetChildren()) do
+		if child.Name == "ForceFieldGate" or child.Name == "LockSymbol" then
+			child:Destroy()
+		end
+	end
 
 	local gate = makePart({
 		Name = "ForceFieldGate",

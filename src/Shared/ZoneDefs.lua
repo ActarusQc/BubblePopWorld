@@ -112,6 +112,11 @@ function ZoneDefs.GetRequiredLevel(zoneId: string): number
 	return if def then def.RequiredLevel else 1
 end
 
+-- Règle d'accès unique : niveau joueur >= RequiredLevel (inclusif).
+function ZoneDefs.CanLevelEnter(playerLevel: number, zoneId: string): boolean
+	return playerLevel >= ZoneDefs.GetRequiredLevel(zoneId)
+end
+
 function ZoneDefs.GetRewardMultiplier(zoneId: string): number
 	local def = ZoneDefs.ById[zoneId]
 	return if def then def.RewardMultiplier else 1

@@ -131,6 +131,34 @@ local function applyArea(area: string)
 	lastArea = area
 end
 
+-- Cadenas local : masqué uniquement pour ce client dès que CanEnter_SummerZone.
+local function refreshSummerLockVisual()
+	local canEnter = player:GetAttribute("CanEnter_SummerZone")
+	local unlocked = canEnter == true
+
+	local gameZones = workspace:FindFirstChild("GameZones")
+	local summer = gameZones and gameZones:FindFirstChild("SummerZone")
+	local gateFolder = summer and summer:FindFirstChild("LevelGate")
+	if not gateFolder then
+		return
+	end
+
+	local lock = gateFolder:FindFirstChild("LockSymbol")
+	if lock and lock:IsA("BasePart") then
+		lock.LocalTransparencyModifier = if unlocked then 1 else 0
+		local billboard = lock:FindFirstChild("LockBillboard")
+		if billboard and billboard:IsA("BillboardGui") then
+			billboard.Enabled = not unlocked
+		end
+	end
+
+	local gate = gateFolder:FindFirstChild("ForceFieldGate")
+	if gate and gate:IsA("BasePart") then
+		-- La collision reste gérée serveur (groupes). Visuel local adouci si déverrouillé.
+		gate.LocalTransparencyModifier = if unlocked then 0.55 else 0
+	end
+end
+
 function ZoneAmbiance.Start()
 	ensureColorCorrection()
 	ensureSound()
@@ -144,6 +172,36 @@ function ZoneAmbiance.Start()
 
 	player:GetAttributeChangedSignal("PlayerArea"):Connect(onArea)
 	onArea()
+
+	player:GetAttributeChangedSignal("CanEnter_SummerZone"):Connect(refreshSummerLockVisual)
+	player:GetAttributeChangedSignal("PlayerLevel"):Connect(refreshSummerLockVisual)
+	task.defer(refreshSummerLockVisual)
+
+	local function watchGateFolder(folder: Instance)
+		folder.ChildAdded:Connect(function()
+			task.defer(refreshSummerLockVisual)
+		end)
+	end
+
+	local gameZones = workspace:FindFirstChild("GameZones")
+	if gameZones then
+		local summer = gameZones:FindFirstChild("SummerZone")
+		local gateFolder = summer and summer:FindFirstChild("LevelGate")
+		if gateFolder then
+			watchGateFolder(gateFolder)
+		end
+	else
+		workspace.ChildAdded:Connect(function(child)
+			if child.Name == "GameZones" then
+				task.defer(refreshSummerLockVisual)
+				local summer = child:WaitForChild("SummerZone", 5)
+				local gateFolder = summer and summer:WaitForChild("LevelGate", 5)
+				if gateFolder then
+					watchGateFolder(gateFolder)
+				end
+			end
+		end)
+	end
 end
 
 return ZoneAmbiance

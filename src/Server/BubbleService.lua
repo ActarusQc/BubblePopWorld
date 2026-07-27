@@ -492,7 +492,7 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 		local zid = (c[3] or zoneIdHint or defaultZoneId) :: string
 		if type(x) == "number" and type(z) == "number" and BubbleService.InBounds(x, z) then
 			local profile = DataService.Get(player)
-			if not profile or profile.Level < ZoneDefs.GetRequiredLevel(zid) then
+			if not profile or not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zid) then
 				continue
 			end
 			local board = boards[zid]
@@ -575,15 +575,12 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 		return
 	end
 
-	-- Accès zone : niveau autoritaire DataService (jamais le client).
+	-- Accès zone : niveau autoritaire DataService (même source que le HUD).
 	local profile = DataService.Get(player)
-	local required = ZoneDefs.GetRequiredLevel(zoneId)
-	if not profile or profile.Level < required then
+	if not profile or not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zoneId) then
 		return
 	end
-	local power = if profile
-		then Config.EffectiveUpgradeLevel("Power", profile.Upgrades.Power or 0)
-		else 0
+	local power = Config.EffectiveUpgradeLevel("Power", profile.Upgrades.Power or 0)
 
 	local cells: { { any } } = { { x, z, zoneId } }
 	if power > 0 then

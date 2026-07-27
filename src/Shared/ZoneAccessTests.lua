@@ -22,10 +22,21 @@ function ZoneAccessTests.Run(): boolean
 	check(ZoneDefs.GetRewardMultiplier("SummerZone") == 1, "Summer RewardMultiplier == 1")
 	check(ZoneDefs.GetRewardMultiplier("ClassicZone") == 1, "Classic RewardMultiplier == 1")
 
+	-- Accès Summer : >= 5 (pas > 5)
+	check(ZoneDefs.CanLevelEnter(4, "SummerZone") == false, "level 4 blocked")
+	check(ZoneDefs.CanLevelEnter(5, "SummerZone") == true, "level 5 allowed (>=)")
+	check(ZoneDefs.CanLevelEnter(6, "SummerZone") == true, "level 6 allowed")
+	check(ZoneDefs.CanLevelEnter(1, "ClassicZone") == true, "classic level 1 allowed")
+
 	check(ZoneDefs.GetAccessGroupName(1) == "ZoneAccess_1", "access group level 1")
 	check(ZoneDefs.GetAccessGroupName(4) == "ZoneAccess_1", "access group level 4")
 	check(ZoneDefs.GetAccessGroupName(5) == "ZoneAccess_5", "access group level 5")
 	check(ZoneDefs.GetAccessGroupName(99) == "ZoneAccess_5", "access group level 99")
+
+	-- Matrice collision : palier Access_L collisionne Gate ssi L < RequiredLevel
+	local summerReq = ZoneDefs.GetRequiredLevel("SummerZone")
+	check((1 < summerReq) == true, "ZoneAccess_1 collides with SummerGate")
+	check((5 < summerReq) == false, "ZoneAccess_5 does not collide with SummerGate")
 
 	local classic = ZoneDefs.ClassicZone
 	local summer = ZoneDefs.SummerZone

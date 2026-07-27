@@ -162,6 +162,26 @@ function DataService.Get(player: Player)
 	return profiles[player]
 end
 
+-- Source autoritaire du niveau (HUD + barrières zones). Jamais d'attribut client.
+function DataService.GetPlayerLevel(player: Player): number
+	local d = profiles[player]
+	if d and type(d.Level) == "number" then
+		return d.Level
+	end
+	return 1
+end
+
+local function refreshZoneAccess(player: Player)
+	task.defer(function()
+		local ok, ZoneService = pcall(function()
+			return require(script.Parent.ZoneService)
+		end)
+		if ok and ZoneService and ZoneService.RefreshPlayerAccess then
+			ZoneService.RefreshPlayerAccess(player)
+		end
+	end)
+end
+
 function DataService.SetMutationWaiter(waiter: ((Player, number) -> boolean)?)
 	mutationWaiter = waiter
 end
@@ -188,6 +208,8 @@ function DataService.Load(player: Player)
 	ls.Parent = player
 
 	DataService.Push(player)
+	-- Collision groups / portes : appliquer dès que le profil (niveau HUD) est connu.
+	refreshZoneAccess(player)
 	if data.__loaded then
 		notifyCoinsChanged(player)
 	end
@@ -267,6 +289,7 @@ function DataService.Push(player: Player)
 	player:SetAttribute("PendingSellValue", d.PendingSellValue)
 	player:SetAttribute("TotalBubblesSold", d.TotalBubblesSold)
 	player:SetAttribute("EquippedBackpack", d.EquippedBackpack or "")
+	player:SetAttribute("PlayerLevel", d.Level)
 	local ls = player:FindFirstChild("leaderstats")
 	if ls then
 		(ls:FindFirstChild("Coins") :: IntValue).Value = math.min(d.Coins, 2^31 - 1)
@@ -331,14 +354,7 @@ function DataService.AddBubblesSold(player: Player, amount: number): boolean
 		DataService.UnlockWorlds(player)
 		Remotes.Event("Announce"):FireClient(player, ("Level %d reached!"):format(d.Level), "level")
 		-- Accès zones (collision groups) immédiat, sans respawn.
-		task.defer(function()
-			local ok, ZoneService = pcall(function()
-				return require(script.Parent.ZoneService)
-			end)
-			if ok and ZoneService and ZoneService.RefreshPlayerAccess then
-				ZoneService.RefreshPlayerAccess(player)
-			end
-		end)
+		refreshZoneAccess(player)
 	end
 	return true
 end
@@ -386,7 +402,14 @@ function DataService.Start()
 	StarterPlayer.CharacterJumpPower = M.JumpPower
 	StarterPlayer.CharacterWalkSpeed = M.WalkSpeed
 
-	Players.PlayerAdded:Connect(function(player)
+	local bound: { [Player]: boolean } = {}
+
+	local function bindPlayer(player: Player)
+		if bound[player] then
+			return
+		end
+		bound[player] = true
+
 		DataService.Load(player)
 		local function onCharacter(character: Model)
 			character:WaitForChild("Humanoid", 10)
@@ -396,9 +419,15 @@ function DataService.Start()
 		if player.Character then
 			task.spawn(onCharacter, player.Character)
 		end
-	end)
+	end
+
+	Players.PlayerAdded:Connect(bindPlayer)
+	for _, player in ipairs(Players:GetPlayers()) do
+		bindPlayer(player)
+	end
 
 	Players.PlayerRemoving:Connect(function(player)
+		bound[player] = nil
 		DataService.Release(player)
 	end)
 
