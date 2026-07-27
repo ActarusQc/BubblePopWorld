@@ -122,10 +122,17 @@ end
 
 function ZoneBuilder.EnsureStudioDecoration()
 	local root = ensureFolder(workspace, "StudioDecoration")
-	-- Jamais GeneratedByCode / jamais clear
+	-- Jamais GeneratedByCode / jamais clear sur ce dossier ni SummerZoneDecor.
 	local zones = ensureFolder(root, "Zones")
 	ensureFolder(zones, "Classic")
 	ensureFolder(zones, "Summer")
+	-- Dossier décor manuel Summer (plugin / Studio) — ne jamais vider.
+	if not root:FindFirstChild("SummerZoneDecor") then
+		local decor = Instance.new("Folder")
+		decor.Name = "SummerZoneDecor"
+		decor:SetAttribute("ManualDecor", true)
+		decor.Parent = root
+	end
 	return root
 end
 
@@ -144,11 +151,7 @@ function ZoneBuilder.EnsureGameZonesRoot(): Folder
 end
 
 local function bubbleExtent(): (number, number)
-	local G = Config.Grid
-	local safetyGap = 2
-	local ex = ((G.SizeX / 2) - 0.5) * G.Spacing + G.BubbleSize.X / 2 + safetyGap
-	local ez = ((G.SizeZ / 2) - 0.5) * G.Spacing + G.BubbleSize.Z / 2 + safetyGap
-	return ex, ez
+	return ZoneDefs.GetBubblePlayExtent()
 end
 
 local function buildZoneBorders(boundsFolder: Folder, zoneDef: any, openWest: boolean, openEastForBridge: boolean)
@@ -224,15 +227,13 @@ local function buildZoneTrigger(triggerFolder: Folder, zoneDef: any)
 end
 
 local function buildBridgeAndEntrance(gameZones: Folder)
-	local classic = ZoneDefs.ClassicZone
-	local summer = ZoneDefs.SummerZone
-	local ex = select(1, bubbleExtent())
-	local classicEdgeX = classic.Origin.X + ex
-	local summerEdgeX = summer.Origin.X - ex
-	local midX = (classicEdgeX + summerEdgeX) / 2
-	local span = math.max(4, summerEdgeX - classicEdgeX)
-	local y = classic.Origin.Y
-	local pathW = Config.GameRoom.PathSize.X
+	local layout = ZoneDefs.GetSummerBridgeLayout()
+	local classicEdgeX = layout.ClassicEdgeX
+	local midX = layout.MidX
+	local span = layout.Span
+	local y = layout.Y
+	local pathW = layout.PathW
+	local oZ = layout.Origin.Z
 
 	local summerFolder = gameZones:FindFirstChild("SummerZone") :: Folder
 	local entrance = ensureFolder(summerFolder, "Entrance")
@@ -242,7 +243,7 @@ local function buildBridgeAndEntrance(gameZones: Folder)
 	makePart({
 		Name = "BridgeDeck",
 		Size = Vector3.new(span + 2, 1.5, pathW),
-		CFrame = CFrame.new(midX, y - 0.75, classic.Origin.Z),
+		CFrame = CFrame.new(midX, y - 0.75, oZ),
 		Color = SUMMER.Wood,
 		Material = Enum.Material.WoodPlanks,
 		CanCollide = true,
@@ -254,7 +255,7 @@ local function buildBridgeAndEntrance(gameZones: Folder)
 		makePart({
 			Name = if side < 0 then "BridgeRailLeft" else "BridgeRailRight",
 			Size = Vector3.new(span, 1.2, 0.6),
-			CFrame = CFrame.new(midX, y + 2.2, classic.Origin.Z + side * (pathW / 2 - 0.3)),
+			CFrame = CFrame.new(midX, y + 2.2, oZ + side * (pathW / 2 - 0.3)),
 			Color = SUMMER.Rope,
 			Material = Enum.Material.Fabric,
 			CanCollide = true,
@@ -265,7 +266,7 @@ local function buildBridgeAndEntrance(gameZones: Folder)
 			decorPart({
 				Name = "BridgePost" .. side .. i,
 				Size = Vector3.new(0.7, 4, 0.7),
-				CFrame = CFrame.new(px, y + 2, classic.Origin.Z + side * (pathW / 2 - 0.3)),
+				CFrame = CFrame.new(px, y + 2, oZ + side * (pathW / 2 - 0.3)),
 				Color = SUMMER.WoodDark,
 				Material = Enum.Material.Wood,
 				Parent = entrance,
@@ -274,9 +275,9 @@ local function buildBridgeAndEntrance(gameZones: Folder)
 	end
 
 	-- Arche estivale à l'entrée Summer (côté ouest de Summer)
-	local archX = summerEdgeX - 2
-	local archZ = summer.Origin.Z
-	local gap = pathW + 2
+	local archX = layout.ArchX
+	local archZ = layout.ArchZ
+	local gap = layout.ArchGap
 	for _, side in ipairs({ -1, 1 }) do
 		makePart({
 			Name = if side < 0 then "ArchPillarL" else "ArchPillarR",
@@ -364,11 +365,10 @@ end
 
 local function buildLevelGate(gameZones: Folder)
 	local summer = ZoneDefs.SummerZone
-	local ex = select(1, bubbleExtent())
-	local summerEdgeX = summer.Origin.X - ex
-	local y = summer.Origin.Y
-	local pathW = Config.GameRoom.PathSize.X + 4
-	local gateX = summerEdgeX + 1.5
+	local layout = ZoneDefs.GetSummerBridgeLayout()
+	local y = layout.Y
+	local pathW = layout.PathW + 4
+	local gateX = layout.GateX
 
 	local summerFolder = gameZones:FindFirstChild("SummerZone") :: Folder
 	local gateFolder = ensureFolder(summerFolder, "LevelGate")
@@ -557,6 +557,14 @@ local function buildSummerGeneratedDecor(gameZones: Folder)
 end
 
 function ZoneBuilder.BuildPlayZones()
+	-- Retire la preview Studio ; conserve SummerZoneDecor intact.
+	local okPreview, SummerPreview = pcall(function()
+		return require(Shared.SummerZoneEditingPreview)
+	end)
+	if okPreview and SummerPreview and SummerPreview.RemoveSummerZonePreview then
+		SummerPreview.RemoveSummerZonePreview()
+	end
+
 	ZoneBuilder.EnsureStudioDecoration()
 	local gameZones = ZoneBuilder.EnsureGameZonesRoot()
 
@@ -579,10 +587,7 @@ end
 
 -- Point milieu passerelle (pour résolution d'aire).
 function ZoneBuilder.GetBridgeMidX(): number
-	local classic = ZoneDefs.ClassicZone
-	local summer = ZoneDefs.SummerZone
-	local ex = select(1, bubbleExtent())
-	return (classic.Origin.X + ex + summer.Origin.X - ex) / 2
+	return ZoneDefs.GetSummerBridgeLayout().MidX
 end
 
 return ZoneBuilder

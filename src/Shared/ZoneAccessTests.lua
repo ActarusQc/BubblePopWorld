@@ -33,6 +33,12 @@ function ZoneAccessTests.Run(): boolean
 	check(ZoneDefs.GetAccessGroupName(5) == "ZoneAccess_5", "access group level 5")
 	check(ZoneDefs.GetAccessGroupName(99) == "ZoneAccess_5", "access group level 99")
 
+	local layout = ZoneDefs.GetSummerBridgeLayout()
+	check(layout.Origin == ZoneDefs.SummerZone.Origin, "bridge layout origin")
+	check(layout.GateX > layout.SummerEdgeX, "gate past summer edge")
+	check(layout.ArchX < layout.SummerEdgeX, "arch before summer edge")
+	check(layout.MidX > ZoneDefs.ClassicZone.Origin.X, "bridge mid à droite de classic")
+
 	-- Matrice collision : palier Access_L collisionne Gate ssi L < RequiredLevel
 	local summerReq = ZoneDefs.GetRequiredLevel("SummerZone")
 	check((1 < summerReq) == true, "ZoneAccess_1 collides with SummerGate")

@@ -20,6 +20,7 @@ local BackpackService = require(script.Parent.BackpackService)
 local ZoneAccess = require(script.Parent.ZoneAccess)
 local ZoneBuilder = require(script.Parent.ZoneBuilder)
 local LobbyEditingPreview = require(Shared.LobbyEditingPreview)
+local SummerZoneEditingPreview = require(Shared.SummerZoneEditingPreview)
 local EnvironmentBackdropBuilder = require(Shared.EnvironmentBackdropBuilder)
 
 local ZoneService = {}
@@ -2276,8 +2277,11 @@ end
 function ZoneService.EnsureWorld(): Folder
 	disableStudioBaseplate()
 
-	-- Jamais utiliser la prévisualisation d'édition Studio en Play.
+	-- Jamais utiliser les prévisualisations d'édition Studio en Play.
 	LobbyEditingPreview.RemoveLobbyEditingPreview()
+	SummerZoneEditingPreview.RemoveSummerZonePreview()
+	-- Assure SummerZoneDecor (décor manuel) sans le toucher.
+	SummerZoneEditingPreview.EnsureSummerZoneDecor()
 
 	local root = ensureFolder(workspace, "BubblePopWorld")
 	local lobby = ensureLobby(root)

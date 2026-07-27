@@ -126,6 +126,69 @@ function ZoneDefs.GetGridHalfExtent(): (number, number)
 	return HALF_X, HALF_Z
 end
 
+-- Emprise visuelle / collision des bulles (même formule que ZoneBuilder).
+function ZoneDefs.GetBubblePlayExtent(): (number, number)
+	local G = GameConfig.Grid
+	local safetyGap = 2
+	local ex = ((G.SizeX / 2) - 0.5) * G.Spacing + G.BubbleSize.X / 2 + safetyGap
+	local ez = ((G.SizeZ / 2) - 0.5) * G.Spacing + G.BubbleSize.Z / 2 + safetyGap
+	return ex, ez
+end
+
+export type SummerBridgeLayout = {
+	ClassicEdgeX: number,
+	SummerEdgeX: number,
+	MidX: number,
+	Span: number,
+	PathW: number,
+	BridgeGap: number,
+	ArchX: number,
+	ArchZ: number,
+	ArchGap: number,
+	GateX: number,
+	Y: number,
+	Origin: Vector3,
+	FloorColor: Color3,
+	BorderColor: Color3,
+	BorderThickness: number,
+	BorderHeight: number,
+	Ex: number,
+	Ez: number,
+}
+
+-- Géométrie d'entrée / passerelle / porte : source unique preview + runtime.
+function ZoneDefs.GetSummerBridgeLayout(): SummerBridgeLayout
+	local classic = ZoneDefs.ClassicZone
+	local summer = ZoneDefs.SummerZone
+	local ex, ez = ZoneDefs.GetBubblePlayExtent()
+	local pathW = GameConfig.GameRoom.PathSize.X
+	local classicEdgeX = classic.Origin.X + ex
+	local summerEdgeX = summer.Origin.X - ex
+	local midX = (classicEdgeX + summerEdgeX) / 2
+	local span = math.max(4, summerEdgeX - classicEdgeX)
+	local y = classic.Origin.Y
+	return {
+		ClassicEdgeX = classicEdgeX,
+		SummerEdgeX = summerEdgeX,
+		MidX = midX,
+		Span = span,
+		PathW = pathW,
+		BridgeGap = pathW + 6,
+		ArchX = summerEdgeX - 2,
+		ArchZ = summer.Origin.Z,
+		ArchGap = pathW + 2,
+		GateX = summerEdgeX + 1.5,
+		Y = y,
+		Origin = summer.Origin,
+		FloorColor = summer.FloorColor or Color3.fromRGB(210, 185, 130),
+		BorderColor = summer.BorderColor or Color3.fromRGB(40, 190, 200),
+		BorderThickness = GameConfig.World.BorderThickness,
+		BorderHeight = 5,
+		Ex = ex,
+		Ez = ez,
+	}
+end
+
 function ZoneDefs.GetZoneBounds(zoneId: string): {
 	MinX: number,
 	MaxX: number,
