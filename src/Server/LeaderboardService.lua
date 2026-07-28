@@ -64,6 +64,23 @@ local statusMode: "loading" | "empty" | "ready" | "unavailable" = "loading"
 type StatusMode = "loading" | "empty" | "ready" | "unavailable"
 type BoardEntry = LeaderboardUtil.BoardEntry
 
+local function dbg(...: any)
+	print("[LeaderboardDebug]", ...)
+end
+
+local function instancePath(inst: Instance?): string
+	if not inst then
+		return "(nil)"
+	end
+	local parts: { string } = {}
+	local cur: Instance? = inst
+	while cur and cur ~= game do
+		table.insert(parts, 1, cur.Name)
+		cur = cur.Parent
+	end
+	return table.concat(parts, ".")
+end
+
 local function sanitizeCoins(value: any): number?
 	return LeaderboardUtil.SanitizeCoins(value)
 end
@@ -94,6 +111,22 @@ local function getStore(): OrderedDataStore?
 end
 
 local function findDisplaySurface(): BasePart?
+	-- 1) Panneau physique existant portant le titre TOP COIN COLLECTORS
+	local needle = "TOP COIN COLLECTORS"
+	for _, desc in ipairs(workspace:GetDescendants()) do
+		if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+			local text = string.upper(tostring((desc :: TextLabel).Text))
+			if string.find(text, needle, 1, true) then
+				local gui = desc:FindFirstAncestorWhichIsA("SurfaceGui")
+				if gui and gui.Parent and gui.Parent:IsA("BasePart") then
+					dbg("Found title panel model/part:", instancePath(gui.Parent))
+					dbg("Found title TextLabel:", instancePath(desc))
+					return gui.Parent :: BasePart
+				end
+			end
+		end
+	end
+
 	local root = workspace:FindFirstChild("BubblePopWorld")
 	if not root then
 		return nil
@@ -445,11 +478,62 @@ local function setStatus(statusLabel: TextLabel, mode: StatusMode, detail: strin
 	end
 end
 
+local function countUiRows(root: Frame): number
+	local rows = root:FindFirstChild("Rows")
+	if not (rows and rows:IsA("Frame")) then
+		return 0
+	end
+	local n = 0
+	for i = 1, TOP_N do
+		if rows:FindFirstChild(("Row%02d"):format(i)) then
+			n += 1
+		end
+	end
+	return n
+end
+
+local function logPresentPlayers()
+	local list = Players:GetPlayers()
+	dbg("Players present:", #list)
+	for _, player in ipairs(list) do
+		local profile = DataService.Get(player)
+		local loaded = profile ~= nil and profile.__loaded == true
+		local profileCoins = if profile then tostring(profile.Coins) else "(no profile)"
+		local lsCoins = "(none)"
+		local ls = player:FindFirstChild("leaderstats")
+		if ls then
+			local coinsVal = ls:FindFirstChild("Coins")
+			if coinsVal and coinsVal:IsA("IntValue") then
+				lsCoins = tostring(coinsVal.Value)
+			elseif coinsVal then
+				lsCoins = tostring((coinsVal :: any).Value)
+			end
+		end
+		dbg(
+			"Player:",
+			player.Name,
+			"| UserId:",
+			player.UserId,
+			"| profileLoaded:",
+			loaded,
+			"| profile.Coins:",
+			profileCoins,
+			"| leaderstats.Coins:",
+			lsCoins
+		)
+	end
+end
+
 local function paintRows(root: Frame, entries: { BoardEntry }?, showPlaceholders: boolean)
 	local rows = root:FindFirstChild("Rows")
 	if not (rows and rows:IsA("Frame")) then
+		dbg("paintRows: Rows frame missing under", instancePath(root))
 		return
 	end
+
+	local uiRowCount = countUiRows(root)
+	dbg("UI rows found before fill:", uiPropCount)
+	dbg("paintRows entries:", if entries then #entries else 0, "| showPlaceholders:", showPlaceholders)
 
 	-- Nettoyage : pas de lignes dynamiques parasites hors Row01..Row10
 	for _, child in ipairs(rows:GetChildren()) do
@@ -461,6 +545,7 @@ local function paintRows(root: Frame, entries: { BoardEntry }?, showPlaceholders
 	for i = 1, TOP_N do
 		local row = rows:FindFirstChild(("Row%02d"):format(i))
 		if not (row and row:IsA("Frame")) then
+			dbg("paintRows: missing", ("Row%02d"):format(i))
 			continue
 		end
 		local rankLabel = row:FindFirstChild("Rank")
@@ -475,18 +560,26 @@ local function paintRows(root: Frame, entries: { BoardEntry }?, showPlaceholders
 		end
 
 		if entry then
+			dbg("Filling rank", entry.Rank, "using", instancePath(row))
 			if rankLabel and rankLabel:IsA("TextLabel") then
+				rankLabel.Visible = true
+				rankLabel.TextTransparency = 0
 				L10nUtil.dynamic(rankLabel, tostring(entry.Rank))
 				rankLabel.TextColor3 = rankAccent(entry.Rank)
 			end
 			if playerLabel and playerLabel:IsA("TextLabel") then
+				playerLabel.Visible = true
+				playerLabel.TextTransparency = 0
 				L10nUtil.dynamic(playerLabel, entry.Name)
 				playerLabel.TextColor3 = COLORS.Text
 			end
 			if coinsLabel and coinsLabel:IsA("TextLabel") then
+				coinsLabel.Visible = true
+				coinsLabel.TextTransparency = 0
 				L10nUtil.dynamic(coinsLabel, comma(entry.Value))
 				coinsLabel.TextColor3 = if entry.Rank <= 3 then rankAccent(entry.Rank) else COLORS.Accent
 			end
+			dbg("Filled row", i, "| rank:", entry.Rank, "| name:", entry.Name, "| coins:", entry.Value)
 		elseif showPlaceholders then
 			if rankLabel and rankLabel:IsA("TextLabel") then
 				L10nUtil.dynamic(rankLabel, tostring(i))
@@ -500,61 +593,20 @@ local function paintRows(root: Frame, entries: { BoardEntry }?, showPlaceholders
 				L10nUtil.dynamic(coinsLabel, "—")
 				coinsLabel.TextColor3 = COLORS.Muted
 			end
-		else
-			if rankLabel and rankLabel:IsA("TextLabel") then
-				L10nUtil.dynamic(rankLabel, "")
-			end
-			if playerLabel and playerLabel:IsA("TextLabel") then
-				L10nUtil.dynamic(playerLabel, "")
-			end
-			if coinsLabel and coinsLabel:IsA("TextLabel") then
-				L10nUtil.dynamic(coinsLabel, "")
-			end
+			dbg("Placeholder row", i)
 		end
 	end
 end
 
-local function resolveNames(userIds: { number }): { [number]: string }
+-- Résolution synchrone non-bloquante : cache + joueurs en ligne uniquement.
+-- Jamais GetNameFromUserIdAsync / GetUserInfosByUserIdsAsync ici (peuvent yield indéfiniment).
+local function resolveNamesImmediate(userIds: { number }): { [number]: string }
 	local resolved: { [number]: string } = {}
-	local missing: { number } = {}
 	local now = os.clock()
-
 	for _, userId in ipairs(userIds) do
 		local cached = nameCache[userId]
 		if cached and cached.Expires > now then
 			resolved[userId] = cached.Name
-		else
-			table.insert(missing, userId)
-		end
-	end
-
-	if #missing == 0 then
-		return resolved
-	end
-
-	local batchOk = false
-	local getInfos = (Players :: any).GetUserInfosByUserIdsAsync
-	if typeof(getInfos) == "function" then
-		local ok, infos = pcall(function()
-			return getInfos(Players, missing)
-		end)
-		if ok and type(infos) == "table" then
-			batchOk = true
-			for _, info in ipairs(infos) do
-				local id = tonumber(info.Id or info.UserId)
-				if id then
-					local display = tostring(info.DisplayName or "")
-					local username = tostring(info.Username or info.Name or "")
-					local chosen = if display ~= "" then display elseif username ~= "" then username else LeaderboardUtil.FallbackName(id)
-					resolved[id] = chosen
-					nameCache[id] = { Name = chosen, Expires = now + NAME_CACHE_TTL_SEC }
-				end
-			end
-		end
-	end
-
-	for _, userId in ipairs(missing) do
-		if resolved[userId] then
 			continue
 		end
 		local online = playerByUserId[userId] or Players:GetPlayerByUserId(userId)
@@ -563,26 +615,64 @@ local function resolveNames(userIds: { number }): { [number]: string }
 			local chosen = if display and display ~= "" then display else online.Name
 			resolved[userId] = chosen
 			nameCache[userId] = { Name = chosen, Expires = now + NAME_CACHE_TTL_SEC }
+		else
+			resolved[userId] = LeaderboardUtil.FallbackName(userId)
+		end
+	end
+	return resolved
+end
+
+-- Remplace les fallbacks par de vrais noms en arrière-plan (timeout 2.5s / id).
+local function resolveNamesAsync(entries: { BoardEntry }, onNameReady: (BoardEntry) -> ())
+	for _, entry in ipairs(entries) do
+		local userId = entry.UserId
+		local isFallback = entry.Name == LeaderboardUtil.FallbackName(userId)
+			or string.match(entry.Name, "^Player %d+$") ~= nil
+		if not isFallback then
 			continue
 		end
 
-		local username: string? = nil
-		local ok, nameOrErr = pcall(function()
-			return Players:GetNameFromUserIdAsync(userId)
+		task.spawn(function()
+			local online = playerByUserId[userId] or Players:GetPlayerByUserId(userId)
+			if online then
+				local display = online.DisplayName
+				local chosen = if display and display ~= "" then display else online.Name
+				nameCache[userId] = { Name = chosen, Expires = os.clock() + NAME_CACHE_TTL_SEC }
+				entry.Name = chosen
+				onNameReady(entry)
+				return
+			end
+
+			dbg("Before GetNameFromUserIdAsync", userId)
+			local finished = false
+
+			task.spawn(function()
+				local ok, nameOrErr = pcall(function()
+					return Players:GetNameFromUserIdAsync(userId)
+				end)
+				if finished then
+					return
+				end
+				finished = true
+				if ok and type(nameOrErr) == "string" and nameOrErr ~= "" then
+					dbg("After GetNameFromUserIdAsync", userId, "=>", nameOrErr)
+					nameCache[userId] = { Name = nameOrErr, Expires = os.clock() + NAME_CACHE_TTL_SEC }
+					entry.Name = nameOrErr
+					onNameReady(entry)
+				else
+					warn("[LeaderboardDebug] GetNameFromUserIdAsync error", userId, tostring(nameOrErr))
+				end
+			end)
+
+			task.delay(2.5, function()
+				if finished then
+					return
+				end
+				finished = true
+				warn("[LeaderboardDebug] GetNameFromUserIdAsync timeout", userId)
+			end)
 		end)
-		if ok and type(nameOrErr) == "string" and nameOrErr ~= "" then
-			username = nameOrErr
-		end
-
-		local chosen = username or LeaderboardUtil.FallbackName(userId)
-		if not batchOk and not username then
-			chosen = LeaderboardUtil.FallbackName(userId)
-		end
-		resolved[userId] = chosen
-		nameCache[userId] = { Name = chosen, Expires = now + math.min(120, NAME_CACHE_TTL_SEC) }
 	end
-
-	return resolved
 end
 
 local function scheduleRefreshSoon(delaySec: number?)
@@ -713,22 +803,29 @@ end
 local function fetchTopEntries(): (boolean, { BoardEntry }?, string?)
 	local store = getStore()
 	if not store then
+		dbg("fetchTopEntries: store is nil")
 		return false, nil, "DataStore unavailable"
 	end
 
+	dbg("Before GetSortedAsync(false,", TOP_N, ") store=", ORDERED_STORE_NAME)
 	local ok, pagesOrErr = pcall(function()
 		return store:GetSortedAsync(false, TOP_N)
 	end)
 	if not ok or not pagesOrErr then
+		dbg("GetSortedAsync pcall FAILED:", tostring(pagesOrErr))
 		return false, nil, tostring(pagesOrErr)
 	end
+	dbg("GetSortedAsync pcall OK")
 
 	local pageOk, pageOrErr = pcall(function()
 		return pagesOrErr:GetCurrentPage()
 	end)
 	if not pageOk or type(pageOrErr) ~= "table" then
+		dbg("GetCurrentPage pcall FAILED:", tostring(pageOrErr))
 		return false, nil, tostring(pageOrErr)
 	end
+
+	dbg("After GetSortedAsync / GetCurrentPage entries received:", #pageOrErr)
 
 	local userIds: { number } = {}
 	local raw: { { UserId: number, Value: number, Rank: number } } = {}
@@ -742,7 +839,8 @@ local function fetchTopEntries(): (boolean, { BoardEntry }?, string?)
 		end
 	end
 
-	local names = resolveNames(userIds)
+	-- Immédiat : fallback Player <UserId> / cache / online — jamais d'API bloquante ici.
+	local names = resolveNamesImmediate(userIds)
 	local entries: { BoardEntry } = {}
 	for _, item in ipairs(raw) do
 		table.insert(entries, {
@@ -752,6 +850,7 @@ local function fetchTopEntries(): (boolean, { BoardEntry }?, string?)
 			Value = item.Value,
 		})
 	end
+	dbg("Entries prepared for rendering:", #entries)
 	return true, entries, nil
 end
 
@@ -771,12 +870,15 @@ end
 local function updateWorldBoard(entries: { BoardEntry }?, mode: StatusMode, detail: string?)
 	local surface = findDisplaySurface()
 	if not surface then
+		warn("[LeaderboardDebug] SurfaceGui host NOT FOUND")
 		if not boardWarned then
 			boardWarned = true
 			warn("[LeaderboardService] panneau introuvable (attendu: BubblePopWorld.Lobby.LobbyDecor.GlobalLeaderboardBoard)")
 		end
 		return
 	end
+
+	dbg("Panel part path:", instancePath(surface))
 
 	if surface.Name == "LeaderboardBoard" then
 		surface.Name = "GlobalLeaderboardBoard"
@@ -786,6 +888,11 @@ local function updateWorldBoard(entries: { BoardEntry }?, mode: StatusMode, deta
 	end
 
 	local root, statusLabel = ensureBoardGui(surface)
+	local gui = surface:FindFirstChildWhichIsA("SurfaceGui")
+	dbg("SurfaceGui path:", instancePath(gui))
+	dbg("Root path:", instancePath(root))
+	dbg("updateWorldBoard mode:", mode, "| detail:", tostring(detail), "| entries:", if entries then #entries else "nil")
+
 	if mode == "loading" and hasValidSnapshot and lastValidEntries and not usingStudioPreview then
 		paintRows(root, lastValidEntries, false)
 		setStatus(statusLabel, "ready", nil)
@@ -810,6 +917,7 @@ end
 
 local function applyStudioPreview(err: string?)
 	usingStudioPreview = true
+	dbg("applyStudioPreview err:", tostring(err))
 	if not studioApiWarned then
 		studioApiWarned = true
 		warn("[LeaderboardService] Classement mondial indisponible en Studio (", tostring(err), ").")
@@ -817,6 +925,10 @@ local function applyStudioPreview(err: string?)
 		warn("[LeaderboardService] Affichage d'un aperçu local des joueurs présents (ne remplace pas le classement publié).")
 	end
 	local localEntries = buildLocalStudioEntries()
+	dbg("Studio local preview entries:", #localEntries)
+	for _, e in ipairs(localEntries) do
+		dbg("Studio local entry:", e.Rank, e.Name, e.Value)
+	end
 	publishCache(localEntries, true)
 	if #localEntries == 0 then
 		updateWorldBoard({}, "unavailable", L10n.LeaderboardUnavailableStudio)
@@ -825,21 +937,27 @@ local function applyStudioPreview(err: string?)
 	end
 end
 
-local function refresh()
-	updateWorldBoard(nil, "loading", nil)
+local function RefreshLeaderboard()
+	dbg("RefreshLeaderboard called")
+	dbg("RunService:IsStudio() =", RunService:IsStudio())
+	logPresentPlayers()
 
 	local ok, entries, err = fetchTopEntries()
+	dbg("fetchTopEntries ok=", ok, "| err=", tostring(err), "| entries=", if entries then #entries else "nil")
 	if not ok or not entries then
 		if RunService:IsStudio() then
+			dbg("Branch: Studio fallback preview")
 			applyStudioPreview(err)
 		else
 			usingStudioPreview = false
+			dbg("Branch: published unavailable")
 			updateWorldBoard(nil, "unavailable", L10n.LeaderboardUnavailable)
 			if err and os.clock() - lastRefreshWarnAt > 60 then
 				lastRefreshWarnAt = os.clock()
 				warn("[LeaderboardService] refresh échoué:", err)
 			end
 		end
+		dbg("RefreshLeaderboard END (fail/fallback path)")
 		return
 	end
 
@@ -848,6 +966,21 @@ local function refresh()
 	hasValidSnapshot = true
 	publishCache(entries, false)
 	updateWorldBoard(entries, if #entries == 0 then "empty" else "ready", nil)
+
+	resolveNamesAsync(entries, function(updated)
+		if lastValidEntries then
+			for _, e in ipairs(lastValidEntries) do
+				if e.UserId == updated.UserId then
+					e.Name = updated.Name
+					break
+				end
+			end
+		end
+		publishCache(lastValidEntries or entries, false)
+		updateWorldBoard(lastValidEntries or entries, "ready", nil)
+	end)
+
+	dbg("RefreshLeaderboard END (success path, count=", #entries, ")")
 end
 
 function LeaderboardService.GetCache()
@@ -855,7 +988,11 @@ function LeaderboardService.GetCache()
 end
 
 function LeaderboardService.ForceRefresh()
-	refresh()
+	RefreshLeaderboard()
+end
+
+function LeaderboardService.RefreshLeaderboard()
+	RefreshLeaderboard()
 end
 
 function LeaderboardService.RemoveEntry(userId: number)
@@ -884,12 +1021,37 @@ end
 
 function LeaderboardService.RefreshWorldBoard()
 	updateWorldBoard(lastValidEntries, if hasValidSnapshot then "ready" else "loading", nil)
-	task.spawn(refresh)
+	task.spawn(RefreshLeaderboard)
+end
+
+local function waitProfileThenRefresh(player: Player)
+	dbg("waitProfileThenRefresh begin for", player.Name)
+	playerByUserId[player.UserId] = player
+	local loaded = false
+	for _ = 1, 40 do
+		local profile = DataService.Get(player)
+		if profile and profile.__loaded then
+			loaded = true
+			dbg("Profile loaded for", player.Name, "Coins=", tostring(profile.Coins))
+			queuePlayerCoins(player, true)
+			break
+		end
+		task.wait(0.25)
+	end
+	if not loaded then
+		dbg("Profile NOT loaded within timeout for", player.Name)
+	end
+	pcall(function()
+		Remotes.Event("LeaderboardUpdate"):FireClient(player, cache)
+	end)
+	dbg("Mandatory RefreshLeaderboard after player/profile wait:", player.Name)
+	RefreshLeaderboard()
 end
 
 function LeaderboardService.Start()
 	getStore()
 	print("[LeaderboardService] Start — store:", ORDERED_STORE_NAME)
+	dbg("Start() IsStudio=", RunService:IsStudio())
 
 	DataService.OnCoinsChanged(function(player: Player, _coins: number)
 		queuePlayerCoins(player, false)
@@ -899,20 +1061,8 @@ function LeaderboardService.Start()
 	end)
 
 	Players.PlayerAdded:Connect(function(player)
-		playerByUserId[player.UserId] = player
 		task.defer(function()
-			for _ = 1, 40 do
-				local profile = DataService.Get(player)
-				if profile and profile.__loaded then
-					queuePlayerCoins(player, true)
-					break
-				end
-				task.wait(0.25)
-			end
-			pcall(function()
-				Remotes.Event("LeaderboardUpdate"):FireClient(player, cache)
-			end)
-			scheduleRefreshSoon(1.5)
+			waitProfileThenRefresh(player)
 		end)
 	end)
 
@@ -922,27 +1072,22 @@ function LeaderboardService.Start()
 	end)
 
 	for _, player in ipairs(Players:GetPlayers()) do
-		playerByUserId[player.UserId] = player
 		task.defer(function()
-			for _ = 1, 40 do
-				local profile = DataService.Get(player)
-				if profile and profile.__loaded then
-					queuePlayerCoins(player, true)
-					break
-				end
-				task.wait(0.25)
-			end
+			waitProfileThenRefresh(player)
 		end)
 	end
 
 	if not refreshLoopStarted then
 		refreshLoopStarted = true
 		task.spawn(function()
+			dbg("Refresh loop starting (initial wait 2s, then every", REFRESH_INTERVAL_SEC, "s)")
 			task.wait(2)
-			pcall(refresh)
+			dbg("Refresh loop: initial tick")
+			pcall(RefreshLeaderboard)
 			while true do
 				task.wait(REFRESH_INTERVAL_SEC)
-				pcall(refresh)
+				dbg("Refresh loop: periodic tick")
+				pcall(RefreshLeaderboard)
 			end
 		end)
 	end
