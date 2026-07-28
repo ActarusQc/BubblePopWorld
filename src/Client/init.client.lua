@@ -14,6 +14,7 @@ local modules = {
 	require(script.InventoryUI),
 	require(script.ZoneAmbiance),
 	require(script.MusicController),
+	require(script.SummerFireworks),
 }
 
 for _, m in ipairs(modules) do

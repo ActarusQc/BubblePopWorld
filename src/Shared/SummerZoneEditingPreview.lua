@@ -252,6 +252,27 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 		Transparency = 0.55,
 	}).Parent = entrance
 
+	-- Repères feux d’artifice (Edit only — pas d’émetteurs actifs)
+	local okFw, FwConfig = pcall(function()
+		return require(script.Parent.SummerFireworksConfig)
+	end)
+	if okFw and FwConfig and FwConfig.GetLaunchPositions then
+		local fwFolder = Instance.new("Folder")
+		fwFolder.Name = "FireworksMarkers"
+		fwFolder.Parent = preview
+		for i, pos in ipairs(FwConfig.GetLaunchPositions()) do
+			ghostPart({
+				Name = "FireworkLaunch_" .. i,
+				Size = Vector3.new(2, 2, 2),
+				CFrame = CFrame.new(pos),
+				Color = Color3.fromRGB(255, 120, 200),
+				Material = Enum.Material.Neon,
+				Transparency = 0.7,
+				Shape = Enum.PartType.Ball,
+			}).Parent = fwFolder
+		end
+	end
+
 	print("[SummerZoneEditingPreview] Créé: Workspace.StudioDecoration.SummerZonePreview")
 	print("[SummerZoneEditingPreview] Décor manuel: Workspace.StudioDecoration.SummerZoneDecor (jamais écrasé)")
 	return preview

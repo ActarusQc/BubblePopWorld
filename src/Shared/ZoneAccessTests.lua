@@ -71,6 +71,26 @@ function ZoneAccessTests.Run(): boolean
 	check(resolvePopZone("SummerZone", "ClassicZone") == "SummerZone", "pop Summer zoneId")
 	check(ZoneDefs.List[1].Id == "ClassicZone" and ZoneDefs.List[2].Id == "SummerZone", "List enregistre Classic+Summer")
 
+	-- Feux d’artifice : points hors centre BubbleBoard
+	local okFw, FwConfig = pcall(function()
+		return require(Shared.SummerFireworksConfig)
+	end)
+	check(okFw == true, "SummerFireworksConfig chargeable")
+	if okFw and FwConfig then
+		check(FwConfig.Enabled == true, "Fireworks Enabled")
+		check(FwConfig.MaxPerSequence <= 3, "MaxPerSequence <= 3")
+		check(FwConfig.PoolSize <= 4, "PoolSize limité")
+		local positions = FwConfig.GetLaunchPositions()
+		check(#positions >= 3, "au moins 3 points de lancement")
+		local origin = ZoneDefs.SummerZone.Origin
+		local ex, ez = ZoneDefs.GetBubblePlayExtent()
+		for _, pos in ipairs(positions) do
+			local inBoardCore = math.abs(pos.X - origin.X) < ex * 0.55 and math.abs(pos.Z - origin.Z) < ez * 0.55
+			check(not inBoardCore, "lancement hors cœur BubbleBoard")
+			check(pos.Y > origin.Y + 10, "lancement assez haut")
+		end
+	end
+
 	if ok then
 		print("[ZoneAccessTests] OK")
 	end
