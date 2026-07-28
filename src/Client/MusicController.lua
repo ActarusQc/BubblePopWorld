@@ -14,38 +14,62 @@ local Remotes = require(Shared.Remotes)
 local player = Players.LocalPlayer
 local MusicController = {}
 
-local FOLDER_NAME = "BPW_ZoneMusic"
+local GROUP_NAME = "BPW_Music"
 local muted = false
 local currentArea: string? = nil
-local currentTrackId: string? = nil
+local currentTrackKey: string? = nil
 local activeSound: Sound? = nil
 local fadingOutSound: Sound? = nil
+local musicGroup: SoundGroup? = nil
 local transitionToken = 0
 local areaDebounceToken = 0
+local warnedTracks: { [string]: boolean } = {}
 local warnedIds: { [string]: boolean } = {}
+local lastDiagKey: string? = nil
 local started = false
+local playGeneration = 0
 
-local function musicFolder(): Folder
-	local existing = SoundService:FindFirstChild(FOLDER_NAME)
-	if existing and existing:IsA("Folder") then
+local function ensureMusicGroup(): SoundGroup
+	if musicGroup and musicGroup.Parent then
+		return musicGroup
+	end
+	local existing = SoundService:FindFirstChild(GROUP_NAME)
+	if existing and existing:IsA("SoundGroup") then
+		musicGroup = existing
 		return existing
 	end
-	local folder = Instance.new("Folder")
-	folder.Name = FOLDER_NAME
-	folder.Parent = SoundService
-	return folder
+	local group = Instance.new("SoundGroup")
+	group.Name = GROUP_NAME
+	group.Volume = MusicConfig.MusicGroupVolume
+	group.Parent = SoundService
+	musicGroup = group
+	return group
 end
 
-local function targetVolume(): number
+local function targetSoundVolume(): number
 	return if muted then 0 else MusicConfig.MusicVolume
 end
 
-local function warnOnce(soundId: string, message: string)
+local function syncGroupVolume()
+	local group = ensureMusicGroup()
+	-- Le mute agit sur le Volume du Sound, pas sur le groupe (évite de couper d'autres sons).
+	group.Volume = MusicConfig.MusicGroupVolume
+end
+
+local function warnTrackOnce(trackKey: string, message: string)
+	if warnedTracks[trackKey] then
+		return
+	end
+	warnedTracks[trackKey] = true
+	warn(message)
+end
+
+local function warnIdOnce(soundId: string, message: string)
 	if warnedIds[soundId] then
 		return
 	end
 	warnedIds[soundId] = true
-	warn("[MusicController]", message, soundId)
+	warn("[MusicController]", message)
 end
 
 local function destroySound(sound: Sound?)
@@ -60,19 +84,45 @@ local function destroySound(sound: Sound?)
 	end
 end
 
-local function createTrack(soundId: string): Sound?
+local function emitDiagnostics(area: string, trackKey: string, soundId: string, playRequested: boolean)
+	local diagKey = table.concat({
+		area,
+		trackKey,
+		soundId,
+		tostring(muted),
+		tostring(playRequested),
+	}, "|")
+	if diagKey == lastDiagKey then
+		return
+	end
+	lastDiagKey = diagKey
+
+	local group = ensureMusicGroup()
+	print("[MusicController] Area:", area)
+	print("[MusicController] Track:", trackKey)
+	print("[MusicController] SoundId:", soundId)
+	print("[MusicController] Muted:", muted)
+	print("[MusicController] Music group volume:", group.Volume)
+	if playRequested then
+		print("[MusicController] Play requested")
+	end
+end
+
+local function createTrack(trackKey: string, soundId: string): Sound?
 	if MusicConfig.IsPlaceholderId(soundId) then
-		warnOnce(soundId, "ID audio placeholder — musique ignorée:")
+		warnTrackOnce(trackKey, ("[MusicController] No valid music asset configured for track: %s"):format(trackKey))
 		return nil
 	end
 
+	local group = ensureMusicGroup()
 	local sound = Instance.new("Sound")
-	sound.Name = "ZoneMusic"
+	sound.Name = "ZoneMusic_" .. trackKey
 	sound.SoundId = soundId
 	sound.Looped = true
 	sound.Volume = 0
+	sound.SoundGroup = group
 	-- Parent SoundService = non spatial (indépendant de la distance joueur)
-	sound.Parent = musicFolder()
+	sound.Parent = SoundService
 
 	local loaded = sound.IsLoaded
 	if not loaded then
@@ -101,7 +151,7 @@ local function createTrack(soundId: string): Sound?
 		return nil
 	end
 	if not loaded then
-		warnOnce(soundId, "Piste inaccessible ou timeout de chargement:")
+		warnIdOnce(soundId, ("Piste inaccessible ou timeout de chargement: %s (track=%s)"):format(soundId, trackKey))
 		destroySound(sound)
 		return nil
 	end
@@ -118,7 +168,6 @@ end
 local function scheduleDestroyAfterFade(sound: Sound, token: number)
 	task.delay(MusicConfig.CrossfadeSeconds + 0.05, function()
 		if token ~= transitionToken then
-			-- Transition plus récente : détruire seulement si ce son n'est plus actif
 			if sound ~= activeSound then
 				destroySound(sound)
 			end
@@ -148,21 +197,36 @@ local function beginFadeOutActive(token: number)
 	end
 end
 
-local function playTrack(trackId: string, immediate: boolean?)
-	if currentTrackId == trackId and activeSound and activeSound.Parent then
-		fadeVolume(activeSound, targetVolume(), if immediate then 0.25 else 0.45)
+local function playTrack(trackKey: string, immediate: boolean?)
+	local soundId = MusicConfig.SoundIdForTrackKey(trackKey)
+	local area = currentArea or "Lobby"
+	syncGroupVolume()
+
+	if currentTrackKey == trackKey and activeSound and activeSound.Parent then
+		emitDiagnostics(area, trackKey, soundId, false)
+		fadeVolume(activeSound, targetSoundVolume(), if immediate then 0.25 else 0.45)
 		return
 	end
 
 	-- Mute : mémoriser la piste, fondu de l'ancienne, pas de nouvelle lecture audible
 	if muted then
-		if currentTrackId == trackId then
+		emitDiagnostics(area, trackKey, soundId, false)
+		if currentTrackKey == trackKey then
 			return
 		end
 		transitionToken += 1
 		local token = transitionToken
 		beginFadeOutActive(token)
-		currentTrackId = trackId
+		currentTrackKey = trackKey
+		return
+	end
+
+	if MusicConfig.IsPlaceholderId(soundId) then
+		emitDiagnostics(area, trackKey, soundId, false)
+		warnTrackOnce(trackKey, ("[MusicController] No valid music asset configured for track: %s"):format(trackKey))
+		transitionToken += 1
+		beginFadeOutActive(transitionToken)
+		currentTrackKey = trackKey
 		return
 	end
 
@@ -170,33 +234,49 @@ local function playTrack(trackId: string, immediate: boolean?)
 	local token = transitionToken
 	beginFadeOutActive(token)
 
-	local newSound = createTrack(trackId)
+	local newSound = createTrack(trackKey, soundId)
 	if token ~= transitionToken then
 		destroySound(newSound)
 		return
 	end
 	if not newSound then
-		currentTrackId = nil
+		currentTrackKey = trackKey
+		emitDiagnostics(area, trackKey, soundId, false)
 		return
 	end
 
-	currentTrackId = trackId
+	currentTrackKey = trackKey
 	activeSound = newSound
+	emitDiagnostics(area, trackKey, soundId, true)
 
-	local playOk = pcall(function()
+	playGeneration += 1
+	local gen = playGeneration
+	local playOk, playErr = pcall(function()
 		newSound:Play()
 	end)
 	if not playOk then
-		warnOnce(trackId, "Échec lecture musique:")
+		warnIdOnce(soundId, ("Échec Sound:Play() pour %s: %s"):format(soundId, tostring(playErr)))
 		destroySound(newSound)
 		if activeSound == newSound then
 			activeSound = nil
-			currentTrackId = nil
 		end
 		return
 	end
 
-	local vol = targetVolume()
+	-- Si le moteur refuse la lecture (permissions), IsPlaying peut rester false après un court délai
+	task.delay(0.5, function()
+		if gen ~= playGeneration then
+			return
+		end
+		if activeSound ~= newSound or not newSound.Parent then
+			return
+		end
+		if not newSound.IsPlaying and not muted then
+			warnIdOnce(soundId, ("Sound non joué après Play() — permissions / asset invalide? %s (track=%s)"):format(soundId, trackKey))
+		end
+	end)
+
+	local vol = targetSoundVolume()
 	if immediate then
 		newSound.Volume = vol
 	else
@@ -207,7 +287,7 @@ end
 local function applyArea(area: any, immediate: boolean?)
 	local areaName = if type(area) == "string" and area ~= "" then area else "Lobby"
 	currentArea = areaName
-	playTrack(MusicConfig.TrackIdForArea(areaName), immediate)
+	playTrack(MusicConfig.TrackKeyForArea(areaName), immediate)
 end
 
 function MusicController.IsMuted(): boolean
@@ -223,18 +303,29 @@ function MusicController.SetMuted(nextMuted: boolean, persist: boolean?)
 		return
 	end
 	muted = nextMuted
+	syncGroupVolume()
+	lastDiagKey = nil -- forcer un log d'état mute
 
 	if muted then
 		if activeSound and activeSound.Parent then
 			fadeVolume(activeSound, 0, 0.45)
 		end
+		local area = currentArea or "Lobby"
+		local trackKey = currentTrackKey or MusicConfig.TrackKeyForArea(area)
+		emitDiagnostics(area, trackKey, MusicConfig.SoundIdForTrackKey(trackKey), false)
 	else
 		local area = currentArea or player:GetAttribute("PlayerArea")
-		local wantId = MusicConfig.TrackIdForArea(if type(area) == "string" then area else "Lobby")
-		if activeSound and activeSound.Parent and currentTrackId == wantId then
+		local trackKey = MusicConfig.TrackKeyForArea(if type(area) == "string" then area else "Lobby")
+		if activeSound and activeSound.Parent and currentTrackKey == trackKey then
+			emitDiagnostics(if type(area) == "string" then area else "Lobby", trackKey, MusicConfig.SoundIdForTrackKey(trackKey), true)
 			fadeVolume(activeSound, MusicConfig.MusicVolume, 0.45)
+			if not activeSound.IsPlaying then
+				pcall(function()
+					activeSound:Play()
+				end)
+			end
 		else
-			currentTrackId = nil
+			currentTrackKey = nil
 			applyArea(area, true)
 		end
 	end
@@ -255,16 +346,17 @@ function MusicController.ApplyMutedFromServer(nextMuted: boolean)
 	if muted == nextMuted then
 		return
 	end
-	-- Appliquer sans re-persister (évite boucle remote)
 	MusicController.SetMuted(nextMuted, false)
 end
 
 function MusicController.Start()
 	if started then
+		print("[MusicController] Start() ignored (already started)")
 		return
 	end
 	started = true
-	musicFolder()
+	ensureMusicGroup()
+	print("[MusicController] Start() once")
 
 	player:GetAttributeChangedSignal("PlayerArea"):Connect(function()
 		areaDebounceToken += 1
@@ -278,14 +370,28 @@ function MusicController.Start()
 		end)
 	end)
 
+	-- Attendre un bref instant que PlayerArea / StatsUpdate initial puissent arriver
 	task.defer(function()
-		task.wait(0.1)
-		applyArea(player:GetAttribute("PlayerArea"), true)
+		task.wait(0.15)
+		local area = player:GetAttribute("PlayerArea")
+		print("[MusicController] Initial PlayerArea:", tostring(area))
+		applyArea(area, true)
 	end)
 
 	Remotes.Event("StatsUpdate").OnClientEvent:Connect(function(stats)
-		if type(stats) == "table" and type(stats.MusicMuted) == "boolean" then
-			MusicController.ApplyMutedFromServer(stats.MusicMuted)
+		if type(stats) ~= "table" or type(stats.MusicMuted) ~= "boolean" then
+			return
+		end
+		local wasMuted = muted
+		MusicController.ApplyMutedFromServer(stats.MusicMuted)
+		-- StatsUpdate tardif avec MusicMuted=false alors qu'aucune piste n'a démarré
+		if wasMuted == false and stats.MusicMuted == false then
+			if (not activeSound or not activeSound.Parent) and not MusicConfig.IsPlaceholderId(MusicConfig.TrackIdForArea(currentArea)) then
+				currentTrackKey = nil
+				applyArea(currentArea or player:GetAttribute("PlayerArea"), true)
+			end
+		elseif wasMuted == true and stats.MusicMuted == false then
+			-- unmute via serveur déjà géré dans SetMuted
 		end
 	end)
 end
