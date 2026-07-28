@@ -13,6 +13,7 @@ local modules = {
 	require(script.ShopUI),
 	require(script.InventoryUI),
 	require(script.ZoneAmbiance),
+	require(script.MusicController),
 }
 
 for _, m in ipairs(modules) do

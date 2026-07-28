@@ -13,6 +13,7 @@ local EVENTS = {
 	"GlobalCounter",    -- serveur -> clients : compteur mondial
 	"LeaderboardUpdate",-- serveur -> clients : classements
 	"ComboUpdate",      -- serveur -> client : combo en cours
+	"SetMusicMuted",    -- client -> serveur : préférence musique d'ambiance (boolean)
 }
 
 local FUNCTIONS = {

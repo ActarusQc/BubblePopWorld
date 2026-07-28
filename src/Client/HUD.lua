@@ -317,6 +317,52 @@ function HUD.Start()
 
 	Remotes.Event("Announce").OnClientEvent:Connect(toast)
 
+	-- Bouton sourdine musique d'ambiance (uniquement — pas les SFX).
+	local MusicController = require(script.Parent.MusicController)
+
+	local musicBtn = Instance.new("TextButton")
+	musicBtn.Name = "MusicMuteButton"
+	musicBtn.Size = UDim2.new(0, 40, 0, 40)
+	-- Sous le bouton Inventaire (haut droite), sans chevaucher le panneau pièces.
+	musicBtn.Position = UDim2.new(1, -126, 0, 64)
+	musicBtn.BackgroundColor3 = Color3.fromRGB(40, 48, 64)
+	musicBtn.TextColor3 = Color3.new(1, 1, 1)
+	musicBtn.Font = Enum.Font.GothamBold
+	musicBtn.TextSize = 20
+	musicBtn.Text = "♪"
+	musicBtn.BorderSizePixel = 0
+	musicBtn.AutoButtonColor = true
+	musicBtn.Selectable = true
+	musicBtn.Parent = gui
+	corner(musicBtn, 10)
+
+	local function refreshMusicButton()
+		local isMuted = MusicController.IsMuted()
+		if isMuted then
+			musicBtn.Text = "♪/"
+			musicBtn.TextColor3 = Color3.fromRGB(180, 190, 210)
+			musicBtn.BackgroundColor3 = Color3.fromRGB(32, 36, 48)
+		else
+			musicBtn.Text = "♪"
+			musicBtn.TextColor3 = Color3.fromRGB(120, 220, 180)
+			musicBtn.BackgroundColor3 = Color3.fromRGB(40, 48, 64)
+		end
+	end
+
+	musicBtn.Activated:Connect(function()
+		MusicController.SetMuted(not MusicController.IsMuted(), true)
+		refreshMusicButton()
+	end)
+
+	Remotes.Event("StatsUpdate").OnClientEvent:Connect(function(stats)
+		if type(stats) == "table" and type(stats.MusicMuted) == "boolean" then
+			MusicController.ApplyMutedFromServer(stats.MusicMuted)
+			refreshMusicButton()
+		end
+	end)
+
+	task.defer(refreshMusicButton)
+
 	HUD.Toast = toast
 	return HUD
 end

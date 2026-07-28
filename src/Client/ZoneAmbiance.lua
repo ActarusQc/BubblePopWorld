@@ -1,10 +1,10 @@
 --!strict
 -- Ambiance locale par zone (client uniquement — Lighting global non modifié pour les autres).
--- ColorCorrection + son optionnels selon PlayerArea.
+-- ColorCorrection + bannière + cadenas Summer selon PlayerArea.
+-- Musique : voir MusicController (ne pas rejouer de sons ici).
 
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
-local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -17,7 +17,6 @@ local player = Players.LocalPlayer
 local ZoneAmbiance = {}
 
 local cc: ColorCorrectionEffect? = nil
-local ambienceSound: Sound? = nil
 local lastBannerAt = 0
 local lastArea: string? = nil
 
@@ -33,20 +32,6 @@ local function ensureColorCorrection(): ColorCorrectionEffect
 	effect.Parent = Lighting
 	cc = effect
 	return effect
-end
-
-local function ensureSound(): Sound
-	if ambienceSound and ambienceSound.Parent then
-		return ambienceSound
-	end
-	local s = Instance.new("Sound")
-	s.Name = "BPW_ZoneAmbience"
-	s.Volume = 0
-	s.Looped = true
-	s.RollOffMaxDistance = 80
-	s.Parent = SoundService
-	ambienceSound = s
-	return s
 end
 
 local function showZoneBanner(displayName: string)
@@ -93,7 +78,6 @@ end
 
 local function applyArea(area: string)
 	local effect = ensureColorCorrection()
-	local sound = ensureSound()
 
 	if area == "SummerZone" then
 		local def = ZoneDefs.SummerZone
@@ -105,28 +89,11 @@ local function applyArea(area: string)
 			effect.Contrast = ac.Contrast
 			effect.Saturation = ac.Saturation
 		end
-		local ids = def.Ambiance and def.Ambiance.SoundIds
-		if ids and ids[1] then
-			sound.SoundId = ids[1]
-			if not sound.IsPlaying then
-				sound:Play()
-			end
-			TweenService:Create(sound, TweenInfo.new(1.2), { Volume = 0.18 }):Play()
-		end
 		if lastArea ~= area then
 			showZoneBanner(L10n.SummerZoneTitle)
 		end
 	else
 		effect.Enabled = false
-		TweenService:Create(sound, TweenInfo.new(0.8), { Volume = 0 }):Play()
-		task.delay(0.9, function()
-			if sound.Volume <= 0.01 then
-				sound:Stop()
-			end
-		end)
-		if area == "GameRoom" and lastArea ~= area and lastArea ~= nil then
-			-- Optionnel : pas de bannière à chaque retour classique
-		end
 	end
 	lastArea = area
 end
@@ -161,7 +128,6 @@ end
 
 function ZoneAmbiance.Start()
 	ensureColorCorrection()
-	ensureSound()
 
 	local function onArea()
 		local area = player:GetAttribute("PlayerArea")

@@ -57,6 +57,7 @@ local TEMPLATE = {
 	CurrentBubbles = 0,
 	BackpackCapacity = Config.Backpack.DefaultCapacity,
 	PendingSellValue = 0,
+	MusicMuted = false,
 	Version = 1,
 }
 
@@ -195,6 +196,7 @@ function DataService.Load(player: Player)
 	reconcileOwnedItems(data)
 	reconcileBackpack(data)
 	reconcileProgression(data)
+	data.MusicMuted = data.MusicMuted == true
 	data.__loaded = ok            -- si false : on ne sauvegarde PAS (évite d'écraser)
 	data.__joinClock = os.clock()
 	profiles[player] = data
@@ -309,6 +311,7 @@ function DataService.Push(player: Player)
 		Worlds = d.Worlds,
 		OwnedItems = d.OwnedItems,
 		EquippedBackpack = d.EquippedBackpack or "",
+		MusicMuted = d.MusicMuted == true,
 	})
 end
 
@@ -401,6 +404,22 @@ function DataService.Start()
 	StarterPlayer.CharacterUseJumpPower = M.UseJumpPower
 	StarterPlayer.CharacterJumpPower = M.JumpPower
 	StarterPlayer.CharacterWalkSpeed = M.WalkSpeed
+
+	Remotes.Event("SetMusicMuted").OnServerEvent:Connect(function(player: Player, muted: any)
+		if typeof(muted) ~= "boolean" then
+			return
+		end
+		local d = profiles[player]
+		if not d or d.__loaded ~= true then
+			return
+		end
+		if d.MusicMuted == muted then
+			return
+		end
+		d.MusicMuted = muted
+		d.__dirty = true
+		DataService.Push(player)
+	end)
 
 	local bound: { [Player]: boolean } = {}
 
