@@ -19,6 +19,8 @@ EnvironmentBackdropConfig.Foothills = {
 	WidthMax = 95,
 	DepthMin = 28,
 	DepthMax = 55,
+	-- Centres tombant dans Summer Zone (seed 20260727) — ne pas créer.
+	SkipIndices = { 1, 2 },
 	Colors = {
 		Color3.fromRGB(42, 78, 72),
 		Color3.fromRGB(38, 70, 78),

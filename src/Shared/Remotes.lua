@@ -5,7 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local EVENTS = {
-	"PopRequest",       -- client -> serveur : {x, z}
+	"PopRequest",       -- client -> serveur : x, z, zoneId?
 	"PopEffects",       -- serveur -> clients : batch d'effets
 	"ToolActivate",     -- client -> serveur : position visée
 	"StatsUpdate",      -- serveur -> client : profil résumé

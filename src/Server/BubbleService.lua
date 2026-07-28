@@ -86,6 +86,20 @@ function BubbleService.GetZoneIdAt(pos: Vector3): string
 	return zoneId
 end
 
+-- API commune : toute zone enregistre sa planche auprès du même BubbleService.
+function BubbleService.RegisterBoard(zoneDef: any)
+	return BubbleService.BuildBoard(zoneDef)
+end
+
+function BubbleService.RegisterZoneBoard(zoneId: string)
+	local def = ZoneDefs.Get(zoneId)
+	if not def then
+		warn("[BubbleService] RegisterZoneBoard: zone inconnue " .. tostring(zoneId))
+		return nil
+	end
+	return BubbleService.BuildBoard(def)
+end
+
 --------------------------------------------------------------------
 -- Apparence visuelle (ne touche pas à la physique)
 --------------------------------------------------------------------
@@ -340,7 +354,7 @@ end
 -- Legacy : reconstruit uniquement la planche classique (Prairie ambiance).
 function BubbleService.BuildWorld(worldDef)
 	currentWorld = worldDef or currentWorld
-	BubbleService.BuildBoard(ZoneDefs.ClassicZone)
+	BubbleService.RegisterBoard(ZoneDefs.ClassicZone)
 	AmbianceService.Apply(currentWorld)
 	local classic = boards[defaultZoneId]
 	if classic then
@@ -350,7 +364,7 @@ end
 
 function BubbleService.BuildAllBoards()
 	for _, zoneDef in ipairs(ZoneDefs.List) do
-		BubbleService.BuildBoard(zoneDef)
+		BubbleService.RegisterBoard(zoneDef)
 	end
 	AmbianceService.Apply(currentWorld)
 	local classic = boards[defaultZoneId]
@@ -563,11 +577,17 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 	if not BubbleService.InBounds(x, z) then return end
 	if not checkBudget(player) then return end
 
-	local zoneId = if type(zoneIdArg) == "string" and ZoneDefs.Get(zoneIdArg) then zoneIdArg else defaultZoneId
-
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not root then return end
+
+	-- Zone : client peut proposer ; serveur tranche via position si absent/invalide.
+	local zoneId: string
+	if type(zoneIdArg) == "string" and ZoneDefs.Get(zoneIdArg) then
+		zoneId = zoneIdArg
+	else
+		zoneId = BubbleService.GetZoneIdAt(root.Position)
+	end
 
 	local target = BubbleService.CellToWorld(x, z, zoneId)
 	local maxRange = if player:GetAttribute("HasWings") == true then B.WingPopRange else B.MaxPopRange

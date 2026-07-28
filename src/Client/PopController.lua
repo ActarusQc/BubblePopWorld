@@ -192,9 +192,13 @@ function PopController.Start()
 
 		squash(part)
 		local x, z = part:GetAttribute("CellX"), part:GetAttribute("CellZ")
+		local zoneId = part:GetAttribute("ZoneId")
+		if typeof(zoneId) ~= "string" then
+			zoneId = "ClassicZone"
+		end
 		task.delay(Config.Bubble.PopDelay, function()
 			if part.Parent and part:GetAttribute("Alive") == true then
-				popRequest:FireServer(x, z)
+				popRequest:FireServer(x, z, zoneId)
 			end
 		end)
 	end)

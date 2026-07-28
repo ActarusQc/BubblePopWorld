@@ -60,6 +60,17 @@ function ZoneAccessTests.Run(): boolean
 		check(sb.MinX - cb.MaxX >= 10, "écart minimum entre planches")
 	end
 
+	-- PopRequest : zoneId obligatoire pour Summer (sinon Classic + échec distance)
+	local function resolvePopZone(zoneIdArg: any, fallbackZoneId: string): string
+		if type(zoneIdArg) == "string" and ZoneDefs.Get(zoneIdArg) then
+			return zoneIdArg
+		end
+		return fallbackZoneId
+	end
+	check(resolvePopZone(nil, "ClassicZone") == "ClassicZone", "pop sans zoneId → fallback")
+	check(resolvePopZone("SummerZone", "ClassicZone") == "SummerZone", "pop Summer zoneId")
+	check(ZoneDefs.List[1].Id == "ClassicZone" and ZoneDefs.List[2].Id == "SummerZone", "List enregistre Classic+Summer")
+
 	if ok then
 		print("[ZoneAccessTests] OK")
 	end

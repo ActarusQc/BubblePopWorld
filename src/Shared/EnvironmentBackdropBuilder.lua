@@ -198,11 +198,19 @@ local function buildMountainLayer(
 		Colors: { Color3 },
 		SnowCapChance: number?,
 		SnowColor: Color3?,
+		SkipIndices: { number }?,
 	}
 )
 	local folder = Instance.new("Folder")
 	folder.Name = layerName
 	folder.Parent = parent
+
+	local skip: { [number]: boolean } = {}
+	if layer.SkipIndices then
+		for _, idx in ipairs(layer.SkipIndices) do
+			skip[idx] = true
+		end
+	end
 
 	for i = 1, layer.Count do
 		local angle, radius = ringPlacement(rng, i, layer.Count, layer.RadiusMin, layer.RadiusMax)
@@ -213,21 +221,24 @@ local function buildMountainLayer(
 		local yawJitter = (rng() - 0.5) * 0.7
 		local snowChance = layer.SnowCapChance or 0
 		local withSnow = snowChance > 0 and rng() < snowChance
-		buildMountain(
-			folder,
-			string.format("%s_%02d", layerName, i),
-			center,
-			groundY,
-			angle,
-			radius,
-			height,
-			width,
-			depth,
-			color,
-			yawJitter,
-			layer.SnowColor,
-			withSnow
-		)
+		-- Consomme le RNG même si skip → le reste de l'horizon reste identique.
+		if not skip[i] then
+			buildMountain(
+				folder,
+				string.format("%s_%02d", layerName, i),
+				center,
+				groundY,
+				angle,
+				radius,
+				height,
+				width,
+				depth,
+				color,
+				yawJitter,
+				layer.SnowColor,
+				withSnow
+			)
+		end
 	end
 end
 
