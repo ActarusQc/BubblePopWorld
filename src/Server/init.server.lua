@@ -41,6 +41,12 @@ do
 	if okMusic and musicTests and musicTests.Run then
 		musicTests.Run()
 	end
+	local okLb, lbTests = pcall(function()
+		return require(Shared.LeaderboardTests)
+	end)
+	if okLb and lbTests and lbTests.Run then
+		lbTests.Run()
+	end
 end
 
 print("[Bubble Pop World] serveur prêt.")

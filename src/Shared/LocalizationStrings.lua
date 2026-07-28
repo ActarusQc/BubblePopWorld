@@ -20,6 +20,8 @@ local LocalizationStrings = {
 	LoadingLeaderboard = "Loading leaderboard...",
 	NoRankingsYet = "No rankings yet",
 	LeaderboardUnavailable = "Leaderboard temporarily unavailable",
+	LeaderboardUnavailableStudio = "Leaderboard unavailable in Studio",
+	LeaderboardStudioPreview = "Studio preview — local players only",
 
 	-- Kiosque vente
 	SellYourBubbles = "SELL YOUR BUBBLES",
