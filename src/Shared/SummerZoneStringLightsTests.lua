@@ -27,7 +27,8 @@ function SummerZoneStringLightsTests.Run(): boolean
 	check(Lights.POST_SPACING == 30, "espacement centralisé = 30")
 
 	local layout = ZoneDefs.GetSummerBridgeLayout()
-	check(layout.Ex == 90 and layout.Ez == 60, "périmètre compact 180x120")
+	check(layout.Ex == 90 and layout.Ez == 66, "périmètre compact 180x132")
+	check(layout.ZoneDepth == 180 and layout.ZoneWidth == 132, "lumières suivent ZoneDepth/ZoneWidth")
 
 	-- Sol : dessus du ZoneFloor construit par ZoneBuilder, pas layout.Y.
 	local groundY = Lights.GetGroundY(layout)
@@ -73,8 +74,10 @@ function SummerZoneStringLightsTests.Run(): boolean
 	check(#points <= 36, "pas plus de 36 poteaux (mobile)")
 
 	local boardO = layout.BoardOrigin
+	local zoneO = layout.ZoneOrigin
 	local insideBoard = 0
 	local inEntrance = 0
+	local outsideZone = 0
 	local halfEntrance = (layout.ArchGap or 18) / 2 + 10
 	for _, p in ipairs(points) do
 		check(math.abs(p.Position.Y - groundY) < 1e-6, "point de périmètre au niveau du sol")
@@ -83,13 +86,20 @@ function SummerZoneStringLightsTests.Run(): boolean
 		then
 			insideBoard += 1
 		end
-		local nearWest = p.Position.X <= layout.ZoneOrigin.X - layout.Ex + 5 + 12
+		local nearWest = p.Position.X <= zoneO.X - layout.Ex + 5 + 12
 		if nearWest and math.abs(p.Position.Z - layout.ArchZ) <= halfEntrance then
 			inEntrance += 1
+		end
+		-- Doit longer la vraie zone (pas l'ancien contour 240×240).
+		if math.abs(p.Position.X - zoneO.X) > layout.Ex + 1
+			or math.abs(p.Position.Z - zoneO.Z) > layout.Ez + 1
+		then
+			outsideZone += 1
 		end
 	end
 	check(insideBoard == 0, "aucun poteau sur le BubbleBoard")
 	check(inEntrance == 0, "aucun poteau dans le gap d'entrée")
+	check(outsideZone == 0, "aucun poteau hors emprise Summer actuelle")
 
 	if ok then
 		print(string.format(
