@@ -3,6 +3,7 @@
 -- Niveau requis, thème, origine, taille de grille et marges décoratives.
 
 local GameConfig = require(script.Parent.GameConfig)
+local SummerZoneConfig = require(script.Parent.SummerZoneConfig)
 
 export type ZoneDef = {
 	Id: string,
@@ -39,11 +40,13 @@ local OUTER_HALF_Z = (G.SizeZ * G.Spacing) / 2
 local INTER_ZONE_GAP = 48
 
 --------------------------------------------------------------------
--- Summer : emprise extérieure inchangée ; BubbleBoard réduit + marges décor.
+-- Summer compacte : dimensions indépendantes de la planche Classic.
 --------------------------------------------------------------------
-local SideDecorMargin = 16
-local EntranceDecorMargin = 14
-local RearDecorMargin = 24
+local SUMMER_HALF_X = SummerZoneConfig.ZoneDepth / 2
+local SUMMER_HALF_Z = SummerZoneConfig.ZoneWidth / 2
+local SideDecorMargin = SummerZoneConfig.SideDecorMargin
+local EntranceDecorMargin = SummerZoneConfig.EntranceDecorMargin
+local RearDecorMargin = SummerZoneConfig.RearDecorMargin
 local BubbleSpacing = G.Spacing
 
 local function playExtentForSize(sizeX: number, sizeZ: number): (number, number)
@@ -64,19 +67,22 @@ local function maxCellsForExtent(availableHalf: number): number
 end
 
 local classicOrigin = G.Origin
-local summerZoneOrigin = classicOrigin + CLASSIC_RIGHT * (OUTER_HALF_X * 2 + INTER_ZONE_GAP)
+local summerZoneOrigin = Vector3.new(
+	classicOrigin.X + OUTER_HALF_X + INTER_ZONE_GAP + SUMMER_HALF_X,
+	classicOrigin.Y,
+	classicOrigin.Z + SummerZoneConfig.EntryCenterOffset
+)
 
-local availableHalfX = (OUTER_HALF_X * 2 - EntranceDecorMargin - RearDecorMargin) / 2
-local availableHalfZ = (OUTER_HALF_Z * 2 - SideDecorMargin * 2) / 2
+local availableHalfX = (SUMMER_HALF_X * 2 - EntranceDecorMargin - RearDecorMargin) / 2
+local availableHalfZ = (SUMMER_HALF_Z * 2 - SideDecorMargin * 2) / 2
 local BubbleColumns = maxCellsForExtent(availableHalfX)
--- −2 rangées : bordure décorative Z plus large (mirador / props), colonnes inchangées.
-local BubbleRows = math.max(1, maxCellsForExtent(availableHalfZ) - 2)
+local BubbleRows = math.max(1, maxCellsForExtent(availableHalfZ) - SummerZoneConfig.BubbleRowReduction)
 local boardEx, boardEz = playExtentForSize(BubbleColumns, BubbleRows)
 local BubbleBoardWidth = boardEx * 2
 local BubbleBoardDepth = boardEz * 2
 
 -- Board ancré côté entrée : marge entrée exacte → surplus au fond.
-local summerZoneMinX = summerZoneOrigin.X - OUTER_HALF_X
+local summerZoneMinX = summerZoneOrigin.X - SUMMER_HALF_X
 local summerBoardOrigin = Vector3.new(
 	summerZoneMinX + EntranceDecorMargin + boardEx,
 	summerZoneOrigin.Y,
@@ -146,10 +152,12 @@ ZoneDefs.SummerLayout = {
 	BubbleBoardDepth = BubbleBoardDepth,
 	BubbleRows = BubbleRows,
 	BubbleColumns = BubbleColumns,
-	OuterHalfX = OUTER_HALF_X,
-	OuterHalfZ = OUTER_HALF_Z,
-	OuterWidth = OUTER_HALF_X * 2,
-	OuterDepth = OUTER_HALF_Z * 2,
+	OuterHalfX = SUMMER_HALF_X,
+	OuterHalfZ = SUMMER_HALF_Z,
+	ZoneWidth = SummerZoneConfig.ZoneWidth,
+	ZoneDepth = SummerZoneConfig.ZoneDepth,
+	EntryCenterOffset = SummerZoneConfig.EntryCenterOffset,
+	LightPerimeterSpacing = SummerZoneConfig.LightPerimeterSpacing,
 }
 
 ZoneDefs.List = {
@@ -210,7 +218,10 @@ end
 
 -- Demi-emprise extérieure de la zone (murs / plancher).
 function ZoneDefs.GetOuterHalfExtent(zoneId: string?): (number, number)
-	if type(zoneId) == "string" and zoneId ~= "SummerZone" and zoneId ~= "ClassicZone" then
+	if zoneId == "SummerZone" then
+		return SUMMER_HALF_X, SUMMER_HALF_Z
+	end
+	if type(zoneId) == "string" and zoneId ~= "ClassicZone" then
 		return ZoneDefs.GetGridHalfExtent(zoneId)
 	end
 	return OUTER_HALF_X, OUTER_HALF_Z
@@ -226,6 +237,9 @@ end
 
 -- Emprise visuelle des murs (hors board réduit) : footprint extérieur.
 function ZoneDefs.GetOuterPlayExtent(zoneId: string?): (number, number)
+	if zoneId == "SummerZone" then
+		return SUMMER_HALF_X, SUMMER_HALF_Z
+	end
 	return playExtentForSize(G.SizeX, G.SizeZ)
 end
 
@@ -273,13 +287,17 @@ export type SummerBridgeLayout = {
 	BubbleColumns: number,
 	BubbleBoardWidth: number,
 	BubbleBoardDepth: number,
+	ZoneWidth: number,
+	ZoneDepth: number,
+	EntryCenterOffset: number,
+	LightPerimeterSpacing: number,
 }
 
 function ZoneDefs.GetSummerBridgeLayout(): SummerBridgeLayout
 	local classic = ZoneDefs.ClassicZone
 	local summer = ZoneDefs.SummerZone
 	local layout = ZoneDefs.SummerLayout
-	local outerEx, outerEz = ZoneDefs.GetOuterPlayExtent()
+	local outerEx, outerEz = ZoneDefs.GetOuterPlayExtent(summer.Id)
 	local boardEx, boardEz = ZoneDefs.GetBubblePlayExtent(summer.Id)
 	local pathW = GameConfig.GameRoom.PathSize.X
 	local zoneO = summer.ZoneOrigin
@@ -319,6 +337,10 @@ function ZoneDefs.GetSummerBridgeLayout(): SummerBridgeLayout
 		BubbleColumns = layout.BubbleColumns,
 		BubbleBoardWidth = layout.BubbleBoardWidth,
 		BubbleBoardDepth = layout.BubbleBoardDepth,
+		ZoneWidth = layout.ZoneWidth,
+		ZoneDepth = layout.ZoneDepth,
+		EntryCenterOffset = layout.EntryCenterOffset,
+		LightPerimeterSpacing = layout.LightPerimeterSpacing,
 	}
 end
 

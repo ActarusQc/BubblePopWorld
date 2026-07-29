@@ -86,6 +86,9 @@ function TravelConfigTests.Run(): boolean
 	local layout = ZoneDefs.GetSummerBridgeLayout()
 	check(math.abs(bridgeCF.Position.X - layout.MidX) < 0.05, "Summer pad at MidX")
 	check(math.abs(bridgeCF.Position.Z - layout.ArchZ) < 0.05, "Summer pad at ArchZ")
+	check(math.abs(bridgeCF.Position.Z) < 0.05, "Summer pad centré sur Z = 0")
+	check(math.abs(layout.ZoneOrigin.Z - layout.ArchZ) < 0.05, "arche centrée sur la zone")
+	check(math.abs(layout.SummerEdgeX - 168) < 0.05, "pont rejoint le bord Summer conservé")
 	check(bridgeCF.Position.X < layout.GateX, "Summer pad before Gate")
 	local look = bridgeCF.LookVector
 	check(look.X > 0.9 and math.abs(look.Z) < 0.15, "Summer pad faces +X")

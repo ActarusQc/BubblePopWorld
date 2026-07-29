@@ -24,8 +24,10 @@ function SummerZoneStringLightsTests.Run(): boolean
 	check(Lights.STRING_LOWEST_TARGET >= 7 and Lights.STRING_LOWEST_TARGET <= 9, "point bas ampoules 7–9")
 	check(Lights.STRING_LOWEST_MIN >= 7, "plancher ampoules >= 7 (au-dessus des têtes)")
 	check(Lights.POST_SPACING >= 20 and Lights.POST_SPACING <= 40, "espacement raisonnable")
+	check(Lights.POST_SPACING == 30, "espacement centralisé = 30")
 
 	local layout = ZoneDefs.GetSummerBridgeLayout()
+	check(layout.Ex == 90 and layout.Ez == 60, "périmètre compact 180x120")
 
 	-- Sol : dessus du ZoneFloor construit par ZoneBuilder, pas layout.Y.
 	local groundY = Lights.GetGroundY(layout)

@@ -39,6 +39,10 @@ function ZoneAccessTests.Run(): boolean
 	check(layout.GateX > layout.SummerEdgeX, "gate past summer edge")
 	check(layout.ArchX < layout.SummerEdgeX, "arch before summer edge")
 	check(layout.MidX > ZoneDefs.ClassicZone.Origin.X, "bridge mid à droite de classic")
+	check(math.abs(layout.SummerEdgeX - 168) < 1e-6, "bord entrée Summer X = 168")
+	check(math.abs(layout.ArchZ) < 1e-6, "entrée Summer centrée Z = 0")
+	check(layout.ZoneWidth == 120 and layout.ZoneDepth == 180, "layout Summer largeur 120 / profondeur 180")
+	check(layout.ZoneOrigin == Vector3.new(258, 6, 0), "centre Summer = (258, 6, 0)")
 
 	local summerReq = ZoneDefs.GetRequiredLevel("SummerZone")
 	check((1 < summerReq) == true, "ZoneAccess_1 collides with SummerGate")
@@ -54,9 +58,11 @@ function ZoneAccessTests.Run(): boolean
 	-- Classic board inchangé
 	check(classic.SizeX == GameConfig.Grid.SizeX and classic.SizeZ == GameConfig.Grid.SizeZ, "Classic 40x40")
 
-	-- Summer : board réduit, zone extérieure inchangée
-	check(L.OuterWidth == GameConfig.Grid.SizeX * GameConfig.Grid.Spacing, "outer width inchangée")
-	check(L.OuterDepth == GameConfig.Grid.SizeZ * GameConfig.Grid.Spacing, "outer depth inchangée")
+	-- Summer compacte : profondeur X -25 %, largeur Z -50 %.
+	check(L.ZoneDepth == 180, "profondeur Summer X = 180")
+	check(L.ZoneWidth == 120, "largeur Summer Z = 120")
+	check(L.ZoneDepth == GameConfig.Grid.SizeX * GameConfig.Grid.Spacing * 0.75, "profondeur réduite de 25 %")
+	check(L.ZoneWidth == GameConfig.Grid.SizeZ * GameConfig.Grid.Spacing * 0.5, "largeur réduite de 50 %")
 	check(summer.SizeX == L.BubbleColumns and summer.SizeZ == L.BubbleRows, "Size = Rows/Cols")
 	check(summer.SizeX < classic.SizeX, "Summer board plus petit (colonnes)")
 	check(summer.SizeZ < classic.SizeZ, "Summer board plus petit (rangées)")
@@ -83,8 +89,10 @@ function ZoneAccessTests.Run(): boolean
 		check(L.EntranceDecorMargin == 14, "EntranceDecorMargin = 14")
 		check(L.RearDecorMargin == 24, "RearDecorMargin = 24")
 		check(L.BubbleSpacing == GameConfig.Grid.Spacing, "BubbleSpacing = Grid.Spacing")
-		check(L.BubbleColumns == 33, "BubbleColumns = 33")
-		check(L.BubbleRows == 32, "BubbleRows = 32")
+		check(L.BubbleColumns == 23, "BubbleColumns = 23")
+		check(L.BubbleRows == 12, "BubbleRows = 12")
+		check(math.abs(L.BubbleBoardWidth - 141.4) < 0.05, "BubbleBoardWidth = 141.4")
+		check(math.abs(L.BubbleBoardDepth - 75.4) < 0.05, "BubbleBoardDepth = 75.4")
 	end
 
 	local function resolvePopZone(zoneIdArg: any, fallbackZoneId: string): string

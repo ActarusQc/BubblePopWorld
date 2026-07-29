@@ -7,6 +7,8 @@
 
 local RunService = game:GetService("RunService")
 
+local GameConfig = require(script.Parent.GameConfig)
+
 local SummerZoneEditingPreview = {}
 
 local STUDIO_ROOT = "StudioDecoration"
@@ -125,6 +127,8 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 	local t = layout.BorderThickness
 	local borderH = layout.BorderHeight
 	local y = layout.Y
+	local floorThickness = 1.4
+	local floorTopY = y - GameConfig.Grid.BubbleSize.Y * 0.35
 
 	SummerZoneEditingPreview.EnsureSummerZoneDecor()
 	SummerZoneEditingPreview.RemoveSummerZonePreview()
@@ -141,6 +145,10 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 	preview:SetAttribute("RearDecorMargin", layout.RearDecorMargin)
 	preview:SetAttribute("BubbleBoardWidth", layout.BubbleBoardWidth)
 	preview:SetAttribute("BubbleBoardDepth", layout.BubbleBoardDepth)
+	preview:SetAttribute("ZoneWidth", layout.ZoneWidth)
+	preview:SetAttribute("ZoneDepth", layout.ZoneDepth)
+	preview:SetAttribute("EntryCenterOffset", layout.EntryCenterOffset)
+	preview:SetAttribute("LightPerimeterSpacing", layout.LightPerimeterSpacing)
 	preview.Parent = root
 
 	local labelHost = ghostPart({
@@ -170,8 +178,8 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 	-- Plancher complet (emprise extérieure)
 	ghostPart({
 		Name = "Floor",
-		Size = Vector3.new(ex * 2, 1.2, ez * 2),
-		CFrame = CFrame.new(o.X, y - 0.6, o.Z),
+		Size = Vector3.new(ex * 2 + 4, floorThickness, ez * 2 + 4),
+		CFrame = CFrame.new(o.X, floorTopY - floorThickness / 2, o.Z),
 		Color = layout.FloorColor,
 		Transparency = 0.35,
 	}).Parent = preview

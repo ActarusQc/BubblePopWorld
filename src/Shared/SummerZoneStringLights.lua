@@ -14,6 +14,8 @@
 local InsertService = game:GetService("InsertService")
 local RunService = game:GetService("RunService")
 
+local SummerZoneConfig = require(script.Parent.SummerZoneConfig)
+
 local SummerZoneStringLights = {}
 
 local GENERATOR_ID = "SummerZoneStringLights"
@@ -23,7 +25,7 @@ local POST_ASSET_ID = 18953379883
 local STRING_ASSET_ID = 93169410099587
 
 -- Périmètre
-local POST_SPACING = 30
+local POST_SPACING = SummerZoneConfig.LightPerimeterSpacing
 local OUTER_INSET = 5
 local BOARD_CLEARANCE = 3
 local ENTRANCE_EXTRA_CLEAR = 10
