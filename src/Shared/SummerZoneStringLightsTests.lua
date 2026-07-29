@@ -106,20 +106,57 @@ function SummerZoneStringLightsTests.Run(): boolean
 	check(inEntrance == 0, "aucun poteau dans le gap d'entrée")
 	check(outsideZone == 0, "aucun poteau hors emprise Summer actuelle")
 
-	-- Segments guirlandes : 1 par arête entre poteaux voisins (boucle fermée, hors gaps).
-	local expectedMaxStrings = #points
-	check(expectedMaxStrings >= 8, "assez de segments potentiels pour un contour")
+	-- Contour attendu : compteurs et emprise dérivés du layout courant.
+	check(type(Lights.DescribePerimeter) == "function", "DescribePerimeter exposé")
+	local desc = Lights.DescribePerimeter(layout)
+	check(desc.PostCount == #points, "DescribePerimeter aligné sur ComputePerimeterPoints")
+	check(desc.ZoneDepth == layout.ZoneDepth and desc.ZoneWidth == layout.ZoneWidth, "description = dimensions actuelles")
+	check(math.abs(desc.MinX - (zoneO.X - layout.Ex + 5)) < 1e-6, "bord contour X min suit Ex")
+	check(math.abs(desc.MaxX - (zoneO.X + layout.Ex - 5)) < 1e-6, "bord contour X max suit Ex")
+	check(math.abs(desc.MinZ - (zoneO.Z - layout.Ez + 5)) < 1e-6, "bord contour Z min suit Ez")
+	check(math.abs(desc.MaxZ - (zoneO.Z + layout.Ez - 5)) < 1e-6, "bord contour Z max suit Ez")
+
+	-- Boucle fermée : un span par arête, sauf celui qui enjambe l'entrée (trop long).
+	check(desc.StringCount == desc.PostCount - 1, "exactement un span omis (l'entrée reste dégagée)")
+	check(desc.StringCount >= 8, "assez de guirlandes pour ceinturer la zone")
+	check(desc.EntranceGapWidth >= layout.ArchGap, "vide d'entrée au moins aussi large que l'arche")
+
+	-- Géométrie pure : relancer ne change rien (pas de dérive ni de doublon au recalcul).
+	local again = Lights.DescribePerimeter(layout)
+	check(again.PostCount == desc.PostCount and again.StringCount == desc.StringCount, "recalcul idempotent")
+
+	-- Aucun span ne traverse l'entrée.
+	local crossingEntrance = 0
+	for i = 1, #points do
+		local p1 = points[i].Position
+		local p2 = points[if i < #points then i + 1 else 1].Position
+		local dist = (p2 - p1).Magnitude
+		if dist <= Lights.POST_SPACING * 1.65 and dist >= 4 then
+			local midpoint = p1:Lerp(p2, 0.5)
+			local nearWest = midpoint.X <= zoneO.X - layout.Ex + 5 + 12
+			if nearWest and math.abs(midpoint.Z - layout.ArchZ) <= halfEntrance then
+				crossingEntrance += 1
+			end
+		end
+	end
+	check(crossingEntrance == 0, "aucune guirlande au-dessus de l'accès principal")
 
 	if ok then
 		print(string.format(
-			"[SummerZoneStringLightsTests] OK — %d poteaux potentiels / ≤%d guirlandes | zone %dx%d | sol %.2f | attache +%.1f | point bas +%.1f",
-			#points,
-			expectedMaxStrings,
+			"[SummerZoneStringLightsTests] OK — %d poteaux / %d guirlandes | zone %dx%d | contour X[%.0f..%.0f] Z[%.0f..%.0f]"
+				.. " | sol %.2f | attache +%.1f | point bas +%.1f | vide entrée %.0f",
+			desc.PostCount,
+			desc.StringCount,
 			layout.ZoneDepth,
 			layout.ZoneWidth,
+			desc.MinX,
+			desc.MaxX,
+			desc.MinZ,
+			desc.MaxZ,
 			groundY,
 			attachY - groundY,
-			lowest - groundY
+			lowest - groundY,
+			desc.EntranceGapWidth
 		))
 		print("[SummerZoneStringLightsTests] Ordre Studio: 1) Create/Refresh Summer Preview  2) Refresh Summer String Lights")
 	end

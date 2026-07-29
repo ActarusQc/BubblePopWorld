@@ -587,6 +587,53 @@ function SummerZoneStringLights.ComputePerimeterPoints(layout: any?): { Perimete
 	return unique
 end
 
+-- Description purement géométrique du contour attendu pour la zone telle qu'elle est
+-- configurée maintenant. Aucune lecture de Workspace : sert de référence de contrôle
+-- (tests, rapport) face à ce que CreateSummerPerimeterLights pose réellement.
+export type PerimeterDescription = {
+	ZoneDepth: number,
+	ZoneWidth: number,
+	Ex: number,
+	Ez: number,
+	PostCount: number,
+	StringCount: number,
+	MinX: number,
+	MaxX: number,
+	MinZ: number,
+	MaxZ: number,
+	EntranceGapWidth: number,
+}
+
+function SummerZoneStringLights.DescribePerimeter(layout: any?): PerimeterDescription
+	local ZoneDefs = getZoneDefs()
+	local L = layout or ZoneDefs.GetSummerBridgeLayout()
+	local points = SummerZoneStringLights.ComputePerimeterPoints(L)
+
+	local strings = 0
+	for i = 1, #points do
+		local a = points[i].Position
+		local b = points[if i < #points then i + 1 else 1].Position
+		local dist = (b - a).Magnitude
+		if dist <= POST_SPACING * 1.65 and dist >= 4 then
+			strings += 1
+		end
+	end
+
+	return {
+		ZoneDepth = L.ZoneDepth,
+		ZoneWidth = L.ZoneWidth,
+		Ex = L.Ex,
+		Ez = L.Ez,
+		PostCount = #points,
+		StringCount = strings,
+		MinX = L.ZoneOrigin.X - L.Ex + OUTER_INSET,
+		MaxX = L.ZoneOrigin.X + L.Ex - OUTER_INSET,
+		MinZ = L.ZoneOrigin.Z - L.Ez + OUTER_INSET,
+		MaxZ = L.ZoneOrigin.Z + L.Ez - OUTER_INSET,
+		EntranceGapWidth = (L.ArchGap or 18) + ENTRANCE_EXTRA_CLEAR * 2,
+	}
+end
+
 local function collectExistingDecorAvoid(decor: Instance, postsFolder: Instance, stringsFolder: Instance): { Vector3 }
 	local points: { Vector3 } = {}
 	for _, d in ipairs(decor:GetDescendants()) do
@@ -718,18 +765,28 @@ end
 -- Suppression ciblée (LightPosts / StringLights uniquement)
 --------------------------------------------------------------------
 
--- Ces dossiers sont réservés au générateur : on vide tous les enfants
--- (y compris orphelins sans attribut) sans toucher au reste de SummerZoneDecor.
-local function clearSystemFolderChildren(folder: Instance?): number
+-- LightPosts / StringLights sont réservés au générateur : leurs enfants sont vidés en
+-- entier. Les enfants marqués GeneratedBy sont retirés silencieusement ; ceux qui ne le
+-- sont pas (contour d'une ancienne version, copie manuelle) sont signalés par nom afin
+-- que rien ne disparaisse sans trace. Le reste de SummerZoneDecor n'est jamais touché.
+local function clearSystemFolderChildren(folder: Instance?): (number, number, { string })
 	if not folder then
-		return 0
+		return 0, 0, {}
 	end
-	local removed = 0
+	local generated, orphans = 0, 0
+	local orphanNames: { string } = {}
 	for _, child in ipairs(folder:GetChildren()) do
+		if isGenerated(child) then
+			generated += 1
+		else
+			orphans += 1
+			if #orphanNames < 12 then
+				table.insert(orphanNames, string.format("%s/%s", folder.Name, child.Name))
+			end
+		end
 		child:Destroy()
-		removed += 1
 	end
-	return removed
+	return generated, orphans, orphanNames
 end
 
 function SummerZoneStringLights.RemoveSummerPerimeterLights(): number
@@ -738,17 +795,36 @@ function SummerZoneStringLights.RemoveSummerPerimeterLights(): number
 		print("[SummerZoneStringLights] Rien à supprimer.")
 		return 0
 	end
-	local removed = clearSystemFolderChildren(posts) + clearSystemFolderChildren(strings)
+	local pg, po, pn = clearSystemFolderChildren(posts)
+	local sg, so, sn = clearSystemFolderChildren(strings)
+	local generated, orphans = pg + sg, po + so
 	print(string.format(
-		"[SummerZoneStringLights] Supprimé %d objet(s) dans LightPosts/StringLights. SummerZoneDecor conservé.",
-		removed
+		"[SummerZoneStringLights] Supprimé %d objet(s) générés + %d non marqué(s) dans LightPosts/StringLights."
+			.. " SummerZoneDecor et ses décors manuels conservés.",
+		generated,
+		orphans
 	))
-	return removed
+	if orphans > 0 then
+		local names = {}
+		for _, n in ipairs(pn) do
+			table.insert(names, n)
+		end
+		for _, n in ipairs(sn) do
+			table.insert(names, n)
+		end
+		warn(string.format(
+			"[SummerZoneStringLights] Objets sans attribut %s retirés des dossiers système : %s",
+			ATTR_FLAG,
+			table.concat(names, ", ")
+		))
+	end
+	return generated + orphans
 end
 
 function SummerZoneStringLights.RemoveGeneratedStringLights(): number
 	local _posts, strings = findFolders()
-	return clearSystemFolderChildren(strings)
+	local g, o = clearSystemFolderChildren(strings)
+	return g + o
 end
 
 --------------------------------------------------------------------
@@ -1093,14 +1169,20 @@ function SummerZoneStringLights.RefreshSummerPerimeterLights(): CreateResult?
 
 	local ZoneDefs = getZoneDefs()
 	local layout = ZoneDefs.GetSummerBridgeLayout()
+	local plan = SummerZoneStringLights.DescribePerimeter(layout)
 	print(string.format(
-		"[SummerZoneStringLights] Rebuild périmètre depuis layout actuel — Zone %dx%d | Ex=%.1f Ez=%.1f | board %dx%d",
-		layout.ZoneDepth,
-		layout.ZoneWidth,
-		layout.Ex,
-		layout.Ez,
-		layout.BubbleColumns,
-		layout.BubbleRows
+		"[SummerZoneStringLights] Rebuild depuis les dimensions actuelles — Zone %dx%d"
+			.. " | contour X[%.0f..%.0f] Z[%.0f..%.0f] | prévu %d poteaux / %d guirlandes"
+			.. " | vide entrée %.0f studs",
+		plan.ZoneDepth,
+		plan.ZoneWidth,
+		plan.MinX,
+		plan.MaxX,
+		plan.MinZ,
+		plan.MaxZ,
+		plan.PostCount,
+		plan.StringCount,
+		plan.EntranceGapWidth
 	))
 	return SummerZoneStringLights.CreateSummerPerimeterLights()
 end
