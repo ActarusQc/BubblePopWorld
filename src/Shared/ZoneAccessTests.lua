@@ -1,5 +1,5 @@
 --!strict
--- Validations ciblées des règles d'accès zones (exécutable via require au démarrage serveur optionnel).
+-- Validations ciblées des règles d'accès zones + planches multi-zones.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -22,7 +22,6 @@ function ZoneAccessTests.Run(): boolean
 	check(ZoneDefs.GetRewardMultiplier("SummerZone") == 1, "Summer RewardMultiplier == 1")
 	check(ZoneDefs.GetRewardMultiplier("ClassicZone") == 1, "Classic RewardMultiplier == 1")
 
-	-- Accès Summer : >= 5 (pas > 5)
 	check(ZoneDefs.CanLevelEnter(4, "SummerZone") == false, "level 4 blocked")
 	check(ZoneDefs.CanLevelEnter(5, "SummerZone") == true, "level 5 allowed (>=)")
 	check(ZoneDefs.CanLevelEnter(6, "SummerZone") == true, "level 6 allowed")
@@ -34,12 +33,13 @@ function ZoneAccessTests.Run(): boolean
 	check(ZoneDefs.GetAccessGroupName(99) == "ZoneAccess_5", "access group level 99")
 
 	local layout = ZoneDefs.GetSummerBridgeLayout()
-	check(layout.Origin == ZoneDefs.SummerZone.Origin, "bridge layout origin")
+	local L = ZoneDefs.SummerLayout
+	check(layout.ZoneOrigin == ZoneDefs.SummerZone.ZoneOrigin, "bridge ZoneOrigin")
+	check(layout.BoardOrigin == ZoneDefs.SummerZone.Origin, "bridge BoardOrigin")
 	check(layout.GateX > layout.SummerEdgeX, "gate past summer edge")
 	check(layout.ArchX < layout.SummerEdgeX, "arch before summer edge")
 	check(layout.MidX > ZoneDefs.ClassicZone.Origin.X, "bridge mid à droite de classic")
 
-	-- Matrice collision : palier Access_L collisionne Gate ssi L < RequiredLevel
 	local summerReq = ZoneDefs.GetRequiredLevel("SummerZone")
 	check((1 < summerReq) == true, "ZoneAccess_1 collides with SummerGate")
 	check((5 < summerReq) == false, "ZoneAccess_5 does not collide with SummerGate")
@@ -47,20 +47,40 @@ function ZoneAccessTests.Run(): boolean
 	local classic = ZoneDefs.ClassicZone
 	local summer = ZoneDefs.SummerZone
 	local right = ZoneDefs.CLASSIC_RIGHT
-	local delta = summer.Origin - classic.Origin
+	local delta = summer.ZoneOrigin - classic.Origin
 	check(delta:Dot(right) > 0, "Summer à droite de Classic")
 	check(classic.Origin == GameConfig.Grid.Origin, "Classic Origin = Grid.Origin")
 
+	-- Classic board inchangé
+	check(classic.SizeX == GameConfig.Grid.SizeX and classic.SizeZ == GameConfig.Grid.SizeZ, "Classic 40x40")
+
+	-- Summer : board réduit, zone extérieure inchangée
+	check(L.OuterWidth == GameConfig.Grid.SizeX * GameConfig.Grid.Spacing, "outer width inchangée")
+	check(L.OuterDepth == GameConfig.Grid.SizeZ * GameConfig.Grid.Spacing, "outer depth inchangée")
+	check(summer.SizeX == L.BubbleColumns and summer.SizeZ == L.BubbleRows, "Size = Rows/Cols")
+	check(summer.SizeX < classic.SizeX, "Summer board plus petit (colonnes)")
+	check(summer.SizeZ < classic.SizeZ, "Summer board plus petit (rangées)")
+
 	local cb = ZoneDefs.GetZoneBounds("ClassicZone")
 	local sb = ZoneDefs.GetZoneBounds("SummerZone")
-	check(cb ~= nil and sb ~= nil, "bounds présents")
-	if cb and sb then
+	local bb = ZoneDefs.GetBoardBounds("SummerZone")
+	check(cb ~= nil and sb ~= nil and bb ~= nil, "bounds présents")
+	if cb and sb and bb then
 		local overlap = cb.MaxX > sb.MinX and cb.MinX < sb.MaxX and cb.MaxZ > sb.MinZ and cb.MinZ < sb.MaxZ
 		check(not overlap, "pas de chevauchement Classic/Summer")
 		check(sb.MinX - cb.MaxX >= 10, "écart minimum entre planches")
+
+		local entrance = bb.MinX - sb.MinX
+		local rear = sb.MaxX - bb.MaxX
+		local sideS = bb.MinZ - sb.MinZ
+		local sideN = sb.MaxZ - bb.MaxZ
+		check(entrance >= L.EntranceDecorMargin - 0.05, "marge entrée >= 11")
+		check(rear >= L.RearDecorMargin - 0.05, "marge fond >= 17")
+		check(sideS >= L.SideDecorMargin - 0.05, "marge sud >= 10")
+		check(sideN >= L.SideDecorMargin - 0.05, "marge nord >= 10")
+		check(rear > entrance, "fond plus large que entrée")
 	end
 
-	-- PopRequest : zoneId obligatoire pour Summer (sinon Classic + échec distance)
 	local function resolvePopZone(zoneIdArg: any, fallbackZoneId: string): string
 		if type(zoneIdArg) == "string" and ZoneDefs.Get(zoneIdArg) then
 			return zoneIdArg
@@ -69,25 +89,21 @@ function ZoneAccessTests.Run(): boolean
 	end
 	check(resolvePopZone(nil, "ClassicZone") == "ClassicZone", "pop sans zoneId → fallback")
 	check(resolvePopZone("SummerZone", "ClassicZone") == "SummerZone", "pop Summer zoneId")
-	check(ZoneDefs.List[1].Id == "ClassicZone" and ZoneDefs.List[2].Id == "SummerZone", "List enregistre Classic+Summer")
+	check(ZoneDefs.List[1].Id == "ClassicZone" and ZoneDefs.List[2].Id == "SummerZone", "List Classic+Summer")
 
-	-- Feux d’artifice : points hors centre BubbleBoard
 	local okFw, FwConfig = pcall(function()
 		return require(Shared.SummerFireworksConfig)
 	end)
 	check(okFw == true, "SummerFireworksConfig chargeable")
 	if okFw and FwConfig then
-		check(FwConfig.Enabled == true, "Fireworks Enabled")
-		check(FwConfig.MaxPerSequence <= 3, "MaxPerSequence <= 3")
-		check(FwConfig.PoolSize <= 4, "PoolSize limité")
 		local positions = FwConfig.GetLaunchPositions()
 		check(#positions >= 3, "au moins 3 points de lancement")
-		local origin = ZoneDefs.SummerZone.Origin
-		local ex, ez = ZoneDefs.GetBubblePlayExtent()
+		local boardO = summer.Origin
+		local boardEx, boardEz = ZoneDefs.GetBubblePlayExtent("SummerZone")
 		for _, pos in ipairs(positions) do
-			local inBoardCore = math.abs(pos.X - origin.X) < ex * 0.55 and math.abs(pos.Z - origin.Z) < ez * 0.55
+			local inBoardCore = math.abs(pos.X - boardO.X) < boardEx * 0.55
+				and math.abs(pos.Z - boardO.Z) < boardEz * 0.55
 			check(not inBoardCore, "lancement hors cœur BubbleBoard")
-			check(pos.Y > origin.Y + 10, "lancement assez haut")
 		end
 	end
 

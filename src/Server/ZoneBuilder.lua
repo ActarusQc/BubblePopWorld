@@ -122,16 +122,21 @@ end
 
 function ZoneBuilder.EnsureStudioDecoration()
 	local root = ensureFolder(workspace, "StudioDecoration")
-	-- Jamais GeneratedByCode / jamais clear sur ce dossier ni SummerZoneDecor.
 	local zones = ensureFolder(root, "Zones")
 	ensureFolder(zones, "Classic")
 	ensureFolder(zones, "Summer")
-	-- Dossier décor manuel Summer (plugin / Studio) — ne jamais vider.
-	if not root:FindFirstChild("SummerZoneDecor") then
-		local decor = Instance.new("Folder")
+	local decor = root:FindFirstChild("SummerZoneDecor")
+	if not decor then
+		decor = Instance.new("Folder")
 		decor.Name = "SummerZoneDecor"
 		decor:SetAttribute("ManualDecor", true)
 		decor.Parent = root
+	end
+	-- Sous-dossiers manuels : créer s’ils manquent, ne jamais vider.
+	if decor:IsA("Folder") then
+		for _, name in ipairs({ "Nature", "BeachProps", "Structures", "Signs", "Effects" }) do
+			ensureFolder(decor, name)
+		end
 	end
 	return root
 end
@@ -150,18 +155,25 @@ function ZoneBuilder.EnsureGameZonesRoot(): Folder
 	return root
 end
 
-local function bubbleExtent(): (number, number)
-	return ZoneDefs.GetBubblePlayExtent()
+local function bubbleExtent(zoneDef: any): (number, number)
+	-- Murs = emprise extérieure (pas le board réduit).
+	if zoneDef.Id == "SummerZone" then
+		return ZoneDefs.GetOuterPlayExtent(zoneDef.Id)
+	end
+	return ZoneDefs.GetBubblePlayExtent(zoneDef.Id)
+end
+
+local function zoneCenter(zoneDef: any): Vector3
+	return zoneDef.ZoneOrigin or zoneDef.Origin
 end
 
 local function buildZoneBorders(boundsFolder: Folder, zoneDef: any, openWest: boolean, openEastForBridge: boolean)
 	clearGenerated(boundsFolder)
-	local G = Config.Grid
 	local W = Config.World
 	local t = W.BorderThickness
-	local ex, ez = bubbleExtent()
-	local o = zoneDef.Origin
-	local borderH = 5 -- 4–6 studs visibles
+	local ex, ez = bubbleExtent(zoneDef)
+	local o = zoneCenter(zoneDef)
+	local borderH = 5
 	local color = zoneDef.BorderColor or W.BorderColor
 
 	local function wall(name: string, size: Vector3, cf: CFrame, collide: boolean?)
@@ -210,8 +222,8 @@ end
 
 local function buildZoneTrigger(triggerFolder: Folder, zoneDef: any)
 	clearGenerated(triggerFolder)
-	local halfX, halfZ = ZoneDefs.GetGridHalfExtent()
-	local o = zoneDef.Origin
+	local halfX, halfZ = ZoneDefs.GetOuterHalfExtent(zoneDef.Id)
+	local o = zoneCenter(zoneDef)
 	local trigger = makePart({
 		Name = "AreaVolume",
 		Size = Vector3.new(halfX * 2 + 8, 40, halfZ * 2 + 8),
@@ -383,7 +395,7 @@ local function buildLevelGate(gameZones: Folder)
 	local gate = makePart({
 		Name = "ForceFieldGate",
 		Size = Vector3.new(2.5, 14, pathW),
-		CFrame = CFrame.new(gateX, y + 7, summer.Origin.Z),
+		CFrame = CFrame.new(gateX, y + 7, layout.ZoneOrigin.Z),
 		Color = Color3.fromRGB(80, 220, 230),
 		Material = Enum.Material.ForceField,
 		Transparency = 0.35,
@@ -407,7 +419,7 @@ local function buildLevelGate(gameZones: Folder)
 	local lock = decorPart({
 		Name = "LockSymbol",
 		Size = Vector3.new(1.2, 2.5, 2.5),
-		CFrame = CFrame.new(gateX - 1.5, y + 8, summer.Origin.Z),
+		CFrame = CFrame.new(gateX - 1.5, y + 8, layout.ZoneOrigin.Z),
 		Color = SUMMER.Sun,
 		Material = Enum.Material.Neon,
 		Parent = gateFolder,
@@ -429,135 +441,30 @@ local function buildLevelGate(gameZones: Folder)
 	L10nUtil.localize(lockLabel, L10n.ZoneLockIcon)
 end
 
-local function buildSummerGeneratedDecor(gameZones: Folder)
-	local summer = ZoneDefs.SummerZone
-	local o = summer.Origin
-	local halfX, halfZ = ZoneDefs.GetGridHalfExtent()
-	local summerFolder = gameZones:FindFirstChild("SummerZone") :: Folder
-	local decor = ensureFolder(summerFolder, "GeneratedDecor")
-	clearGenerated(decor)
+-- Plancher thématique extérieur + référence de contour (sans props décoratifs).
+local function buildDecorPerimeter(summerFolder: Folder)
+	local layout = ZoneDefs.GetSummerBridgeLayout()
+	local perimeter = ensureFolder(summerFolder, "DecorPerimeter")
+	clearGenerated(perimeter)
 
-	-- Bordure sable basse (hors grille, sud)
+	local halfX, halfZ = ZoneDefs.GetOuterHalfExtent("SummerZone")
+	local o = layout.ZoneOrigin
+	local thickness = 1.4
+	local floorTopY = o.Y - Config.Grid.BubbleSize.Y * 0.35
+
 	makePart({
-		Name = "SandBorderSouth",
-		Size = Vector3.new(halfX * 2 + 10, 1.2, 6),
-		CFrame = CFrame.new(o.X, o.Y - 1, o.Z - halfZ - 5),
-		Color = SUMMER.Sand,
+		Name = "ZoneFloor",
+		Size = Vector3.new(halfX * 2 + 4, thickness, halfZ * 2 + 4),
+		CFrame = CFrame.new(o.X, floorTopY - thickness / 2, o.Z),
+		Color = layout.FloorColor,
 		Material = Enum.Material.Sand,
+		Transparency = 0,
 		CanCollide = true,
-		Parent = decor,
-	})
-
-	-- Eau décorative (pas de collision)
-	decorPart({
-		Name = "WaterAccent",
-		Size = Vector3.new(halfX * 2 + 4, 0.4, 8),
-		CFrame = CFrame.new(o.X, o.Y - 1.5, o.Z + halfZ + 6),
-		Color = SUMMER.Water,
-		Material = Enum.Material.Glass,
-		Transparency = 0.35,
-		Parent = decor,
-	})
-
-	-- Palmiers simples (coins)
-	local palmSpots = {
-		Vector3.new(o.X - halfX - 6, o.Y, o.Z - halfZ + 10),
-		Vector3.new(o.X + halfX + 6, o.Y, o.Z - halfZ + 10),
-		Vector3.new(o.X - halfX - 6, o.Y, o.Z + halfZ - 10),
-		Vector3.new(o.X + halfX + 6, o.Y, o.Z + halfZ - 10),
-	}
-	for i, pos in ipairs(palmSpots) do
-		decorPart({
-			Name = "PalmTrunk" .. i,
-			Size = Vector3.new(1.4, 10, 1.4),
-			CFrame = CFrame.new(pos.X, pos.Y + 5, pos.Z),
-			Color = SUMMER.WoodDark,
-			Material = Enum.Material.Wood,
-			Parent = decor,
-		})
-		decorPart({
-			Name = "PalmLeaves" .. i,
-			Size = Vector3.new(8, 1.5, 8),
-			CFrame = CFrame.new(pos.X, pos.Y + 10.5, pos.Z),
-			Color = SUMMER.Lime,
-			Material = Enum.Material.Grass,
-			Parent = decor,
-		})
-	end
-
-	-- Parasols / chaises
-	for i, side in ipairs({ -1, 1 }) do
-		local px = o.X + side * (halfX + 5)
-		local pz = o.Z - 20
-		decorPart({
-			Name = "UmbrellaPole" .. i,
-			Size = Vector3.new(0.5, 7, 0.5),
-			CFrame = CFrame.new(px, o.Y + 3.5, pz),
-			Color = SUMMER.Wood,
-			Parent = decor,
-		})
-		decorPart({
-			Name = "UmbrellaTop" .. i,
-			Size = Vector3.new(7, 0.6, 7),
-			CFrame = CFrame.new(px, o.Y + 7.2, pz),
-			Color = if side < 0 then SUMMER.Coral else SUMMER.Sun,
-			Parent = decor,
-		})
-		decorPart({
-			Name = "BeachChair" .. i,
-			Size = Vector3.new(3, 1.2, 4),
-			CFrame = CFrame.new(px + side * 3, o.Y + 0.6, pz + 4),
-			Color = SUMMER.Sky,
-			Parent = decor,
-		})
-	end
-
-	-- Bouées / ballon / glacière
-	decorPart({
-		Name = "BeachBall",
-		Size = Vector3.new(2.5, 2.5, 2.5),
-		CFrame = CFrame.new(o.X + halfX + 4, o.Y + 1.2, o.Z),
-		Color = SUMMER.Coral,
-		Shape = Enum.PartType.Ball,
-		Parent = decor,
-	})
-	decorPart({
-		Name = "Cooler",
-		Size = Vector3.new(3, 2.2, 2),
-		CFrame = CFrame.new(o.X - halfX - 4, o.Y + 1.1, o.Z + 15),
-		Color = SUMMER.Turquoise,
-		Parent = decor,
-	})
-	decorPart({
-		Name = "FloatRing",
-		Size = Vector3.new(4, 0.8, 4),
-		CFrame = CFrame.new(o.X + 20, o.Y + 0.5, o.Z + halfZ + 4),
-		Color = SUMMER.Sun,
-		Parent = decor,
-	})
-
-	-- Kiosque limonade simple
-	local kioskPos = Vector3.new(o.X + halfX + 8, o.Y, o.Z + 40)
-	makePart({
-		Name = "LemonadeCounter",
-		Size = Vector3.new(8, 3, 4),
-		CFrame = CFrame.new(kioskPos.X, o.Y + 1.5, kioskPos.Z),
-		Color = SUMMER.Wood,
-		Material = Enum.Material.WoodPlanks,
-		CanCollide = true,
-		Parent = decor,
-	})
-	decorPart({
-		Name = "LemonadeRoof",
-		Size = Vector3.new(10, 0.6, 6),
-		CFrame = CFrame.new(kioskPos.X, o.Y + 5, kioskPos.Z),
-		Color = SUMMER.Sun,
-		Parent = decor,
+		Parent = perimeter,
 	})
 end
 
 function ZoneBuilder.BuildPlayZones()
-	-- Retire la preview Studio ; conserve SummerZoneDecor intact.
 	local okPreview, SummerPreview = pcall(function()
 		return require(Shared.SummerZoneEditingPreview)
 	end)
@@ -570,8 +477,6 @@ function ZoneBuilder.BuildPlayZones()
 
 	local summerFolder = gameZones:FindFirstChild("SummerZone") :: Folder
 
-	-- Classic : les SafetyBorders de ZoneService restent la référence (ouverture est ajoutée là).
-	-- Summer : bordures thématiques propres.
 	buildZoneBorders(ensureFolder(summerFolder, "Bounds"), ZoneDefs.SummerZone, true, false)
 
 	local classicFolder = gameZones:FindFirstChild("ClassicZone") :: Folder
@@ -580,12 +485,16 @@ function ZoneBuilder.BuildPlayZones()
 
 	buildBridgeAndEntrance(gameZones)
 	buildLevelGate(gameZones)
-	buildSummerGeneratedDecor(gameZones)
+	buildDecorPerimeter(summerFolder)
+
+	local legacyDecor = summerFolder:FindFirstChild("GeneratedDecor")
+	if legacyDecor then
+		legacyDecor:Destroy()
+	end
 
 	return gameZones
 end
 
--- Point milieu passerelle (pour résolution d'aire).
 function ZoneBuilder.GetBridgeMidX(): number
 	return ZoneDefs.GetSummerBridgeLayout().MidX
 end

@@ -26,6 +26,8 @@ type BoardState = {
 	zoneId: string,
 	themeId: string,
 	origin: Vector3,
+	sizeX: number,
+	sizeZ: number,
 	folder: Folder,
 	grid: { [number]: { [number]: any } },
 	rewardMult: number,
@@ -48,33 +50,61 @@ local effectQueue: { any } = {}
 --------------------------------------------------------------------
 -- Coordonnées (zone-aware)
 --------------------------------------------------------------------
+local function boardSizes(zoneId: string): (number, number)
+	local board = boards[zoneId]
+	if board then
+		return board.sizeX, board.sizeZ
+	end
+	return ZoneDefs.GetGridSize(zoneId)
+end
+
 function BubbleService.CellToWorld(x: number, z: number, zoneId: string?): Vector3
 	local id = zoneId or defaultZoneId
 	local board = boards[id]
-	local origin = if board then board.origin else G.Origin
-	return origin + Vector3.new((x - G.SizeX / 2) * G.Spacing, 0, (z - G.SizeZ / 2) * G.Spacing)
+	local def = ZoneDefs.Get(id)
+	local origin = if board then board.origin elseif def then def.Origin else G.Origin
+	local sizeX, sizeZ = boardSizes(id)
+	return origin + Vector3.new((x - sizeX / 2) * G.Spacing, 0, (z - sizeZ / 2) * G.Spacing)
 end
 
 function BubbleService.WorldToCell(pos: Vector3): (number, number, string)
-	local bestId = defaultZoneId
-	local bestDist = math.huge
-	for _, board in ipairs(boardList) do
-		local d = (Vector3.new(pos.X, 0, pos.Z) - Vector3.new(board.origin.X, 0, board.origin.Z)).Magnitude
-		if d < bestDist then
-			bestDist = d
-			bestId = board.zoneId
+	local bestId = ZoneDefs.ResolveZoneIdAt(pos)
+	if #boardList > 0 then
+		local contained: string? = nil
+		local bestDist = math.huge
+		local nearest = bestId
+		for _, board in ipairs(boardList) do
+			local halfX = (board.sizeX * G.Spacing) / 2
+			local halfZ = (board.sizeZ * G.Spacing) / 2
+			local o = board.origin
+			local inside = pos.X >= o.X - halfX
+				and pos.X <= o.X + halfX
+				and pos.Z >= o.Z - halfZ
+				and pos.Z <= o.Z + halfZ
+			if inside then
+				contained = board.zoneId
+				break
+			end
+			local d = (Vector3.new(pos.X, 0, pos.Z) - Vector3.new(o.X, 0, o.Z)).Magnitude
+			if d < bestDist then
+				bestDist = d
+				nearest = board.zoneId
+			end
 		end
+		bestId = contained or nearest
 	end
 	local board = boards[bestId]
-	local origin = if board then board.origin else G.Origin
+	local def = ZoneDefs.Get(bestId)
+	local origin = if board then board.origin elseif def then def.Origin else G.Origin
+	local sizeX, sizeZ = boardSizes(bestId)
 	local rel = pos - origin
-	return math.round(rel.X / G.Spacing + G.SizeX / 2),
-		math.round(rel.Z / G.Spacing + G.SizeZ / 2),
+	return math.round(rel.X / G.Spacing + sizeX / 2),
+		math.round(rel.Z / G.Spacing + sizeZ / 2),
 		bestId
 end
 
-function BubbleService.InBounds(x: number, z: number): boolean
-	return x >= 1 and x <= G.SizeX and z >= 1 and z <= G.SizeZ
+function BubbleService.InBounds(x: number, z: number, zoneId: string?): boolean
+	return ZoneDefs.InBounds(x, z, zoneId or defaultZoneId)
 end
 
 function BubbleService.GetBoard(zoneId: string): BoardState?
@@ -303,11 +333,15 @@ function BubbleService.BuildBoard(zoneDef: any)
 
 	local tintVariants = zoneDef.BubbleTintVariants or B.Appearance.TintVariants
 	local folder = resolveParentFolder(zoneId) :: Folder
+	local sizeX = zoneDef.SizeX or G.SizeX
+	local sizeZ = zoneDef.SizeZ or G.SizeZ
 
 	local board: BoardState = {
 		zoneId = zoneId,
 		themeId = zoneDef.ThemeId,
 		origin = zoneDef.Origin,
+		sizeX = sizeX,
+		sizeZ = sizeZ,
 		folder = folder,
 		grid = {},
 		rewardMult = zoneDef.RewardMultiplier or 1,
@@ -317,8 +351,8 @@ function BubbleService.BuildBoard(zoneDef: any)
 	table.insert(boardList, board)
 
 	do
-		local halfX = (G.SizeX * G.Spacing) / 2 + 2
-		local halfZ = (G.SizeZ * G.Spacing) / 2 + 2
+		local halfX = (sizeX * G.Spacing) / 2 + 2
+		local halfZ = (sizeZ * G.Spacing) / 2 + 2
 		local thickness = 1.2
 		local floorTopY = board.origin.Y - G.BubbleSize.Y * 0.35
 		local floor = Instance.new("Part")
@@ -338,9 +372,9 @@ function BubbleService.BuildBoard(zoneDef: any)
 		floor.Parent = folder
 	end
 
-	for x = 1, G.SizeX do
+	for x = 1, sizeX do
 		board.grid[x] = {}
-		for z = 1, G.SizeZ do
+		for z = 1, sizeZ do
 			board.grid[x][z] = buildBubble(board, x, z)
 		end
 		if x % 6 == 0 then
@@ -504,7 +538,7 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 	for _, c in ipairs(cells) do
 		local x, z = c[1], c[2]
 		local zid = (c[3] or zoneIdHint or defaultZoneId) :: string
-		if type(x) == "number" and type(z) == "number" and BubbleService.InBounds(x, z) then
+		if type(x) == "number" and type(z) == "number" and BubbleService.InBounds(x, z, zid) then
 			local profile = DataService.Get(player)
 			if not profile or not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zid) then
 				continue
@@ -574,20 +608,19 @@ end
 local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 	if type(x) ~= "number" or type(z) ~= "number" then return end
 	x, z = math.floor(x), math.floor(z)
-	if not BubbleService.InBounds(x, z) then return end
 	if not checkBudget(player) then return end
 
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not root then return end
 
-	-- Zone : client peut proposer ; serveur tranche via position si absent/invalide.
 	local zoneId: string
 	if type(zoneIdArg) == "string" and ZoneDefs.Get(zoneIdArg) then
 		zoneId = zoneIdArg
 	else
 		zoneId = BubbleService.GetZoneIdAt(root.Position)
 	end
+	if not BubbleService.InBounds(x, z, zoneId) then return end
 
 	local target = BubbleService.CellToWorld(x, z, zoneId)
 	local maxRange = if player:GetAttribute("HasWings") == true then B.WingPopRange else B.MaxPopRange
@@ -595,7 +628,6 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 		return
 	end
 
-	-- Accès zone : niveau autoritaire DataService (même source que le HUD).
 	local profile = DataService.Get(player)
 	if not profile or not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zoneId) then
 		return
@@ -645,8 +677,9 @@ function BubbleService.WorldFolder()
 end
 
 function BubbleService.IsAlive(x: number, z: number, zoneId: string?): boolean
-	if not BubbleService.InBounds(x, z) then return false end
-	local board = boards[zoneId or defaultZoneId]
+	local zid = zoneId or defaultZoneId
+	if not BubbleService.InBounds(x, z, zid) then return false end
+	local board = boards[zid]
 	local cell = board and board.grid[x] and board.grid[x][z]
 	return cell ~= nil and cell.alive == true
 end

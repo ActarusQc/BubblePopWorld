@@ -71,6 +71,13 @@ function SummerZoneEditingPreview.EnsureSummerZoneDecor(): Folder
 	local root = SummerZoneEditingPreview.EnsureStudioDecorationRoot()
 	local existing = root:FindFirstChild(DECOR_NAME)
 	if existing and existing:IsA("Folder") then
+		for _, name in ipairs({ "Nature", "BeachProps", "Structures", "Signs", "Effects" }) do
+			if not existing:FindFirstChild(name) then
+				local sub = Instance.new("Folder")
+				sub.Name = name
+				sub.Parent = existing
+			end
+		end
 		return existing
 	end
 	if existing then
@@ -81,6 +88,11 @@ function SummerZoneEditingPreview.EnsureSummerZoneDecor(): Folder
 	folder.Name = DECOR_NAME
 	folder:SetAttribute("ManualDecor", true)
 	folder.Parent = root
+	for _, name in ipairs({ "Nature", "BeachProps", "Structures", "Signs", "Effects" }) do
+		local sub = Instance.new("Folder")
+		sub.Name = name
+		sub.Parent = folder
+	end
 	return folder
 end
 
@@ -106,8 +118,10 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 
 	local ZoneDefs = getZoneDefs()
 	local layout = ZoneDefs.GetSummerBridgeLayout()
-	local o = layout.Origin
+	local o = layout.ZoneOrigin
+	local boardO = layout.BoardOrigin
 	local ex, ez = layout.Ex, layout.Ez
+	local boardEx, boardEz = layout.BoardEx, layout.BoardEz
 	local t = layout.BorderThickness
 	local borderH = layout.BorderHeight
 	local y = layout.Y
@@ -120,9 +134,10 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 	preview.Name = PREVIEW_NAME
 	preview:SetAttribute("SummerZonePreview", true)
 	preview:SetAttribute("StudioPreviewOnly", true)
+	preview:SetAttribute("BubbleColumns", layout.BubbleColumns)
+	preview:SetAttribute("BubbleRows", layout.BubbleRows)
 	preview.Parent = root
 
-	-- Étiquette claire
 	local labelHost = ghostPart({
 		Name = "PREVIEW_LABEL",
 		Size = Vector3.new(1, 1, 1),
@@ -147,7 +162,7 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 	title.TextScaled = true
 	title.Parent = bb
 
-	-- Plancher (emprise grille)
+	-- Plancher complet (emprise extérieure)
 	ghostPart({
 		Name = "Floor",
 		Size = Vector3.new(ex * 2, 1.2, ez * 2),
@@ -156,15 +171,24 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 		Transparency = 0.35,
 	}).Parent = preview
 
-	-- Emplacement BubbleBoard (volume grille)
-	local halfX, halfZ = ZoneDefs.GetGridHalfExtent()
+	-- Bordure décorative (anneau sous le board — marqueur)
+	ghostPart({
+		Name = "DecorPerimeterMarker",
+		Size = Vector3.new(ex * 2, 0.25, ez * 2),
+		CFrame = CFrame.new(o.X, y - 0.1, o.Z),
+		Color = Color3.fromRGB(230, 200, 140),
+		Material = Enum.Material.Sand,
+		Transparency = 0.55,
+	}).Parent = preview
+
+	-- BubbleBoard central réduit (dimensions exactes)
 	ghostPart({
 		Name = "BubbleBoardMarker",
-		Size = Vector3.new(halfX * 2, 0.4, halfZ * 2),
-		CFrame = CFrame.new(o.X, y + 0.2, o.Z),
+		Size = Vector3.new(boardEx * 2, 0.4, boardEz * 2),
+		CFrame = CFrame.new(boardO.X, y + 0.2, boardO.Z),
 		Color = Color3.fromRGB(80, 220, 230),
 		Material = Enum.Material.Neon,
-		Transparency = 0.65,
+		Transparency = 0.55,
 	}).Parent = preview
 
 	-- Limite générale (cadre filaire bas)

@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
+local ZoneDefs = require(Shared.ZoneDefs)
 local ToolDefs = require(Shared.ToolDefs)
 local Remotes = require(Shared.Remotes)
 local L10n = require(Shared.LocalizationStrings)
@@ -173,7 +174,7 @@ function ToolService.Give(player: Player, id: string)
 	end
 end
 
-local function resolveCells(def, cx: number, cz: number, direction: Vector3)
+local function resolveCells(def, cx: number, cz: number, direction: Vector3, zoneId: string)
 	local cells = {}
 	if def.Shape == "Single" then
 		table.insert(cells, { cx, cz })
@@ -215,7 +216,8 @@ local function resolveCells(def, cx: number, cz: number, direction: Vector3)
 		end
 
 	elseif def.Shape == "FullRow" then
-		for z = 1, Config.Grid.SizeZ do
+		local _, sizeZ = ZoneDefs.GetGridSize(zoneId)
+		for z = 1, sizeZ do
 			for dx = -def.Radius + 1, def.Radius - 1 do
 				table.insert(cells, { cx + dx, z })
 			end
@@ -276,7 +278,7 @@ local function onActivate(player: Player, _toolName: any, targetPos: any)
 		then root.CFrame.LookVector
 		else (targetPos - root.Position)
 
-	local cells = resolveCells(def, cx, cz, direction)
+	local cells = resolveCells(def, cx, cz, direction, zoneId)
 	-- Annoter chaque cellule avec la zone sous le joueur
 	local zoned: { { any } } = {}
 	for _, c in ipairs(cells) do

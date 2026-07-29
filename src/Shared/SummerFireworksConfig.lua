@@ -58,21 +58,18 @@ SummerFireworksConfig.Colors = {
 -- Points de lancement (monde) : hors centre BubbleBoard — bords / arche / fond.
 function SummerFireworksConfig.GetLaunchPositions(): { Vector3 }
 	local layout = ZoneDefs.GetSummerBridgeLayout()
-	local o = layout.Origin
+	local o = layout.ZoneOrigin
 	local ex, ez = layout.Ex, layout.Ez
 	local edge = SummerFireworksConfig.EdgeOffset
 	local yBase = layout.Y
 	local h = (SummerFireworksConfig.BurstHeightMin + SummerFireworksConfig.BurstHeightMax) * 0.5
 
 	return {
-		-- Fond est (arrière-plan)
 		Vector3.new(o.X + ex + edge, yBase + h, o.Z),
 		Vector3.new(o.X + ex + edge * 0.85, yBase + h + 4, o.Z + ez * 0.55),
 		Vector3.new(o.X + ex + edge * 0.85, yBase + h + 4, o.Z - ez * 0.55),
-		-- Nord / sud derrière les murs
 		Vector3.new(o.X + ex * 0.35, yBase + h + 2, o.Z + ez + edge),
 		Vector3.new(o.X + ex * 0.35, yBase + h + 2, o.Z - ez - edge),
-		-- Près de l’arche (hors plateau, côtés)
 		Vector3.new(layout.ArchX - 2, yBase + h + 6, o.Z + layout.ArchGap * 0.5 + 10),
 		Vector3.new(layout.ArchX - 2, yBase + h + 6, o.Z - layout.ArchGap * 0.5 - 10),
 	}
