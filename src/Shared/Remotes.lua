@@ -14,6 +14,11 @@ local EVENTS = {
 	"LeaderboardUpdate",-- serveur -> clients : classements
 	"ComboUpdate",      -- serveur -> client : combo en cours
 	"SetMusicMuted",    -- client -> serveur : préférence musique d'ambiance (boolean)
+	-- Bubble Transit
+	"RequestDestinationList", -- client -> serveur : transitId
+	"DestinationListUpdated", -- serveur -> client : liste destinations filtrée
+	"RequestTravel",          -- client -> serveur : destinationId, transitId
+	"TravelResult",           -- serveur -> client : ok / code / message
 }
 
 local FUNCTIONS = {

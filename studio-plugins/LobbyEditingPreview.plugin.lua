@@ -33,6 +33,11 @@ local lightsCreateBtn = toolbar:CreateButton(
 	"Place poteaux + guirlandes dans SummerZoneDecor (Edit) — remplace seulement les lumières générées",
 	"rbxassetid://6031068421"
 )
+local lightsRefreshBtn = toolbar:CreateButton(
+	"Refresh Summer String Lights",
+	"Repose les poteaux au sol, corrige leur hauteur et rebâtit les guirlandes pendantes",
+	"rbxassetid://6031068421"
+)
 local lightsRemoveBtn = toolbar:CreateButton(
 	"Remove Summer String Lights",
 	"Supprime uniquement LightPosts/StringLights générés — conserve le reste de SummerZoneDecor",
@@ -85,6 +90,13 @@ lightsCreateBtn.Click:Connect(function()
 	local M = getSharedModule("SummerZoneStringLights")
 	if M then
 		M.CreateSummerPerimeterLights()
+	end
+end)
+
+lightsRefreshBtn.Click:Connect(function()
+	local M = getSharedModule("SummerZoneStringLights")
+	if M then
+		M.RefreshSummerPerimeterLights()
 	end
 end)
 

@@ -4,7 +4,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ZoneDefs = require(Shared.ZoneDefs)
-local SummerZoneStringLights = require(Shared.SummerZoneStringLights)
+local GameConfig = require(Shared.GameConfig)
+local Lights = require(Shared.SummerZoneStringLights)
 
 local SummerZoneStringLightsTests = {}
 
@@ -17,18 +18,55 @@ function SummerZoneStringLightsTests.Run(): boolean
 		end
 	end
 
-	check(SummerZoneStringLights.POST_ASSET_ID == 18953379883, "post asset id")
-	check(SummerZoneStringLights.STRING_ASSET_ID == 93169410099587, "string asset id")
-	check(SummerZoneStringLights.POST_TARGET_HEIGHT >= 9 and SummerZoneStringLights.POST_TARGET_HEIGHT <= 12, "post height 9–12")
-	check(
-		SummerZoneStringLights.LIGHT_ATTACH_ABOVE_GROUND >= 7
-			and SummerZoneStringLights.LIGHT_ATTACH_ABOVE_GROUND <= 9,
-		"bulb height 7–9"
-	)
-	check(SummerZoneStringLights.POST_SPACING >= 20 and SummerZoneStringLights.POST_SPACING <= 40, "spacing raisonnable")
+	check(Lights.POST_ASSET_ID == 18953379883, "post asset id")
+	check(Lights.STRING_ASSET_ID == 93169410099587, "string asset id")
+	check(Lights.POST_TARGET_HEIGHT >= 9 and Lights.POST_TARGET_HEIGHT <= 12, "hauteur poteau 9–12")
+	check(Lights.STRING_LOWEST_TARGET >= 7 and Lights.STRING_LOWEST_TARGET <= 9, "point bas ampoules 7–9")
+	check(Lights.STRING_LOWEST_MIN >= 7, "plancher ampoules >= 7 (au-dessus des têtes)")
+	check(Lights.POST_SPACING >= 20 and Lights.POST_SPACING <= 40, "espacement raisonnable")
 
 	local layout = ZoneDefs.GetSummerBridgeLayout()
-	local points = SummerZoneStringLights.ComputePerimeterPoints(layout)
+
+	-- Sol : dessus du ZoneFloor construit par ZoneBuilder, pas layout.Y.
+	local groundY = Lights.GetGroundY(layout)
+	local expectedGround = layout.Y - GameConfig.Grid.BubbleSize.Y * 0.35
+	check(math.abs(groundY - expectedGround) < 1e-6, "sol = dessus du ZoneFloor")
+	check(groundY < layout.Y, "sol sous le plan des bulles")
+
+	-- Attache et courbe.
+	local attachY = groundY + Lights.POST_TARGET_HEIGHT - Lights.POST_GROUND_SINK - Lights.STRING_ATTACH_BELOW_TOP
+	check(attachY - groundY >= 9, "attache près du sommet du poteau (>= 9 studs)")
+	local sag = Lights.ComputeSagDepth(attachY, groundY)
+	check(sag > 0, "profondeur de courbe positive")
+	check(attachY - sag >= groundY + Lights.STRING_LOWEST_MIN - 1e-6, "point bas au-dessus des têtes")
+
+	local a = Vector3.new(0, attachY, 0)
+	local b = Vector3.new(Lights.POST_SPACING, attachY, 0)
+	local factor = Lights.MaxNodeSagFactor(Lights.STRING_CHAIN_PIECES)
+	check(factor > 0 and factor <= 1, "facteur de noeud dans ]0,1]")
+	local nodes = Lights.ComputeSagNodes(a, b, sag / factor, Lights.STRING_CHAIN_PIECES)
+	check(#nodes == Lights.STRING_CHAIN_PIECES + 1, "nombre de noeuds de courbe")
+	check(math.abs(nodes[1].Y - attachY) < 1e-6, "noeud de départ au point d'attache")
+	check(math.abs(nodes[#nodes].Y - attachY) < 1e-6, "noeud d'arrivée au point d'attache")
+
+	local lowest = math.huge
+	for _, n in ipairs(nodes) do
+		lowest = math.min(lowest, n.Y)
+		check(n.Y <= attachY + 1e-6, "aucun noeud au-dessus des attaches (pas d'arche inversée)")
+	end
+	check(lowest < attachY, "milieu de guirlande plus bas que les extrémités")
+	check(lowest >= groundY + Lights.STRING_LOWEST_MIN - 1e-6, "point le plus bas >= 7 studs du sol")
+	check(math.abs((attachY - lowest) - sag) < 1e-6, "noeud le plus bas exactement à la profondeur voulue")
+	check(lowest - groundY >= 7 and lowest - groundY <= 9, "point bas dans la fenêtre 7–9 studs")
+
+	-- Symétrie de la courbe.
+	local mid = math.floor(#nodes / 2)
+	if #nodes % 2 == 1 and mid >= 1 then
+		check(math.abs(nodes[mid].Y - nodes[#nodes - mid + 1].Y) < 1e-6, "courbe symétrique")
+	end
+
+	-- Périmètre : rien sur le board ni dans l'entrée.
+	local points = Lights.ComputePerimeterPoints(layout)
 	check(#points >= 8, "au moins 8 poteaux potentiels")
 	check(#points <= 36, "pas plus de 36 poteaux (mobile)")
 
@@ -37,6 +75,7 @@ function SummerZoneStringLightsTests.Run(): boolean
 	local inEntrance = 0
 	local halfEntrance = (layout.ArchGap or 18) / 2 + 10
 	for _, p in ipairs(points) do
+		check(math.abs(p.Position.Y - groundY) < 1e-6, "point de périmètre au niveau du sol")
 		if math.abs(p.Position.X - boardO.X) <= layout.BoardEx
 			and math.abs(p.Position.Z - boardO.Z) <= layout.BoardEz
 		then
@@ -52,9 +91,11 @@ function SummerZoneStringLightsTests.Run(): boolean
 
 	if ok then
 		print(string.format(
-			"[SummerZoneStringLightsTests] OK — %d points périmètre (espacement %d)",
+			"[SummerZoneStringLightsTests] OK — %d points périmètre | sol %.2f | attache +%.1f | point bas +%.1f",
 			#points,
-			SummerZoneStringLights.POST_SPACING
+			groundY,
+			attachY - groundY,
+			lowest - groundY
 		))
 	end
 	return ok

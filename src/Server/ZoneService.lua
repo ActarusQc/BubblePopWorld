@@ -2301,6 +2301,14 @@ function ZoneService.EnsureWorld(): Folder
 	ZoneBuilder.EnsureStudioDecoration()
 	ZoneBuilder.BuildPlayZones()
 
+	-- Capsules Bubble Transit + marqueurs d'arrivée (idempotent).
+	local okTravel, BubbleTransitBuilder = pcall(function()
+		return require(script.Parent.BubbleTransitBuilder)
+	end)
+	if okTravel and BubbleTransitBuilder and BubbleTransitBuilder.EnsureTerminals then
+		BubbleTransitBuilder.EnsureTerminals()
+	end
+
 	-- Décor d'horizon (montagnes) : Workspace.GeneratedWorld.EnvironmentBackdrop uniquement.
 	EnvironmentBackdropBuilder.Build()
 

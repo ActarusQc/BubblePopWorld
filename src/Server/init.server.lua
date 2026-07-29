@@ -8,6 +8,7 @@ local services = {
 	require(script.DataService),
 	require(script.BackpackService),
 	require(script.ZoneService),
+	require(script.TravelService),
 	require(script.GlobalCounterService),
 	require(script.ComboService),
 	require(script.AmbianceService),
@@ -52,6 +53,12 @@ do
 	end)
 	if okLights and lightsTests and lightsTests.Run then
 		lightsTests.Run()
+	end
+	local okTravel, travelTests = pcall(function()
+		return require(Shared.TravelConfigTests)
+	end)
+	if okTravel and travelTests and travelTests.Run then
+		travelTests.Run()
 	end
 end
 
