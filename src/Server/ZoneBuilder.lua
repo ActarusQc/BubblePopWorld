@@ -286,39 +286,10 @@ local function buildBridgeAndEntrance(gameZones: Folder)
 		end
 	end
 
-	-- Arche estivale à l'entrée Summer (côté ouest de Summer)
+	-- Ancres layout (arche 3D StudioDecoration/SummerZoneDecor — pas d'arche code)
 	local archX = layout.ArchX
 	local archZ = layout.ArchZ
 	local gap = layout.ArchGap
-	for _, side in ipairs({ -1, 1 }) do
-		makePart({
-			Name = if side < 0 then "ArchPillarL" else "ArchPillarR",
-			Size = Vector3.new(2, 12, 2),
-			CFrame = CFrame.new(archX, y + 6, archZ + side * (gap / 2)),
-			Color = SUMMER.Wood,
-			Material = Enum.Material.Wood,
-			CanCollide = true,
-			Parent = entrance,
-		})
-	end
-	makePart({
-		Name = "ArchLintel",
-		Size = Vector3.new(2.5, 2, gap + 4),
-		CFrame = CFrame.new(archX, y + 12, archZ),
-		Color = SUMMER.Turquoise,
-		Material = Enum.Material.SmoothPlastic,
-		CanCollide = true,
-		Parent = entrance,
-	})
-	decorPart({
-		Name = "ArchSun",
-		Size = Vector3.new(3, 3, 0.6),
-		CFrame = CFrame.new(archX - 1.5, y + 12.5, archZ),
-		Color = SUMMER.Sun,
-		Material = Enum.Material.Neon,
-		Shape = Enum.PartType.Cylinder,
-		Parent = entrance,
-	})
 
 	-- Planches de surf encadrant l'entrée
 	for i, side in ipairs({ -1, 1 }) do

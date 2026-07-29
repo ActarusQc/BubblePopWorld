@@ -245,27 +245,6 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 		}).Parent = entrance
 	end
 
-	local archX = layout.ArchX
-	local archZ = layout.ArchZ
-	local gap = layout.ArchGap
-	for _, side in ipairs({ -1, 1 }) do
-		ghostPart({
-			Name = if side < 0 then "ArchPillarL" else "ArchPillarR",
-			Size = Vector3.new(2, 12, 2),
-			CFrame = CFrame.new(archX, y + 6, archZ + side * (gap / 2)),
-			Color = Color3.fromRGB(160, 110, 60),
-			Material = Enum.Material.Wood,
-			Transparency = 0.35,
-		}).Parent = entrance
-	end
-	ghostPart({
-		Name = "ArchLintel",
-		Size = Vector3.new(2.5, 2, gap + 4),
-		CFrame = CFrame.new(archX, y + 12, archZ),
-		Color = Color3.fromRGB(40, 200, 210),
-		Transparency = 0.35,
-	}).Parent = entrance
-
 	-- Emplacement porte (fantôme, pas de Touched / pas de collision)
 	ghostPart({
 		Name = "GateMarker",

@@ -5,9 +5,9 @@
 local MusicConfig = {}
 
 -- Remplacer les IDs ici. rbxassetid://0 = pas encore configuré (pas de lecture).
-MusicConfig.LOBBY_MUSIC_ID = "rbxassetid://1842413282"
-MusicConfig.MAIN_BUBBLE_ZONE_MUSIC_ID = "rbxassetid://0"
-MusicConfig.SUMMER_ZONE_MUSIC_ID = "rbxassetid://0"
+MusicConfig.LOBBY_MUSIC_ID = "rbxassetid://132319769870114"
+MusicConfig.MAIN_BUBBLE_ZONE_MUSIC_ID = "rbxassetid://132358134818032"
+MusicConfig.SUMMER_ZONE_MUSIC_ID = "rbxassetid://1841668957"
 
 MusicConfig.MusicVolume = 0.25
 MusicConfig.CrossfadeSeconds = 1.5
