@@ -47,6 +47,12 @@ do
 	if okLb and lbTests and lbTests.Run then
 		lbTests.Run()
 	end
+	local okLights, lightsTests = pcall(function()
+		return require(Shared.SummerZoneStringLightsTests)
+	end)
+	if okLights and lightsTests and lightsTests.Run then
+		lightsTests.Run()
+	end
 end
 
 print("[Bubble Pop World] serveur prêt.")

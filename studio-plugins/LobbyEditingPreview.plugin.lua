@@ -28,6 +28,17 @@ local summerRemoveBtn = toolbar:CreateButton(
 	"rbxassetid://6031097226"
 )
 
+local lightsCreateBtn = toolbar:CreateButton(
+	"Add Summer String Lights",
+	"Place poteaux + guirlandes dans SummerZoneDecor (Edit) — remplace seulement les lumières générées",
+	"rbxassetid://6031068421"
+)
+local lightsRemoveBtn = toolbar:CreateButton(
+	"Remove Summer String Lights",
+	"Supprime uniquement LightPosts/StringLights générés — conserve le reste de SummerZoneDecor",
+	"rbxassetid://6031068421"
+)
+
 local function getSharedModule(name)
 	local shared = game:GetService("ReplicatedStorage"):FindFirstChild("Shared")
 	if not shared then
@@ -67,5 +78,19 @@ summerRemoveBtn.Click:Connect(function()
 	local M = getSharedModule("SummerZoneEditingPreview")
 	if M then
 		M.RemoveSummerZonePreview()
+	end
+end)
+
+lightsCreateBtn.Click:Connect(function()
+	local M = getSharedModule("SummerZoneStringLights")
+	if M then
+		M.CreateSummerPerimeterLights()
+	end
+end)
+
+lightsRemoveBtn.Click:Connect(function()
+	local M = getSharedModule("SummerZoneStringLights")
+	if M then
+		M.RemoveSummerPerimeterLights()
 	end
 end)
