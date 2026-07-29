@@ -84,7 +84,7 @@ function ZoneAccessTests.Run(): boolean
 		check(L.RearDecorMargin == 24, "RearDecorMargin = 24")
 		check(L.BubbleSpacing == GameConfig.Grid.Spacing, "BubbleSpacing = Grid.Spacing")
 		check(L.BubbleColumns == 33, "BubbleColumns = 33")
-		check(L.BubbleRows == 34, "BubbleRows = 34")
+		check(L.BubbleRows == 32, "BubbleRows = 32")
 	end
 
 	local function resolvePopZone(zoneIdArg: any, fallbackZoneId: string): string

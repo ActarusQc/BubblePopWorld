@@ -69,7 +69,8 @@ local summerZoneOrigin = classicOrigin + CLASSIC_RIGHT * (OUTER_HALF_X * 2 + INT
 local availableHalfX = (OUTER_HALF_X * 2 - EntranceDecorMargin - RearDecorMargin) / 2
 local availableHalfZ = (OUTER_HALF_Z * 2 - SideDecorMargin * 2) / 2
 local BubbleColumns = maxCellsForExtent(availableHalfX)
-local BubbleRows = maxCellsForExtent(availableHalfZ)
+-- −2 rangées : bordure décorative Z plus large (mirador / props), colonnes inchangées.
+local BubbleRows = math.max(1, maxCellsForExtent(availableHalfZ) - 2)
 local boardEx, boardEz = playExtentForSize(BubbleColumns, BubbleRows)
 local BubbleBoardWidth = boardEx * 2
 local BubbleBoardDepth = boardEz * 2
