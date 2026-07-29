@@ -5,8 +5,13 @@
 -- Ne vide jamais SummerZoneDecor / StudioDecoration.
 -- Usage (plugin ou Command Bar, Rojo connecté) :
 --   require(...).CreateSummerPerimeterLights()
---   require(...).RefreshSummerPerimeterLights()
+--   require(...).RefreshSummerPerimeterLights()  -- = rebuild complet depuis ZoneDefs actuel
+--   require(...).RebuildSummerPerimeterLights() -- alias explicite
 --   require(...).RemoveSummerPerimeterLights()
+--
+-- Ordre Studio recommandé :
+--   1) Create/Refresh Summer Preview
+--   2) Refresh Summer String Lights  (recalcule le contour sur les dimensions actuelles)
 --
 -- Toute la géométrie passe par les helpers AABB monde ci-dessous : le pivot des
 -- assets importés n'est jamais supposé centré ni au sol.
@@ -710,19 +715,19 @@ local function analyzeStringTemplate(template: Instance): TemplateInfo
 end
 
 --------------------------------------------------------------------
--- Suppression ciblée
+-- Suppression ciblée (LightPosts / StringLights uniquement)
 --------------------------------------------------------------------
 
-local function clearGeneratedChildren(folder: Instance?): number
+-- Ces dossiers sont réservés au générateur : on vide tous les enfants
+-- (y compris orphelins sans attribut) sans toucher au reste de SummerZoneDecor.
+local function clearSystemFolderChildren(folder: Instance?): number
 	if not folder then
 		return 0
 	end
 	local removed = 0
 	for _, child in ipairs(folder:GetChildren()) do
-		if isGenerated(child) or isGenerated(folder) then
-			child:Destroy()
-			removed += 1
-		end
+		child:Destroy()
+		removed += 1
 	end
 	return removed
 end
@@ -733,14 +738,17 @@ function SummerZoneStringLights.RemoveSummerPerimeterLights(): number
 		print("[SummerZoneStringLights] Rien à supprimer.")
 		return 0
 	end
-	local removed = clearGeneratedChildren(posts) + clearGeneratedChildren(strings)
-	print(string.format("[SummerZoneStringLights] Supprimé %d objet(s) généré(s). SummerZoneDecor conservé.", removed))
+	local removed = clearSystemFolderChildren(posts) + clearSystemFolderChildren(strings)
+	print(string.format(
+		"[SummerZoneStringLights] Supprimé %d objet(s) dans LightPosts/StringLights. SummerZoneDecor conservé.",
+		removed
+	))
 	return removed
 end
 
 function SummerZoneStringLights.RemoveGeneratedStringLights(): number
 	local _posts, strings = findFolders()
-	return clearGeneratedChildren(strings)
+	return clearSystemFolderChildren(strings)
 end
 
 --------------------------------------------------------------------
@@ -1074,79 +1082,32 @@ function SummerZoneStringLights.CreateSummerPerimeterLights(): CreateResult?
 	return result
 end
 
--- Corrige les poteaux déjà générés (sol + hauteur) puis reconstruit les guirlandes.
+-- Rebuild complet : lit ZoneDefs actuel, purge LightPosts/StringLights, recree le contour.
+-- (L'ancien Refresh ne faisait que corriger la hauteur des poteaux existants — d'où le
+-- contour resté calé sur l'ancienne emprise après un redimensionnement de zone.)
 function SummerZoneStringLights.RefreshSummerPerimeterLights(): CreateResult?
 	if RunService:IsRunning() then
 		warn("[SummerZoneStringLights] Refresh uniquement en mode Edit (pas en Play).")
 		return nil
 	end
 
-	local postsFolder, stringsFolder = findFolders()
-	local existing: { Instance } = {}
-	if postsFolder then
-		for _, child in ipairs(postsFolder:GetChildren()) do
-			if isGenerated(child) or isGenerated(postsFolder) then
-				table.insert(existing, child)
-			end
-		end
-	end
-	if #existing == 0 or not postsFolder or not stringsFolder then
-		print("[SummerZoneStringLights] Aucun poteau généré — création complète.")
-		return SummerZoneStringLights.CreateSummerPerimeterLights()
-	end
-
-	table.sort(existing, function(a, b)
-		return a.Name < b.Name
-	end)
-
 	local ZoneDefs = getZoneDefs()
 	local layout = ZoneDefs.GetSummerBridgeLayout()
-	local groundY = SummerZoneStringLights.GetGroundY(layout)
-	local ignore: { Instance } = { postsFolder, stringsFolder }
+	print(string.format(
+		"[SummerZoneStringLights] Rebuild périmètre depuis layout actuel — Zone %dx%d | Ex=%.1f Ez=%.1f | board %dx%d",
+		layout.ZoneDepth,
+		layout.ZoneWidth,
+		layout.Ex,
+		layout.Ez,
+		layout.BubbleColumns,
+		layout.BubbleRows
+	))
+	return SummerZoneStringLights.CreateSummerPerimeterLights()
+end
 
-	local placements: { PostPlacement } = {}
-	for _, post in ipairs(existing) do
-		prepareDecorModel(post)
-		local center = aabbCenter(post)
-		if not center then
-			continue
-		end
-		local localGround = groundYAt(center.X, center.Z, layout, ignore)
-		local placement = fitPostToGround(post, localGround)
-		if placement then
-			table.insert(placements, placement)
-		end
-	end
-
-	SummerZoneStringLights.RemoveGeneratedStringLights()
-
-	local stringTemplate = SummerZoneStringLights.LoadAssetTemplate(STRING_ASSET_ID)
-	if not stringTemplate then
-		warn("[SummerZoneStringLights] Poteaux corrigés, mais asset guirlande introuvable.")
-		return nil
-	end
-	stringTemplate.Parent = nil
-
-	local attachPoints: { Vector3 } = {}
-	for _, placement in ipairs(placements) do
-		table.insert(attachPoints, placement.Attach)
-	end
-
-	local stringCount, mode, lowest = buildSegments(stringTemplate, attachPoints, groundY, stringsFolder :: Folder)
-	stringTemplate:Destroy()
-
-	local attachAbove = if #placements > 0 then placements[1].Attach.Y - placements[1].GroundY else 0
-	local result: CreateResult = {
-		PostCount = #placements,
-		StringCount = stringCount,
-		PostHeight = POST_TARGET_HEIGHT,
-		GroundY = groundY,
-		AttachHeightAboveGround = attachAbove,
-		LowestBulbAboveGround = lowest,
-		Mode = mode,
-	}
-	report(result)
-	return result
+-- Alias explicite pour le plugin / Command Bar.
+function SummerZoneStringLights.RebuildSummerPerimeterLights(): CreateResult?
+	return SummerZoneStringLights.RefreshSummerPerimeterLights()
 end
 
 -- Constantes exposées pour tests / rapport.

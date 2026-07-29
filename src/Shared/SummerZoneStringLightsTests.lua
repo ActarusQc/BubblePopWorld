@@ -25,6 +25,11 @@ function SummerZoneStringLightsTests.Run(): boolean
 	check(Lights.STRING_LOWEST_MIN >= 7, "plancher ampoules >= 7 (au-dessus des têtes)")
 	check(Lights.POST_SPACING >= 20 and Lights.POST_SPACING <= 40, "espacement raisonnable")
 	check(Lights.POST_SPACING == 30, "espacement centralisé = 30")
+	check(type(Lights.RebuildSummerPerimeterLights) == "function", "alias RebuildSummerPerimeterLights")
+	check(type(Lights.RefreshSummerPerimeterLights) == "function", "RefreshSummerPerimeterLights")
+	check(type(Lights.CreateSummerPerimeterLights) == "function", "CreateSummerPerimeterLights")
+	check(type(Lights.RemoveSummerPerimeterLights) == "function", "RemoveSummerPerimeterLights")
+	check(Lights.GENERATOR_ID == "SummerZoneStringLights", "GeneratedBy id")
 
 	local layout = ZoneDefs.GetSummerBridgeLayout()
 	check(layout.Ex == 90 and layout.Ez == 66, "périmètre compact 180x132")
@@ -101,14 +106,22 @@ function SummerZoneStringLightsTests.Run(): boolean
 	check(inEntrance == 0, "aucun poteau dans le gap d'entrée")
 	check(outsideZone == 0, "aucun poteau hors emprise Summer actuelle")
 
+	-- Segments guirlandes : 1 par arête entre poteaux voisins (boucle fermée, hors gaps).
+	local expectedMaxStrings = #points
+	check(expectedMaxStrings >= 8, "assez de segments potentiels pour un contour")
+
 	if ok then
 		print(string.format(
-			"[SummerZoneStringLightsTests] OK — %d points périmètre | sol %.2f | attache +%.1f | point bas +%.1f",
+			"[SummerZoneStringLightsTests] OK — %d poteaux potentiels / ≤%d guirlandes | zone %dx%d | sol %.2f | attache +%.1f | point bas +%.1f",
 			#points,
+			expectedMaxStrings,
+			layout.ZoneDepth,
+			layout.ZoneWidth,
 			groundY,
 			attachY - groundY,
 			lowest - groundY
 		))
+		print("[SummerZoneStringLightsTests] Ordre Studio: 1) Create/Refresh Summer Preview  2) Refresh Summer String Lights")
 	end
 	return ok
 end
