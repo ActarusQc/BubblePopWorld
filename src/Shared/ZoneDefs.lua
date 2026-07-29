@@ -41,14 +41,15 @@ local INTER_ZONE_GAP = 48
 --------------------------------------------------------------------
 -- Summer : emprise extérieure inchangée ; BubbleBoard réduit + marges décor.
 --------------------------------------------------------------------
-local SideDecorMargin = 10
-local EntranceDecorMargin = 11
-local RearDecorMargin = 17
+local SideDecorMargin = 16
+local EntranceDecorMargin = 14
+local RearDecorMargin = 24
+local BubbleSpacing = G.Spacing
 
 local function playExtentForSize(sizeX: number, sizeZ: number): (number, number)
 	local safetyGap = 2
-	local ex = ((sizeX / 2) - 0.5) * G.Spacing + G.BubbleSize.X / 2 + safetyGap
-	local ez = ((sizeZ / 2) - 0.5) * G.Spacing + G.BubbleSize.Z / 2 + safetyGap
+	local ex = ((sizeX / 2) - 0.5) * BubbleSpacing + G.BubbleSize.X / 2 + safetyGap
+	local ez = ((sizeZ / 2) - 0.5) * BubbleSpacing + G.BubbleSize.Z / 2 + safetyGap
 	return ex, ez
 end
 
@@ -139,6 +140,7 @@ ZoneDefs.SummerLayout = {
 	SideDecorMargin = SideDecorMargin,
 	EntranceDecorMargin = EntranceDecorMargin,
 	RearDecorMargin = RearDecorMargin,
+	BubbleSpacing = BubbleSpacing,
 	BubbleBoardWidth = BubbleBoardWidth,
 	BubbleBoardDepth = BubbleBoardDepth,
 	BubbleRows = BubbleRows,
@@ -265,6 +267,7 @@ export type SummerBridgeLayout = {
 	SideDecorMargin: number,
 	EntranceDecorMargin: number,
 	RearDecorMargin: number,
+	BubbleSpacing: number,
 	BubbleRows: number,
 	BubbleColumns: number,
 	BubbleBoardWidth: number,
@@ -310,6 +313,7 @@ function ZoneDefs.GetSummerBridgeLayout(): SummerBridgeLayout
 		SideDecorMargin = layout.SideDecorMargin,
 		EntranceDecorMargin = layout.EntranceDecorMargin,
 		RearDecorMargin = layout.RearDecorMargin,
+		BubbleSpacing = layout.BubbleSpacing,
 		BubbleRows = layout.BubbleRows,
 		BubbleColumns = layout.BubbleColumns,
 		BubbleBoardWidth = layout.BubbleBoardWidth,

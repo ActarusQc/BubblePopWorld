@@ -9,6 +9,11 @@ EnvironmentBackdropConfig.WorldCenter = Vector3.new(0, 0, -90)
 EnvironmentBackdropConfig.GroundY = -10
 EnvironmentBackdropConfig.Seed = 20260727
 
+-- Marge (studs) autour de l’emprise Summer Zone : aucun décor d’horizon ne doit
+-- chevaucher cette zone (montagnes vertes Foothills / collines GroundBand / etc.).
+-- L’horizon lointain hors emprise reste généré normalement.
+EnvironmentBackdropConfig.SummerExclusionPad = 12
+
 EnvironmentBackdropConfig.Foothills = {
 	RadiusMin = 220,
 	RadiusMax = 320,
@@ -19,8 +24,8 @@ EnvironmentBackdropConfig.Foothills = {
 	WidthMax = 95,
 	DepthMin = 28,
 	DepthMax = 55,
-	-- Centres tombant dans Summer Zone (seed 20260727) — ne pas créer.
-	SkipIndices = { 1, 2 },
+	-- Filet seed 20260727 (exclusion géométrique = source de vérité).
+	SkipIndices = { 1, 2, 3 },
 	Colors = {
 		Color3.fromRGB(42, 78, 72),
 		Color3.fromRGB(38, 70, 78),
@@ -39,6 +44,7 @@ EnvironmentBackdropConfig.MainMountains = {
 	WidthMax = 140,
 	DepthMin = 40,
 	DepthMax = 80,
+	SkipIndices = { 1, 2, 3 },
 	Colors = {
 		Color3.fromRGB(58, 72, 92),
 		Color3.fromRGB(48, 60, 78),
@@ -59,6 +65,7 @@ EnvironmentBackdropConfig.FarPeaks = {
 	DepthMin = 45,
 	DepthMax = 90,
 	SnowCapChance = 0.42,
+	SkipIndices = { 2 },
 	Colors = {
 		Color3.fromRGB(78, 92, 112),
 		Color3.fromRGB(88, 100, 118),
@@ -79,6 +86,10 @@ EnvironmentBackdropConfig.GroundBand = {
 	HillHeightMin = 8,
 	HillHeightMax = 22,
 	RockCount = 16,
+	-- Indices seed 20260727 qui chevauchent Summer (filet + exclusion géométrique).
+	SkipSegmentIndices = { 1, 2, 3 },
+	SkipHillIndices = { 1, 2 },
+	SkipRockIndices = { 1, 2, 3 },
 	Colors = {
 		Color3.fromRGB(34, 72, 68),
 		Color3.fromRGB(40, 80, 72),
@@ -103,6 +114,7 @@ EnvironmentBackdropConfig.Trees = {
 	TreesPerClusterMax = 5,
 	RadiusMin = 180,
 	RadiusMax = 280,
+	SkipClusterIndices = { 1, 2 },
 	TrunkColor = Color3.fromRGB(62, 44, 32),
 	FoliageColors = {
 		Color3.fromRGB(28, 78, 52),

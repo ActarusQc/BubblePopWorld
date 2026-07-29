@@ -7,11 +7,36 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.EnvironmentBackdropConfig)
+local ZoneDefs = require(Shared.ZoneDefs)
 
 local EnvironmentBackdropBuilder = {}
 
 local GENERATED_FOLDER = "GeneratedWorld"
 local MODEL_NAME = "EnvironmentBackdrop"
+
+-- Empêche la création de décors d’horizon qui chevauchent la Summer Zone.
+local function overlapsSummerZone(x: number, z: number, halfExtentX: number, halfExtentZ: number): boolean
+	local sb = ZoneDefs.GetZoneBounds("SummerZone")
+	if not sb then
+		return false
+	end
+	local pad = Config.SummerExclusionPad or 12
+	local minX = sb.MinX - pad
+	local maxX = sb.MaxX + pad
+	local minZ = sb.MinZ - pad
+	local maxZ = sb.MaxZ + pad
+	return not (x + halfExtentX < minX or x - halfExtentX > maxX or z + halfExtentZ < minZ or z - halfExtentZ > maxZ)
+end
+
+local function indexSet(indices: { number }?): { [number]: boolean }
+	local set: { [number]: boolean } = {}
+	if indices then
+		for _, idx in ipairs(indices) do
+			set[idx] = true
+		end
+	end
+	return set
+end
 
 local function createRng(seed: number): () -> number
 	local state = math.floor(seed) % 2147483647
@@ -205,12 +230,7 @@ local function buildMountainLayer(
 	folder.Name = layerName
 	folder.Parent = parent
 
-	local skip: { [number]: boolean } = {}
-	if layer.SkipIndices then
-		for _, idx in ipairs(layer.SkipIndices) do
-			skip[idx] = true
-		end
-	end
+	local skip = indexSet(layer.SkipIndices)
 
 	for i = 1, layer.Count do
 		local angle, radius = ringPlacement(rng, i, layer.Count, layer.RadiusMin, layer.RadiusMax)
@@ -221,8 +241,11 @@ local function buildMountainLayer(
 		local yawJitter = (rng() - 0.5) * 0.7
 		local snowChance = layer.SnowCapChance or 0
 		local withSnow = snowChance > 0 and rng() < snowChance
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+		local blocked = skip[i] or overlapsSummerZone(x, z, width * 0.5, depth * 0.5)
 		-- Consomme le RNG même si skip → le reste de l'horizon reste identique.
-		if not skip[i] then
+		if not blocked then
 			buildMountain(
 				folder,
 				string.format("%s_%02d", layerName, i),
@@ -248,6 +271,10 @@ local function buildGroundBand(parent: Folder, rng: () -> number, center: Vector
 	folder.Name = "GroundBand"
 	folder.Parent = parent
 
+	local skipSeg = indexSet((cfg :: any).SkipSegmentIndices)
+	local skipHill = indexSet((cfg :: any).SkipHillIndices)
+	local skipRock = indexSet((cfg :: any).SkipRockIndices)
+
 	for i = 1, cfg.SegmentCount do
 		local angle, radius = ringPlacement(rng, i, cfg.SegmentCount, cfg.RadiusMin, cfg.RadiusMax)
 		local width = lerp(cfg.WidthMin, cfg.WidthMax, rng())
@@ -255,13 +282,16 @@ local function buildGroundBand(parent: Folder, rng: () -> number, center: Vector
 		local x = center.X + math.cos(angle) * radius
 		local z = center.Z + math.sin(angle) * radius
 		local yaw = angle + math.pi / 2 + (rng() - 0.5) * 0.35
-		makeBlock(
-			folder,
-			string.format("Ground_%02d", i),
-			Vector3.new(width, cfg.Thickness, length),
-			CFrame.new(x, groundY + cfg.Thickness * 0.35, z) * CFrame.Angles(0, yaw, 0),
-			pickColor(rng, cfg.BaseColors)
-		)
+		local color = pickColor(rng, cfg.BaseColors)
+		if not skipSeg[i] and not overlapsSummerZone(x, z, width * 0.5, length * 0.5) then
+			makeBlock(
+				folder,
+				string.format("Ground_%02d", i),
+				Vector3.new(width, cfg.Thickness, length),
+				CFrame.new(x, groundY + cfg.Thickness * 0.35, z) * CFrame.Angles(0, yaw, 0),
+				color
+			)
+		end
 	end
 
 	for i = 1, cfg.HillCount do
@@ -272,13 +302,16 @@ local function buildGroundBand(parent: Folder, rng: () -> number, center: Vector
 		local x = center.X + math.cos(angle) * radius
 		local z = center.Z + math.sin(angle) * radius
 		local yaw = angle + math.pi / 2 + (rng() - 0.5) * 0.5
-		makeWedge(
-			folder,
-			string.format("Hill_%02d", i),
-			Vector3.new(d, h, w),
-			CFrame.new(x, groundY + h * 0.5, z) * CFrame.Angles(0, yaw, 0),
-			pickColor(rng, cfg.Colors)
-		)
+		local color = pickColor(rng, cfg.Colors)
+		if not skipHill[i] and not overlapsSummerZone(x, z, w * 0.5, d * 0.5) then
+			makeWedge(
+				folder,
+				string.format("Hill_%02d", i),
+				Vector3.new(d, h, w),
+				CFrame.new(x, groundY + h * 0.5, z) * CFrame.Angles(0, yaw, 0),
+				color
+			)
+		end
 	end
 
 	for i = 1, cfg.RockCount do
@@ -286,14 +319,22 @@ local function buildGroundBand(parent: Folder, rng: () -> number, center: Vector
 		local size = lerp(4, 12, rng())
 		local x = center.X + math.cos(angle) * radius
 		local z = center.Z + math.sin(angle) * radius
-		makeBlock(
-			folder,
-			string.format("Rock_%02d", i),
-			Vector3.new(size * lerp(0.8, 1.4, rng()), size * lerp(0.5, 1.1, rng()), size * lerp(0.7, 1.3, rng())),
-			CFrame.new(x, groundY + size * 0.35, z)
-				* CFrame.Angles(rng() * 0.4, rng() * math.pi * 2, rng() * 0.35),
-			pickColor(rng, cfg.RockColors)
-		)
+		local sx = size * lerp(0.8, 1.4, rng())
+		local sy = size * lerp(0.5, 1.1, rng())
+		local sz = size * lerp(0.7, 1.3, rng())
+		local rx = rng() * 0.4
+		local ry = rng() * math.pi * 2
+		local rz = rng() * 0.35
+		local color = pickColor(rng, cfg.RockColors)
+		if not skipRock[i] and not overlapsSummerZone(x, z, sx * 0.5, sz * 0.5) then
+			makeBlock(
+				folder,
+				string.format("Rock_%02d", i),
+				Vector3.new(sx, sy, sz),
+				CFrame.new(x, groundY + size * 0.35, z) * CFrame.Angles(rx, ry, rz),
+				color
+			)
+		end
 	end
 end
 
@@ -333,26 +374,39 @@ local function buildTrees(parent: Folder, rng: () -> number, center: Vector3, gr
 	folder.Name = "TreeClusters"
 	folder.Parent = parent
 
+	local skipCluster = indexSet((cfg :: any).SkipClusterIndices)
+
 	for c = 1, cfg.ClusterCount do
 		local angle, radius = ringPlacement(rng, c, cfg.ClusterCount, cfg.RadiusMin, cfg.RadiusMax)
 		local clusterX = center.X + math.cos(angle) * radius
 		local clusterZ = center.Z + math.sin(angle) * radius
-		local clusterFolder = Instance.new("Folder")
-		clusterFolder.Name = string.format("Cluster_%02d", c)
-		clusterFolder.Parent = folder
-
 		local treeCount = math.floor(lerp(cfg.TreesPerClusterMin, cfg.TreesPerClusterMax + 0.999, rng()))
+		local blocked = skipCluster[c] or overlapsSummerZone(clusterX, clusterZ, 14, 14)
+
+		local clusterFolder: Folder? = nil
+		if not blocked then
+			local cf = Instance.new("Folder")
+			cf.Name = string.format("Cluster_%02d", c)
+			cf.Parent = folder
+			clusterFolder = cf
+		end
+
 		for t = 1, treeCount do
 			local ox = (rng() - 0.5) * 18
 			local oz = (rng() - 0.5) * 18
 			local scale = lerp(0.85, 1.45, rng())
-			buildTree(
-				clusterFolder,
-				string.format("Tree_%d", t),
-				Vector3.new(clusterX + ox, groundY, clusterZ + oz),
-				scale,
-				rng
-			)
+			-- Consomme le RNG foliage même si skip (horizon stable).
+			if clusterFolder then
+				buildTree(
+					clusterFolder,
+					string.format("Tree_%d", t),
+					Vector3.new(clusterX + ox, groundY, clusterZ + oz),
+					scale,
+					rng
+				)
+			else
+				pickColor(rng, cfg.FoliageColors)
+			end
 		end
 	end
 end

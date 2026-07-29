@@ -136,6 +136,11 @@ function SummerZoneEditingPreview.CreateSummerZonePreview(): Folder?
 	preview:SetAttribute("StudioPreviewOnly", true)
 	preview:SetAttribute("BubbleColumns", layout.BubbleColumns)
 	preview:SetAttribute("BubbleRows", layout.BubbleRows)
+	preview:SetAttribute("SideDecorMargin", layout.SideDecorMargin)
+	preview:SetAttribute("EntranceDecorMargin", layout.EntranceDecorMargin)
+	preview:SetAttribute("RearDecorMargin", layout.RearDecorMargin)
+	preview:SetAttribute("BubbleBoardWidth", layout.BubbleBoardWidth)
+	preview:SetAttribute("BubbleBoardDepth", layout.BubbleBoardDepth)
 	preview.Parent = root
 
 	local labelHost = ghostPart({

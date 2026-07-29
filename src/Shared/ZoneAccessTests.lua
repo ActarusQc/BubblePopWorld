@@ -74,11 +74,17 @@ function ZoneAccessTests.Run(): boolean
 		local rear = sb.MaxX - bb.MaxX
 		local sideS = bb.MinZ - sb.MinZ
 		local sideN = sb.MaxZ - bb.MaxZ
-		check(entrance >= L.EntranceDecorMargin - 0.05, "marge entrée >= 11")
-		check(rear >= L.RearDecorMargin - 0.05, "marge fond >= 17")
-		check(sideS >= L.SideDecorMargin - 0.05, "marge sud >= 10")
-		check(sideN >= L.SideDecorMargin - 0.05, "marge nord >= 10")
+		check(entrance >= L.EntranceDecorMargin - 0.05, "marge entrée >= 14")
+		check(rear >= L.RearDecorMargin - 0.05, "marge fond >= 24")
+		check(sideS >= L.SideDecorMargin - 0.05, "marge sud >= 16")
+		check(sideN >= L.SideDecorMargin - 0.05, "marge nord >= 16")
 		check(rear > entrance, "fond plus large que entrée")
+		check(L.SideDecorMargin == 16, "SideDecorMargin = 16")
+		check(L.EntranceDecorMargin == 14, "EntranceDecorMargin = 14")
+		check(L.RearDecorMargin == 24, "RearDecorMargin = 24")
+		check(L.BubbleSpacing == GameConfig.Grid.Spacing, "BubbleSpacing = Grid.Spacing")
+		check(L.BubbleColumns == 33, "BubbleColumns = 33")
+		check(L.BubbleRows == 34, "BubbleRows = 34")
 	end
 
 	local function resolvePopZone(zoneIdArg: any, fallbackZoneId: string): string
