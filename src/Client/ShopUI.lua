@@ -46,6 +46,9 @@ type SavedState = {
 	JumpHeight: number,
 	UseJumpPower: boolean,
 	AutoRotate: boolean,
+	-- PlayerModule.Controls n'expose pas de getter : on mémorise l'état
+	-- juste avant notre Disable (Enabled=true en pratique à l'entrée browse).
+	ControlsEnabled: boolean,
 	CameraType: Enum.CameraType,
 	CameraSubject: Instance?,
 	FieldOfView: number,
@@ -123,6 +126,7 @@ local browse = {
 	promptEnabled = {} :: { [ProximityPrompt]: boolean },
 	tempConns = {} :: { RBXScriptConnection },
 	cameraTween = nil :: Tween?,
+	actionGeneration = 0,
 }
 
 local exiting = false
@@ -530,7 +534,7 @@ function ShopUI.Start()
 					humanoid.AutoRotate = saved.AutoRotate
 				end
 
-				if browse.controls then
+				if browse.controls and saved.ControlsEnabled then
 					pcall(function()
 						(browse.controls :: any):Enable()
 					end)
@@ -571,6 +575,7 @@ function ShopUI.Start()
 		browse.saved = nil
 		browse.controls = nil
 		browse.cameraTween = nil
+		browse.actionGeneration += 1
 
 		exiting = false
 	end
@@ -627,17 +632,21 @@ function ShopUI.Start()
 		end
 
 		-- 1) Mémoriser EXACTEMENT l'état avant freeze (jamais hardcodé à la restauration).
+		-- ControlsEnabled : PlayerModule n'a pas de getter public ; on capture l'état
+		-- juste avant notre Disable (Enabled en pratique quand le joueur ouvre le browse).
+		local controls = tryGetControls()
 		browse.saved = {
 			WalkSpeed = humanoid.WalkSpeed,
 			JumpPower = humanoid.JumpPower,
 			JumpHeight = humanoid.JumpHeight,
 			UseJumpPower = humanoid.UseJumpPower,
 			AutoRotate = humanoid.AutoRotate,
+			ControlsEnabled = controls ~= nil,
 			CameraType = camera.CameraType,
 			CameraSubject = camera.CameraSubject,
 			FieldOfView = camera.FieldOfView,
 		}
-		browse.controls = tryGetControls()
+		browse.controls = controls
 
 		-- 2) Mémoriser Enabled original de CHAQUE prompt ItemShop avant de tout désactiver.
 		table.clear(browse.promptEnabled)
@@ -707,11 +716,19 @@ function ShopUI.Start()
 		startSpin()
 		refreshPresentation()
 
-		-- Personnage : sortir proprement sur mort / respawn pendant le browse.
+		-- Personnage : sortir proprement sur mort / respawn / Humanoid disparu pendant le browse.
 		table.insert(
 			browse.tempConns,
 			humanoid.Died:Connect(function()
 				exitBrowse()
+			end)
+		)
+		table.insert(
+			browse.tempConns,
+			humanoid.AncestryChanged:Connect(function(_, parent)
+				if parent == nil then
+					exitBrowse()
+				end
 			end)
 		)
 		table.insert(
@@ -757,14 +774,15 @@ function ShopUI.Start()
 			return
 		end
 
-		local previousText = actionBtn.Text
+		browse.actionGeneration += 1
+		local generation = browse.actionGeneration
 		actionBtn.Active = false
 		local id = item.Id
 		local ok, success, message = pcall(function()
 			return Remotes.Func(remoteName):InvokeServer(id)
 		end)
 
-		if not browse.active then
+		if generation ~= browse.actionGeneration or not browse.active then
 			return
 		end
 
@@ -775,11 +793,10 @@ function ShopUI.Start()
 
 		L10nUtil.dynamic(actionBtn, if type(message) == "string" then message else L10n.Denied)
 		task.wait(1)
-		if browse.active then
-			refreshFromServer(id)
-		else
-			actionBtn.Text = previousText
+		if generation ~= browse.actionGeneration or not browse.active then
+			return
 		end
+		refreshFromServer(id)
 	end
 
 	--------------------------------------------------------------------
