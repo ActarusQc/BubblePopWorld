@@ -6,6 +6,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local Remotes = require(Shared.Remotes)
 local L10n = require(Shared.LocalizationStrings)
+local ShopCatalog = require(Shared.ShopCatalog)
 local DataService = require(script.Parent.DataService)
 local BackpackVisual = require(script.Parent.BackpackVisual)
 
@@ -64,14 +65,96 @@ local function getItemRows(profile: any)
 	return out
 end
 
+local function localized(key: string): string
+	local value = (L10n :: any)[key]
+	return if type(value) == "string" then value else key
+end
+
+local function getCategoryRows(profile: any)
+	local categories = {
+		Skills = {},
+		Items = {},
+		Cosmetics = {},
+	}
+	local coins = if type(profile.Coins) == "number" then profile.Coins else 0
+	local equipped = profile.EquippedBackpack or ""
+	local owned = if type(profile.OwnedItems) == "table" then profile.OwnedItems else {}
+
+	for _, category in ipairs(ShopCatalog.Categories) do
+		local rows = categories[category]
+		if rows then
+			for _, catalogItem in ipairs(ShopCatalog.GetCategoryItems(category)) do
+				local row = {
+					Id = catalogItem.Id,
+					Label = localized(catalogItem.NameKey),
+					Description = localized(catalogItem.DescriptionKey),
+					Type = catalogItem.Type,
+					Available = catalogItem.Available,
+					Equipable = catalogItem.Equipable,
+					IconKey = catalogItem.IconKey,
+					ButtonState = "ComingSoon",
+				}
+
+				if catalogItem.Available and catalogItem.Type == "Upgrade" then
+					local upgradeId = catalogItem.UpgradeId or catalogItem.Id
+					local def = Config.Upgrades[upgradeId]
+					if def then
+						local stored = profile.Upgrades[upgradeId] or 0
+						local level = Config.EffectiveUpgradeLevel(upgradeId, stored)
+						row.Level = level
+						row.Max = def.Max
+						if level >= def.Max then
+							row.ButtonState = "Max"
+						else
+							local cost = Config.UpgradeCost(upgradeId, level)
+							row.Cost = cost
+							row.ButtonState = if coins < cost then "TooExpensive" else "Upgrade"
+						end
+					end
+				elseif catalogItem.Available and catalogItem.Type == "Backpack" then
+					local shopItemId = catalogItem.ShopItemId or catalogItem.Id
+					local def = Config.ShopItems[shopItemId]
+					if def then
+						local isOwned = owned[shopItemId] == true
+						local isEquipped = equipped == shopItemId
+						row.Cost = def.Cost
+						row.Capacity = def.Capacity
+						row.Owned = isOwned
+						row.Equipped = isEquipped
+						if isEquipped then
+							row.ButtonState = "Equipped"
+						elseif isOwned then
+							row.ButtonState = "Equip"
+						else
+							row.ButtonState = if coins < def.Cost then "TooExpensive" else "Buy"
+						end
+					end
+				end
+
+				table.insert(rows, row)
+			end
+		end
+	end
+	return categories
+end
+
 local function getShopData(player: Player)
 	local profile = DataService.Get(player)
 	if not profile then
-		return { Upgrades = {}, Items = {}, EquippedBackpack = "" }
+		return {
+			Upgrades = {},
+			Items = {},
+			Categories = { Skills = {}, Items = {}, Cosmetics = {} },
+			Coins = 0,
+			EquippedBackpack = "",
+			DefaultCapacity = Config.Backpack.DefaultCapacity,
+		}
 	end
 	return {
 		Upgrades = getUpgradeRows(profile),
 		Items = getItemRows(profile),
+		Categories = getCategoryRows(profile),
+		Coins = profile.Coins,
 		EquippedBackpack = profile.EquippedBackpack or "",
 		DefaultCapacity = Config.Backpack.DefaultCapacity,
 	}
@@ -79,6 +162,7 @@ end
 
 local function buyUpgrade(player: Player, id: any)
 	if type(id) ~= "string" then return false, "Invalid request" end
+	if not ShopCatalog.IsPurchasable(id) then return false, "Coming soon" end
 	local def = Config.Upgrades[id]
 	if not def then return false, "Unknown upgrade" end
 	if not table.find(Config.UpgradeOrder, id) then return false, "Upgrade not for sale" end
@@ -103,6 +187,7 @@ end
 
 local function buyItem(player: Player, id: any)
 	if type(id) ~= "string" then return false, "Invalid request" end
+	if not ShopCatalog.IsPurchasable(id) then return false, "Coming soon" end
 	local def = Config.ShopItems[id]
 	if not def then return false, "Unknown item" end
 	if not table.find(Config.ShopItemOrder, id) then return false, "Item not for sale" end
@@ -141,14 +226,19 @@ end
 local function equipBackpack(player: Player, id: any)
 	if type(id) ~= "string" then return false, "Invalid request" end
 
+	if id ~= "" then
+		local catalogItem = ShopCatalog.GetItem(id)
+		local def = Config.ShopItems[id]
+		if not catalogItem or catalogItem.Type ~= "Backpack" or not catalogItem.Available
+			or not ShopCatalog.IsPurchasable(id) or not def or def.Kind ~= "Backpack" then
+			return false, "Unknown backpack"
+		end
+	end
+
 	local profile = DataService.Get(player)
 	if not profile then return false, "Profile not loaded" end
 
 	if id ~= "" then
-		local def = Config.ShopItems[id]
-		if not def or def.Kind ~= "Backpack" then
-			return false, "Unknown backpack"
-		end
 		if type(profile.OwnedItems) ~= "table" or profile.OwnedItems[id] ~= true then
 			return false, "Not owned"
 		end
