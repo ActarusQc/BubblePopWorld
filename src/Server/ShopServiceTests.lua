@@ -257,6 +257,21 @@ function ShopServiceTests.Run(context: Context): boolean
 	check(equipOk == true and profile.EquippedBackpack == "BackpackGold",
 		"EquipBackpack accepte sac live possédé")
 
+	context.ResetCounters()
+	profile.CurrentBubbles = 0
+	local defaultOk = equipBackpack(player, "")
+	check(defaultOk == true, "EquipBackpack accepte le sac par défaut")
+	check(profile.EquippedBackpack == "", "sac par défaut vide EquippedBackpack")
+	check(profile.BackpackCapacity == Config.Backpack.DefaultCapacity,
+		"sac par défaut restaure DefaultCapacity")
+	check(profile.OwnedItems.BackpackGold == true and profile.CurrentBubbles == 0,
+		"sac par défaut conserve possession et bulles")
+	check(context.Counters.Get == 1 and context.Counters.Push == 1
+		and context.Counters.Refresh == 1 and context.Counters.Announce == 1,
+		"sac par défaut appelle Get/Push/Refresh/Announce une fois")
+	check(context.Counters.ApplyCharacterStats == 0 and context.Counters.NotifyCoinsChanged == 0,
+		"sac par défaut n'appelle pas Apply/NotifyCoins")
+
 	print(("\nShopServiceTests: %d réussis, %d échoués"):format(passed, failed))
 	return failed == 0
 end
