@@ -165,12 +165,19 @@ GameConfig.Lobby = {
 	ItemShop = {
 		OriginOffset = lobbyItemShopOffset,
 		YawDegrees = 90, -- même orientation que SellBooth (façade vers +X)
-		SignText = "BUBBLE SHOP",
+		-- Footprint walk-in (local X = largeur, local Z = profondeur ; entrée = +Z).
+		Width = 22,
+		Depth = 18,
+		Height = 12,
+		DoorWidth = 10,
+		WallThickness = 0.6,
+		SignText = "SHOP",
 		TaglineText = "BUY BUBBLES & ITEMS",
 		InteriorTagline = "Buy cool items to boost your adventure!",
+		PromptMaxDistance = 13,
+		-- Legacy (kiosque) — non utilisé par le walk-in builder :
 		PromptActionText = "Open Shop",
 		PromptObjectText = "Bubble Shop",
-		PromptMaxDistance = 10, -- 8–12 studs : proche du comptoir uniquement
 	},
 	-- Utilisé uniquement quand SellBooth.Mode == "StudioModel".
 	SellKiosk = {
@@ -257,6 +264,18 @@ GameConfig.Bubble = {
 	BounceCooldown = 0.15,          -- délai mini entre 2 rebonds
 	ContactDistance = 4.2,          -- distance sol-torse considérée comme un contact
 	PopDelay = 0.06,                -- délai avant éclatement (on voit la bulle céder)
+}
+
+-- Teinte des bulles Normales par zone (salle principale = GameRoom / ClassicZone).
+-- Rare / Golden / Diamond / Legendary restent sur BubbleTypes.List (config globale).
+-- Common peut être un Color3 unique ou une liste de variantes (comme TintVariants).
+GameConfig.ZoneBubblePalettes = {
+	GameRoom = {
+		Common = GameConfig.Bubble.Appearance.TintVariants,
+	},
+	SummerZone = {
+		Common = Color3.fromRGB(255, 145, 35),
+	},
 }
 
 -- Progression. Le niveau récompense la boucle complète (éclater → remplir → vendre) :
@@ -397,12 +416,25 @@ GameConfig.Combo = {
 	Max = 6,        -- multiplicateur maximum
 }
 
+-- Apparition des objets : une boucle par zone active, même gestionnaire
+-- (DropService + ItemSpawnPlanner). MinInterval/MaxInterval sont l'intervalle
+-- GLOBAL : chaque zone attend cet intervalle × nombre de zones actives, ce qui
+-- conserve la fréquence globale historique tout en garantissant chaque zone.
 GameConfig.Drops = {
 	MinInterval = 25,
 	MaxInterval = 55,
 	Lifetime = 45,
 	PickupRadius = 8,   -- ramassage automatique : distance joueur-objet (studs)
 	PickupRate = 0.08,  -- fréquence de vérification côté serveur
+
+	EdgeMargin = 3,       -- cellules ignorées sur le pourtour de chaque planche
+	MaxActivePerZone = 2, -- objets simultanés max par zone
+
+	-- Diagnostic serveur uniquement (jamais true en production) :
+	-- cadence rapide par zone + logs préfixés [ItemSpawnDebug].
+	ItemSpawnDebug = false,
+	DebugMinInterval = 10,
+	DebugMaxInterval = 15,
 }
 
 GameConfig.Chest = {
