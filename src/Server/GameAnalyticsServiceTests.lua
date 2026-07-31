@@ -120,6 +120,16 @@ local function countCustom(recording: RecordingSink, name: string): number
 	return count
 end
 
+local function sumCustomValues(recording: RecordingSink, name: string): number
+	local sum = 0
+	for _, entry in ipairs(recording.custom) do
+		if entry.name == name then
+			sum += entry.value or 0
+		end
+	end
+	return sum
+end
+
 local function countFunnel(recording: RecordingSink, stepName: string): number
 	local count = 0
 	for _, entry in ipairs(recording.funnel) do
@@ -895,12 +905,125 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(versionFieldCount == 1, "Task6 version → champ version une seule fois")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
+	-- Task 7 — cas 1 : RecordPop + flush deltas
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.FlushAllPlayers()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.FlushSessionDeltasForTests(playerA)
+	check(sumCustomValues(recording, "SessionNormalPops") == 3, "Task7 RecordPop x3 → SessionNormalPops 3")
+	local popsAfterFirstFlush = countCustom(recording, "SessionNormalPops")
+	GameAnalyticsService.FlushSessionDeltasForTests(playerA)
+	check(
+		countCustom(recording, "SessionNormalPops") == popsAfterFirstFlush,
+		"Task7 second flush sans activité → pas de re-emit SessionNormalPops"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 7 — cas 2 : delta incrémental
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.FlushSessionDeltasForTests(playerA)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.FlushSessionDeltasForTests(playerA)
+	check(sumCustomValues(recording, "SessionNormalPops") == 5, "Task7 flush delta → total pops 5")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 7 — cas 3 : zone seconds
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	local zoneSession = GameAnalyticsService.GetSessionForTests(playerA)
+	check(zoneSession ~= nil, "Task7 zone session exists")
+	if zoneSession then
+		zoneSession.currentArea = "Lobby"
+		zoneSession.areaEnteredAt = os.clock() - 10
+	end
+	GameAnalyticsService.RecordZoneChange(playerA, "GameRoom")
+	GameAnalyticsService.FlushSessionDeltasForTests(playerA)
+	check(sumCustomValues(recording, "SessionZoneSecondsLobby") >= 10, "Task7 zone change → SessionZoneSecondsLobby > 0")
+	local lobbyEmitCount = countCustom(recording, "SessionZoneSecondsLobby")
+	GameAnalyticsService.FlushSessionDeltasForTests(playerA)
+	check(
+		countCustom(recording, "SessionZoneSecondsLobby") == lobbyEmitCount,
+		"Task7 second zone flush → pas de re-emit lobby seconds"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 7 — cas 4 : Start idempotent
+	local spawnCount = GameAnalyticsService.GetFlushLoopSpawnCountForTests()
+	GameAnalyticsService.Start()
+	check(
+		GameAnalyticsService.GetFlushLoopSpawnCountForTests() == spawnCount,
+		"Task7 Start twice → une seule boucle flush"
+	)
+	check(GameAnalyticsService.GetFlushLoopStartedForTests() == true, "Task7 flush loop actif")
+
+	-- Task 7 — cas 5 : sink fail sur SessionNormalPops
+	recording = newRecordingSink()
+	local failNormalPops = true
+	GameAnalyticsService.SetSink({
+		logOnboarding = function() end,
+		logFunnel = function() end,
+		logCustom = function(_player, name, value, _fields)
+			if name == "SessionNormalPops" and failNormalPops then
+				error("normal pops fail")
+			end
+			table.insert(recording.custom, { name = name, value = value })
+		end,
+		logEconomy = function() end,
+		logProgressionComplete = function() end,
+	})
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.RecordToolUse(playerA, "pin")
+	local flushOk = pcall(function()
+		GameAnalyticsService.FlushSessionDeltasForTests(playerA)
+	end)
+	check(flushOk, "Task7 sink fail SessionNormalPops → flush ne propage pas")
+	check(countCustom(recording, "SessionToolUses") == 1, "Task7 sink fail normal pops → SessionToolUses émis")
+	check(countCustom(recording, "SessionNormalPops") == 0, "Task7 sink fail → SessionNormalPops non flushé")
+	local sessionAfterFail = GameAnalyticsService.GetSessionForTests(playerA)
+	check(
+		sessionAfterFail ~= nil and sessionAfterFail.lastFlushedTotals.normalPops == 0,
+		"Task7 sink fail → lastFlushed normalPops inchangé"
+	)
+	failNormalPops = false
+	GameAnalyticsService.FlushSessionDeltasForTests(playerA)
+	check(countCustom(recording, "SessionNormalPops") == 1, "Task7 retry flush → SessionNormalPops émis")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+	attachRecordingSink(recording)
+
+	-- Task 7 — cas 6 : FlushAndRemovePlayer + FirstSessionDuration
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), true)
+	local initialSession = GameAnalyticsService.GetSessionForTests(playerA)
+	if initialSession then
+		initialSession.joinClock = os.clock() - 30
+	end
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.RecordPop(playerA, nil)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+	check(sumCustomValues(recording, "SessionNormalPops") == 2, "Task7 FlushAndRemovePlayer → deltas restants")
+	check(hasCustom(recording, "FirstSessionDuration"), "Task7 FlushAndRemovePlayer initial → FirstSessionDuration")
+	check(not GameAnalyticsService.HasSession(playerA), "Task7 FlushAndRemovePlayer → session supprimée")
+
 	local source = script.Parent:WaitForChild("GameAnalyticsService").Source
 	check(string.find(source, "DataService") == nil, "GameAnalyticsService ne require pas DataService")
 	check(string.find(source, "ZoneDefs") ~= nil, "GameAnalyticsService require ZoneDefs")
 
 	GameAnalyticsService.SetWarnHandler(nil)
 	GameAnalyticsService.SetSink(nil)
+	GameAnalyticsService.StopFlushLoopForTests()
 
 	if ok then
 		print("[GameAnalyticsServiceTests] OK")

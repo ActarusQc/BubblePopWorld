@@ -62,6 +62,9 @@ local sessions: { [Player]: PlayerSession } = {}
 local sink: AnalyticsSink? = nil
 local warnHandler: (...any) -> () = warn
 local started = false
+local flushLoopStarted = false
+local flushLoopSpawnCount = 0
+local flushIntervalOverride: number? = nil
 
 local ANALYTICS_TEMPLATE = {
 	OnboardingVersion = 1,
@@ -153,6 +156,37 @@ local function copyTotals(src: SessionTotals): SessionTotals
 	}
 end
 
+local ZONE_SECONDS_EVENT_NAMES = {
+	Lobby = "SessionZoneSecondsLobby",
+	GameRoom = "SessionZoneSecondsGameRoom",
+	SummerZone = "SessionZoneSecondsSummerZone",
+}
+
+local function mapAreaToTracked(area: string?): string?
+	if area == "Lobby" or area == "GameRoom" or area == "SummerZone" then
+		return area
+	end
+	if area == nil then
+		return nil
+	end
+	return "Lobby"
+end
+
+local function accumulateZoneTime(session: PlayerSession)
+	local area = session.currentArea
+	local enteredAt = session.areaEnteredAt
+	if not area or not enteredAt then
+		return
+	end
+	local tracked = mapAreaToTracked(area)
+	if not tracked then
+		return
+	end
+	local elapsed = math.max(0, os.clock() - enteredAt)
+	session.sessionTotals.zoneSeconds[tracked] += elapsed
+	session.areaEnteredAt = os.clock()
+end
+
 local function createDefaultSink(): AnalyticsSink
 	local AnalyticsService = game:GetService("AnalyticsService")
 	return {
@@ -225,6 +259,95 @@ end
 local function _logCustom(player: Player, name: string, value: number?, fields: any?): boolean
 	return invokeSink("logCustom", function()
 		getSink().logCustom(player, name, value, fields)
+	end)
+end
+
+local function flushScalarDelta(
+	player: Player,
+	eventName: string,
+	total: number,
+	lastValue: number,
+	onSuccess: (newLast: number) -> ()
+)
+	local delta = total - lastValue
+	if delta <= 0 then
+		return
+	end
+	local emitValue = math.floor(delta)
+	if emitValue <= 0 then
+		return
+	end
+	if _logCustom(player, eventName, emitValue, nil) then
+		onSuccess(total)
+	end
+end
+
+local function flushDeltas(player: Player)
+	local session = sessions[player]
+	if not session then
+		return
+	end
+
+	accumulateZoneTime(session)
+
+	local totals = session.sessionTotals
+	local last = session.lastFlushedTotals
+
+	flushScalarDelta(player, "SessionNormalPops", totals.normalPops, last.normalPops, function(v)
+		last.normalPops = v
+	end)
+	flushScalarDelta(player, "SessionSpecialPops", totals.specialPops, last.specialPops, function(v)
+		last.specialPops = v
+	end)
+	flushScalarDelta(player, "SessionPopsGameRoom", totals.popsGameRoom, last.popsGameRoom, function(v)
+		last.popsGameRoom = v
+	end)
+	flushScalarDelta(player, "SessionPopsSummerZone", totals.popsSummerZone, last.popsSummerZone, function(v)
+		last.popsSummerZone = v
+	end)
+	flushScalarDelta(player, "SessionToolUses", totals.toolUses, last.toolUses, function(v)
+		last.toolUses = v
+	end)
+	flushScalarDelta(player, "SessionSalesCount", totals.salesCount, last.salesCount, function(v)
+		last.salesCount = v
+	end)
+	flushScalarDelta(player, "SessionCoinsFromSales", totals.coinsFromSales, last.coinsFromSales, function(v)
+		last.coinsFromSales = v
+	end)
+	flushScalarDelta(player, "SessionZoneChanges", totals.zoneChanges, last.zoneChanges, function(v)
+		last.zoneChanges = v
+	end)
+
+	for zoneKey, eventName in pairs(ZONE_SECONDS_EVENT_NAMES) do
+		local totalSeconds = totals.zoneSeconds[zoneKey]
+		local lastSeconds = last.zoneSeconds[zoneKey]
+		local delta = totalSeconds - lastSeconds
+		if delta > 0 then
+			local emitValue = math.floor(delta)
+			if emitValue > 0 and _logCustom(player, eventName, emitValue, nil) then
+				last.zoneSeconds[zoneKey] = totalSeconds
+			end
+		end
+	end
+end
+
+local function startFlushLoop()
+	if flushLoopStarted then
+		return
+	end
+	flushLoopStarted = true
+	flushLoopSpawnCount += 1
+	task.spawn(function()
+		while flushLoopStarted do
+			local interval = flushIntervalOverride or AnalyticsConfig.FlushIntervalSeconds
+			task.wait(interval)
+			if not flushLoopStarted then
+				break
+			end
+			for trackedPlayer in pairs(sessions) do
+				pcall(flushDeltas, trackedPlayer)
+			end
+		end
 	end)
 end
 
@@ -412,6 +535,7 @@ function GameAnalyticsService.Start()
 	if not sink then
 		sink = createDefaultSink()
 	end
+	startFlushLoop()
 end
 
 function GameAnalyticsService.EnsureBagValueCoverage(profile: any)
@@ -435,6 +559,68 @@ function GameAnalyticsService.EnsureBagValueCoverage(profile: any)
 		bag.Unknown = (bag.Unknown or 0) + (pending - sum)
 		profile.__dirty = true
 	end
+end
+
+function GameAnalyticsService.RecordPop(
+	player: Player,
+	info: { zoneId: string?, isSpecial: boolean? }?
+)
+	local session = sessions[player]
+	if not session then
+		return
+	end
+	local totals = session.sessionTotals
+	if info and info.isSpecial == true then
+		totals.specialPops += 1
+	else
+		totals.normalPops += 1
+	end
+	local zoneId = info and info.zoneId
+	if zoneId == "GameRoom" then
+		totals.popsGameRoom += 1
+	elseif zoneId == "SummerZone" then
+		totals.popsSummerZone += 1
+	end
+end
+
+function GameAnalyticsService.RecordToolUse(player: Player, _toolId: string?)
+	local session = sessions[player]
+	if not session then
+		return
+	end
+	session.sessionTotals.toolUses += 1
+end
+
+function GameAnalyticsService.RecordZoneChange(player: Player, newArea: string)
+	local session = sessions[player]
+	if not session then
+		return
+	end
+
+	accumulateZoneTime(session)
+
+	local trackedNew = mapAreaToTracked(newArea)
+	if not trackedNew then
+		return
+	end
+
+	local trackedCurrent = mapAreaToTracked(session.currentArea)
+	if trackedCurrent ~= trackedNew then
+		session.sessionTotals.zoneChanges += 1
+	end
+
+	session.currentArea = trackedNew
+	session.areaEnteredAt = os.clock()
+end
+
+function GameAnalyticsService.RecordSale(player: Player, coinsEarned: number?)
+	local session = sessions[player]
+	if not session then
+		return
+	end
+	session.sessionTotals.salesCount += 1
+	local coins = math.max(0, math.floor(tonumber(coinsEarned) or 0))
+	session.sessionTotals.coinsFromSales += coins
 end
 
 function GameAnalyticsService.ObserveOnboarding(player: Player, stepName: string)
@@ -481,6 +667,9 @@ function GameAnalyticsService.OnBubblePopped(
 	end
 
 	local session = sessions[player]
+	if session then
+		GameAnalyticsService.RecordPop(player, ctx)
+	end
 	if not session then
 		return
 	end
@@ -620,6 +809,12 @@ function GameAnalyticsService.OnBackpackSoldAnalytics(player: Player, _ctx: any?
 		summerZone = profile.Analytics.SummerZone
 	end
 
+	local coinsEarned: number? = nil
+	if type(_ctx) == "table" then
+		coinsEarned = _ctx.coinsEarned or _ctx.coins or _ctx.amount
+	end
+	GameAnalyticsService.RecordSale(player, coinsEarned)
+
 	if summerZone.SoldFirstSummerBackpack == true then
 		if summerZone.pendingSummerFullBackpackSale == true then
 			summerZone.pendingSummerFullBackpackSale = nil
@@ -738,7 +933,18 @@ function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProf
 end
 
 function GameAnalyticsService.FlushAndRemovePlayer(player: Player)
-	-- full delta flush in later task
+	local session = sessions[player]
+	if not session then
+		return
+	end
+
+	accumulateZoneTime(session)
+	flushDeltas(player)
+
+	if session.isInitialProfileSession then
+		_logCustom(player, "FirstSessionDuration", secondsSinceJoin(session), nil)
+	end
+
 	sessions[player] = nil
 end
 
@@ -789,6 +995,26 @@ function GameAnalyticsService.DebugEmitCustom(player: Player, name: string, valu
 		return
 	end
 	_logCustom(player, name, value, nil)
+end
+
+function GameAnalyticsService.FlushSessionDeltasForTests(player: Player)
+	flushDeltas(player)
+end
+
+function GameAnalyticsService.StopFlushLoopForTests()
+	flushLoopStarted = false
+end
+
+function GameAnalyticsService.SetFlushIntervalForTests(seconds: number?)
+	flushIntervalOverride = seconds
+end
+
+function GameAnalyticsService.GetFlushLoopStartedForTests(): boolean
+	return flushLoopStarted
+end
+
+function GameAnalyticsService.GetFlushLoopSpawnCountForTests(): number
+	return flushLoopSpawnCount
 end
 
 return GameAnalyticsService
