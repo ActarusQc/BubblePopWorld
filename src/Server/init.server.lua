@@ -4,8 +4,19 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 require(ReplicatedStorage:WaitForChild("Shared").Remotes) -- crée les remotes en premier
 
+local GameAnalyticsService = require(script.GameAnalyticsService)
+local DataService = require(script.DataService)
+
+-- Analytics avant DataService (InitPlayer / flush à la déconnexion).
+do
+	local ok, err = pcall(GameAnalyticsService.Start)
+	if not ok then
+		warn("[BPW] échec GameAnalyticsService: " .. tostring(err))
+	end
+end
+
 local services = {
-	require(script.DataService),
+	DataService,
 	require(script.BackpackService),
 	require(script.ZoneService),
 	require(script.TravelService),
@@ -95,6 +106,66 @@ do
 	end)
 	if okScene and sceneTests and sceneTests.Run then
 		sceneTests.Run()
+	end
+	local okAnalyticsCfg, analyticsCfgTests = pcall(function()
+		return require(Shared.AnalyticsConfigTests)
+	end)
+	if okAnalyticsCfg and analyticsCfgTests and analyticsCfgTests.Run then
+		analyticsCfgTests.Run()
+	end
+	local okShopCatalog, shopCatalogTests = pcall(function()
+		return require(Shared.ShopCatalogTests)
+	end)
+	if okShopCatalog and shopCatalogTests and shopCatalogTests.Run then
+		shopCatalogTests.Run()
+	end
+	local okShopBrowse, shopBrowseTests = pcall(function()
+		return require(Shared.ShopBrowseLogicTests)
+	end)
+	if okShopBrowse and shopBrowseTests and shopBrowseTests.Run then
+		shopBrowseTests.Run()
+	end
+	local okShopLayout, shopLayoutTests = pcall(function()
+		return require(Shared.ShopBrowseLayoutTests)
+	end)
+	if okShopLayout and shopLayoutTests and shopLayoutTests.Run then
+		shopLayoutTests.Run()
+	end
+	local okShopViewport, shopViewportTests = pcall(function()
+		return require(Shared.ShopViewportModelsTests)
+	end)
+	if okShopViewport and shopViewportTests and shopViewportTests.Run then
+		shopViewportTests.Run()
+	end
+	local okItemShopVisual, itemShopVisualTests = pcall(function()
+		return require(Shared.ItemShopVisualTests)
+	end)
+	if okItemShopVisual and itemShopVisualTests and itemShopVisualTests.Run then
+		itemShopVisualTests.Run()
+	end
+	local okItemSpawn, itemSpawnTests = pcall(function()
+		return require(Shared.ItemSpawnTests)
+	end)
+	if okItemSpawn and itemSpawnTests and itemSpawnTests.Run then
+		itemSpawnTests.Run()
+	end
+	local okDsAnalytics, dsAnalyticsTests = pcall(function()
+		return require(script.DataServiceAnalyticsTests)
+	end)
+	if okDsAnalytics and dsAnalyticsTests and dsAnalyticsTests.Run then
+		dsAnalyticsTests.Run()
+	end
+	local okGas, gasTests = pcall(function()
+		return require(script.GameAnalyticsServiceTests)
+	end)
+	if okGas and gasTests and gasTests.Run then
+		gasTests.Run()
+	end
+	local okShopService, shopServiceTests = pcall(function()
+		return require(script.ShopServiceTests)
+	end)
+	if okShopService and shopServiceTests and shopServiceTests.Run then
+		shopServiceTests.Run()
 	end
 end
 

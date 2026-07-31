@@ -1261,6 +1261,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 
 	local source = script.Parent:WaitForChild("GameAnalyticsService").Source
 	check(string.find(source, "DataService") == nil, "GameAnalyticsService ne require pas DataService")
+	check(string.find(source, "BindToClose") == nil, "GameAnalyticsService n'appelle pas BindToClose")
 	check(string.find(source, "ZoneDefs") ~= nil, "GameAnalyticsService require ZoneDefs")
 
 	GameAnalyticsService.SetWarnHandler(nil)

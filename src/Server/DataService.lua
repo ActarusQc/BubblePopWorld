@@ -494,6 +494,10 @@ function DataService.Start()
 
 	Players.PlayerRemoving:Connect(function(player)
 		bound[player] = nil
+		pcall(function()
+			local GAS = require(script.Parent.GameAnalyticsService)
+			GAS.FlushAndRemovePlayer(player)
+		end)
 		DataService.Release(player)
 	end)
 
@@ -508,6 +512,10 @@ function DataService.Start()
 	end)
 
 	game:BindToClose(function()
+		pcall(function()
+			local GAS = require(script.Parent.GameAnalyticsService)
+			GAS.FlushAllPlayers()
+		end)
 		for _, player in ipairs(Players:GetPlayers()) do
 			task.spawn(DataService.Save, player)
 		end
