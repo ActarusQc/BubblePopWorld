@@ -35,6 +35,8 @@ export type PlayerSession = {
 	areaEnteredAt: number?,
 	sessionFirstBubbleSent: boolean,
 	sessionFirstSaleSent: boolean,
+	-- Gates SecondsToFirst* (session initiale) : jamais renvoyés deux fois
+	firstTimingSent: { [string]: boolean },
 }
 
 export type AnalyticsSink = {
@@ -262,6 +264,37 @@ local function _logProgressionComplete(
 	end)
 end
 
+local function secondsSinceJoin(session: PlayerSession): number
+	return math.max(0, math.floor(os.clock() - session.joinClock))
+end
+
+-- SecondsToFirst* : best-effort après succès funnel ; gate pour ne jamais renvoyer.
+local function tryFirstTiming(player: Player, session: PlayerSession, stepName: string)
+	if not session.isInitialProfileSession then
+		return
+	end
+	local timingName = AnalyticsConfig.FirstTimingByStep[stepName]
+	if not timingName or session.firstTimingSent[timingName] == true then
+		return
+	end
+	if _logCustom(player, timingName, secondsSinceJoin(session), nil) then
+		session.firstTimingSent[timingName] = true
+	end
+end
+
+-- SessionSecondsTo* : best-effort ; n'interrompt jamais le drain / le marquage funnel.
+local function trySessionSeconds(player: Player, session: PlayerSession, stepName: string)
+	if stepName == "PoppedFirstBubble" and not session.sessionFirstBubbleSent then
+		if _logCustom(player, "SessionSecondsToFirstBubble", secondsSinceJoin(session), nil) then
+			session.sessionFirstBubbleSent = true
+		end
+	elseif stepName == "SoldFirstBackpack" and not session.sessionFirstSaleSent then
+		if _logCustom(player, "SessionSecondsToFirstSale", secondsSinceJoin(session), nil) then
+			session.sessionFirstSaleSent = true
+		end
+	end
+end
+
 local function drainOnboarding(player: Player)
 	local session = sessions[player]
 	if not session or not session.onboardingActive then
@@ -280,49 +313,35 @@ local function drainOnboarding(player: Player)
 	for _, step in ipairs(AnalyticsConfig.OnboardingSteps) do
 		local name = step.name
 		if onboarding[name] == true then
+			-- Étape déjà validée : retenter seulement les timings non encore gated.
+			tryFirstTiming(player, session, name)
+			trySessionSeconds(player, session, name)
 			continue
 		end
 		if not session.onboardingObserved[name] then
 			return
 		end
+
 		local ok = _logOnboarding(player, step.step, name, nil)
 		if not ok then
+			-- Funnel échoué : rien marquer, aucun timing lié.
 			return
 		end
 
-		if session.isInitialProfileSession then
-			local timingName = AnalyticsConfig.FirstTimingByStep[name]
-			if timingName then
-				local seconds = math.max(0, math.floor(os.clock() - session.joinClock))
-				local timingOk = _logCustom(player, timingName, seconds, nil)
-				if not timingOk then
-					return
-				end
-			end
-		end
-
-		if name == "PoppedFirstBubble" and not session.sessionFirstBubbleSent then
-			local seconds = math.max(0, math.floor(os.clock() - session.joinClock))
-			local sessionOk = _logCustom(player, "SessionSecondsToFirstBubble", seconds, nil)
-			if not sessionOk then
-				return
-			end
-			session.sessionFirstBubbleSent = true
-		elseif name == "SoldFirstBackpack" and not session.sessionFirstSaleSent then
-			local seconds = math.max(0, math.floor(os.clock() - session.joinClock))
-			local sessionOk = _logCustom(player, "SessionSecondsToFirstSale", seconds, nil)
-			if not sessionOk then
-				return
-			end
-			session.sessionFirstSaleSent = true
-		end
-
+		-- Succès funnel → marquage immédiat (indépendant des timings).
 		onboarding[name] = true
 		profile.__dirty = true
 		if name == "PurchasedFirstUpgrade" then
 			profile.Analytics.OnboardingCompleted = true
 			session.onboardingActive = false
 			profile.__dirty = true
+		end
+
+		tryFirstTiming(player, session, name)
+		trySessionSeconds(player, session, name)
+
+		if not session.onboardingActive then
+			return
 		end
 	end
 end
@@ -530,6 +549,7 @@ function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProf
 		areaEnteredAt = nil,
 		sessionFirstBubbleSent = false,
 		sessionFirstSaleSent = false,
+		firstTimingSent = {},
 	}
 	sessions[player] = session
 

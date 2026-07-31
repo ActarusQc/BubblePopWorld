@@ -509,7 +509,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(failProfile.Analytics.Onboarding.PoppedFirstBubble ~= true, "sink fail onboarding → flag PoppedFirstBubble non persisté")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
-	-- Task 5 — cas 6b : sink fail timing (Option A)
+	-- Task 5 — cas 6b : First timing échoue → étape quand même marquée ; pas de rejeu funnel
 	recording = newRecordingSink()
 	GameAnalyticsService.SetSink({
 		logOnboarding = function(_player, _step, stepName, _fields)
@@ -530,13 +530,56 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.OnReachedMainBubbleRoom(playerA, "GameRoom")
 	GameAnalyticsService.OnBubblePopped(playerA, nil)
 	check(
-		timingFailProfile.Analytics.Onboarding.PoppedFirstBubble ~= true,
-		"sink fail timing initial → PoppedFirstBubble non marqué (Option A)"
+		timingFailProfile.Analytics.Onboarding.PoppedFirstBubble == true,
+		"sink fail First timing → PoppedFirstBubble quand même marqué"
 	)
+	local popsAfterFail = countOnboarding(recording, "PoppedFirstBubble")
+	check(popsAfterFail == 1, "sink fail First timing → un seul envoi funnel PoppedFirstBubble")
+	GameAnalyticsService.OnBubblePopped(playerA, nil)
 	check(
-		countOnboarding(recording, "PoppedFirstBubble") >= 1,
-		"sink fail timing → onboarding quand même tenté avant custom"
+		countOnboarding(recording, "PoppedFirstBubble") == popsAfterFail,
+		"après fail First timing → pas de rejeu funnel au prochain drain"
 	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+	attachRecordingSink(recording)
+
+	-- Task 5 — cas 6c : SessionSeconds échoue → étape persistée ; pas de rejeu funnel ni First
+	recording = newRecordingSink()
+	local firstTimingAttempts = 0
+	GameAnalyticsService.SetSink({
+		logOnboarding = function(_player, _step, stepName, _fields)
+			table.insert(recording.onboarding, { step = _step, stepName = stepName })
+		end,
+		logFunnel = function() end,
+		logCustom = function(_player, name, value, _fields)
+			if name == "SessionSecondsToFirstBubble" then
+				error("session timing fail")
+			end
+			if name == "SecondsToFirstBubble" then
+				firstTimingAttempts += 1
+			end
+			table.insert(recording.custom, { name = name, value = value })
+		end,
+		logEconomy = function() end,
+		logProgressionComplete = function() end,
+	})
+	local sessionTimingFailProfile = buildAnalyticsProfile()
+	GameAnalyticsService.InitPlayer(playerA, sessionTimingFailProfile, true)
+	GameAnalyticsService.OnReachedMainBubbleRoom(playerA, "GameRoom")
+	GameAnalyticsService.OnBubblePopped(playerA, nil)
+	check(
+		sessionTimingFailProfile.Analytics.Onboarding.PoppedFirstBubble == true,
+		"SessionSeconds fail → étape PoppedFirstBubble persistée"
+	)
+	check(firstTimingAttempts == 1, "SessionSeconds fail → First timing envoyé une fois")
+	local funnelPops = countOnboarding(recording, "PoppedFirstBubble")
+	check(funnelPops == 1, "SessionSeconds fail → un seul envoi funnel")
+	GameAnalyticsService.OnBubblePopped(playerA, nil)
+	check(
+		countOnboarding(recording, "PoppedFirstBubble") == funnelPops,
+		"SessionSeconds fail → pas de rejeu funnel au prochain drain"
+	)
+	check(firstTimingAttempts == 1, "SessionSeconds fail → pas de renvoi SecondsToFirstBubble")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 	attachRecordingSink(recording)
 
