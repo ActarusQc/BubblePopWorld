@@ -3,7 +3,6 @@
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local AnalyticsConfig = require(Shared.AnalyticsConfig)
@@ -245,12 +244,14 @@ function GameAnalyticsService.Start()
 	end
 end
 
-function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProfile: boolean)
+function GameAnalyticsService.InitPlayer(player: Player, _profile: any, isNewProfile: boolean)
+	-- _profile réservé Task 3+ (flags Analytics) ; aucune mutation ici.
 	local emptyTotals = createEmptyTotals()
 	local session: PlayerSession = {
 		sessionId = HttpService:GenerateGUID(false),
 		joinClock = os.clock(),
 		isInitialProfileSession = isNewProfile == true,
+		-- provisoire Task 2 ; Task 4 remplacera par OnboardingStarted/Completed
 		onboardingActive = isNewProfile == true,
 		onboardingObserved = {},
 		summerObserved = {},
