@@ -220,8 +220,8 @@ local function _logFunnel(
 	end)
 end
 
-local function _logCustom(player: Player, name: string, value: number?, fields: any?)
-	invokeSink("logCustom", function()
+local function _logCustom(player: Player, name: string, value: number?, fields: any?): boolean
+	return invokeSink("logCustom", function()
 		getSink().logCustom(player, name, value, fields)
 	end)
 end
@@ -289,6 +289,34 @@ local function drainOnboarding(player: Player)
 		if not ok then
 			return
 		end
+
+		if session.isInitialProfileSession then
+			local timingName = AnalyticsConfig.FirstTimingByStep[name]
+			if timingName then
+				local seconds = math.max(0, math.floor(os.clock() - session.joinClock))
+				local timingOk = _logCustom(player, timingName, seconds, nil)
+				if not timingOk then
+					return
+				end
+			end
+		end
+
+		if name == "PoppedFirstBubble" and not session.sessionFirstBubbleSent then
+			local seconds = math.max(0, math.floor(os.clock() - session.joinClock))
+			local sessionOk = _logCustom(player, "SessionSecondsToFirstBubble", seconds, nil)
+			if not sessionOk then
+				return
+			end
+			session.sessionFirstBubbleSent = true
+		elseif name == "SoldFirstBackpack" and not session.sessionFirstSaleSent then
+			local seconds = math.max(0, math.floor(os.clock() - session.joinClock))
+			local sessionOk = _logCustom(player, "SessionSecondsToFirstSale", seconds, nil)
+			if not sessionOk then
+				return
+			end
+			session.sessionFirstSaleSent = true
+		end
+
 		onboarding[name] = true
 		profile.__dirty = true
 		if name == "PurchasedFirstUpgrade" then
@@ -415,6 +443,72 @@ end
 
 function GameAnalyticsService.OnSummerRequiredLevelReached(player: Player)
 	GameAnalyticsService.ObserveSummer(player, "ReachedRequiredLevel")
+end
+
+function GameAnalyticsService.OnReachedMainBubbleRoom(player: Player, zoneId: string?)
+	if zoneId == "GameRoom" then
+		GameAnalyticsService.ObserveOnboarding(player, "ReachedMainBubbleRoom")
+	end
+end
+
+function GameAnalyticsService.OnBubblePopped(
+	player: Player,
+	ctx: { zoneId: string?, rarityId: string?, isSpecial: boolean? }?
+)
+	GameAnalyticsService.ObserveOnboarding(player, "PoppedFirstBubble")
+
+	local session = sessions[player]
+	if not session then
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return
+	end
+	if not ctx or ctx.isSpecial ~= true then
+		return
+	end
+	local lifetime = profile.Analytics.Lifetime
+	if type(lifetime) ~= "table" or lifetime.FirstSpecialBubble == true then
+		return
+	end
+	if _logCustom(player, "FirstSpecialBubble", 1, nil) then
+		lifetime.FirstSpecialBubble = true
+		profile.__dirty = true
+	end
+end
+
+function GameAnalyticsService.OnBackpackBecameFull(player: Player, _ctx: { zoneId: string? }?)
+	GameAnalyticsService.ObserveOnboarding(player, "BackpackFullFirstTime")
+end
+
+function GameAnalyticsService.OnReturnedToLobby(player: Player)
+	local session = sessions[player]
+	if not session then
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return
+	end
+	local onboarding = profile.Analytics.Onboarding
+	if session.onboardingObserved.BackpackFullFirstTime or (type(onboarding) == "table" and onboarding.BackpackFullFirstTime == true) then
+		GameAnalyticsService.ObserveOnboarding(player, "ReturnedToLobbyAfterFullBackpack")
+	end
+end
+
+function GameAnalyticsService.OnBackpackSold(player: Player, _ctx: any?)
+	GameAnalyticsService.ObserveOnboarding(player, "SoldFirstBackpack")
+end
+
+function GameAnalyticsService.OnUpgradePurchased(player: Player, _ctx: any?)
+	GameAnalyticsService.ObserveOnboarding(player, "PurchasedFirstUpgrade")
+end
+
+function GameAnalyticsService.OnLevelReached(player: Player, level: number)
+	if level >= ZoneDefs.GetRequiredLevel("SummerZone") then
+		GameAnalyticsService.OnSummerRequiredLevelReached(player)
+	end
 end
 
 function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProfile: boolean)
