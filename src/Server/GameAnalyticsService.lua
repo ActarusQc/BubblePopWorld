@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local AnalyticsConfig = require(Shared.AnalyticsConfig)
+local ZoneDefs = require(Shared.ZoneDefs)
 
 export type SessionTotals = {
 	normalPops: number,
@@ -26,6 +27,8 @@ export type PlayerSession = {
 	onboardingActive: boolean,
 	onboardingObserved: { [string]: boolean },
 	summerObserved: { [string]: boolean },
+	summerFunnelVersionFieldSent: boolean,
+	profile: any,
 	sessionTotals: SessionTotals,
 	lastFlushedTotals: SessionTotals,
 	currentArea: string?,
@@ -57,6 +60,60 @@ local sessions: { [Player]: PlayerSession } = {}
 local sink: AnalyticsSink? = nil
 local warnHandler: (...any) -> () = warn
 local started = false
+
+local ANALYTICS_TEMPLATE = {
+	OnboardingVersion = 1,
+	SummerZoneVersion = 1,
+	SummerZoneFunnelSessionId = "",
+	OnboardingStarted = false,
+	OnboardingCompleted = false,
+	Onboarding = {},
+	SummerZone = {},
+	BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 },
+	Lifetime = { FirstSpecialBubble = false },
+}
+
+local function deepCopyTable(src: any): any
+	if type(src) ~= "table" then
+		return src
+	end
+	local out = {}
+	for k, v in pairs(src) do
+		out[k] = deepCopyTable(v)
+	end
+	return out
+end
+
+local function ensureAnalytics(profile: any)
+	if type(profile) ~= "table" then
+		return
+	end
+	if type(profile.Analytics) ~= "table" then
+		profile.Analytics = deepCopyTable(ANALYTICS_TEMPLATE)
+		return
+	end
+	local analytics = profile.Analytics
+	for key, templateValue in pairs(ANALYTICS_TEMPLATE) do
+		if analytics[key] == nil then
+			analytics[key] = if type(templateValue) == "table" then deepCopyTable(templateValue) else templateValue
+		elseif type(templateValue) == "table" and type(analytics[key]) == "table" then
+			if key == "Onboarding" or key == "SummerZone" then
+				continue
+			end
+			for nestedKey, nestedValue in pairs(templateValue) do
+				if analytics[key][nestedKey] == nil then
+					analytics[key][nestedKey] = nestedValue
+				end
+			end
+		end
+	end
+	if type(analytics.Onboarding) ~= "table" then
+		analytics.Onboarding = {}
+	end
+	if type(analytics.SummerZone) ~= "table" then
+		analytics.SummerZone = {}
+	end
+end
 
 local function emptyZoneSeconds(): { Lobby: number, GameRoom: number, SummerZone: number }
 	return { Lobby = 0, GameRoom = 0, SummerZone = 0 }
@@ -135,10 +192,10 @@ local function getSink(): AnalyticsSink?
 	return nil
 end
 
-local function invokeSink(methodName: string, fn: () -> ())
+local function invokeSink(methodName: string, fn: () -> ()): boolean
 	local activeSink = getSink()
 	if not activeSink then
-		return
+		return false
 	end
 	local ok, err = pcall(fn)
 	if not ok then
@@ -148,10 +205,11 @@ local function invokeSink(methodName: string, fn: () -> ())
 	elseif AnalyticsConfig.DebugEnabled then
 		print("[GameAnalytics] sink ok:", methodName)
 	end
+	return ok
 end
 
-local function _logOnboarding(player: Player, step: number, stepName: string, fields: any?)
-	invokeSink("logOnboarding", function()
+local function _logOnboarding(player: Player, step: number, stepName: string, fields: any?): boolean
+	return invokeSink("logOnboarding", function()
 		local activeSink = getSink()
 		if activeSink then
 			activeSink.logOnboarding(player, step, stepName, fields)
@@ -166,8 +224,8 @@ local function _logFunnel(
 	step: number,
 	stepName: string,
 	fields: any?
-)
-	invokeSink("logFunnel", function()
+): boolean
+	return invokeSink("logFunnel", function()
 		local activeSink = getSink()
 		if activeSink then
 			activeSink.logFunnel(player, funnelName, sessionId, step, stepName, fields)
@@ -226,6 +284,93 @@ local function _logProgressionComplete(
 	end)
 end
 
+local function drainOnboarding(player: Player)
+	local session = sessions[player]
+	if not session or not session.onboardingActive then
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return
+	end
+	local onboarding = profile.Analytics.Onboarding
+	if type(onboarding) ~= "table" then
+		profile.Analytics.Onboarding = {}
+		onboarding = profile.Analytics.Onboarding
+	end
+
+	for _, step in ipairs(AnalyticsConfig.OnboardingSteps) do
+		local name = step.name
+		if onboarding[name] == true then
+			continue
+		end
+		if not session.onboardingObserved[name] then
+			return
+		end
+		local ok = _logOnboarding(player, step.step, name, nil)
+		if not ok then
+			return
+		end
+		onboarding[name] = true
+		profile.__dirty = true
+		if name == "PurchasedFirstUpgrade" then
+			profile.Analytics.OnboardingCompleted = true
+			session.onboardingActive = false
+			profile.__dirty = true
+		end
+	end
+end
+
+local function drainSummer(player: Player)
+	local session = sessions[player]
+	if not session then
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return
+	end
+	local analytics = profile.Analytics
+	local summerZone = analytics.SummerZone
+	if type(summerZone) ~= "table" then
+		analytics.SummerZone = {}
+		summerZone = analytics.SummerZone
+	end
+	local funnelSessionId = analytics.SummerZoneFunnelSessionId
+	if type(funnelSessionId) ~= "string" or funnelSessionId == "" then
+		return
+	end
+
+	for _, step in ipairs(AnalyticsConfig.SummerSteps) do
+		local name = step.name
+		if summerZone[name] == true then
+			continue
+		end
+		if not session.summerObserved[name] then
+			return
+		end
+		local fields: any? = nil
+		if not session.summerFunnelVersionFieldSent then
+			local version = tonumber(analytics.SummerZoneVersion) or AnalyticsConfig.SummerZoneAnalyticsVersion
+			fields = AnalyticsConfig.VersionCustomField(version)
+		end
+		local ok = _logFunnel(
+			player,
+			AnalyticsConfig.FunnelSummer,
+			funnelSessionId,
+			step.step,
+			name,
+			fields
+		)
+		if not ok then
+			return
+		end
+		session.summerFunnelVersionFieldSent = true
+		summerZone[name] = true
+		profile.__dirty = true
+	end
+end
+
 function GameAnalyticsService.SetSink(nextSink: AnalyticsSink?)
 	sink = nextSink
 end
@@ -267,16 +412,46 @@ function GameAnalyticsService.EnsureBagValueCoverage(profile: any)
 	end
 end
 
+function GameAnalyticsService.ObserveOnboarding(player: Player, stepName: string)
+	local session = sessions[player]
+	if not session then
+		GameAnalyticsService.WarnNoSession(player, "ObserveOnboarding:" .. stepName)
+		return
+	end
+	if not session.onboardingActive then
+		return
+	end
+	session.onboardingObserved[stepName] = true
+	drainOnboarding(player)
+end
+
+function GameAnalyticsService.ObserveSummer(player: Player, stepName: string)
+	local session = sessions[player]
+	if not session then
+		GameAnalyticsService.WarnNoSession(player, "ObserveSummer:" .. stepName)
+		return
+	end
+	session.summerObserved[stepName] = true
+	drainSummer(player)
+end
+
+function GameAnalyticsService.OnSummerRequiredLevelReached(player: Player)
+	GameAnalyticsService.ObserveSummer(player, "ReachedRequiredLevel")
+end
+
 function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProfile: boolean)
+	ensureAnalytics(profile)
+
 	local emptyTotals = createEmptyTotals()
 	local session: PlayerSession = {
 		sessionId = HttpService:GenerateGUID(false),
 		joinClock = os.clock(),
-		isInitialProfileSession = isNewProfile == true,
-		-- provisoire Task 2 ; Task 4 remplacera par OnboardingStarted/Completed
-		onboardingActive = isNewProfile == true,
+		isInitialProfileSession = false,
+		onboardingActive = false,
 		onboardingObserved = {},
 		summerObserved = {},
+		summerFunnelVersionFieldSent = false,
+		profile = profile,
 		sessionTotals = emptyTotals,
 		lastFlushedTotals = copyTotals(emptyTotals),
 		currentArea = nil,
@@ -285,7 +460,61 @@ function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProf
 		sessionFirstSaleSent = false,
 	}
 	sessions[player] = session
+
+	profile.Analytics.OnboardingVersion = AnalyticsConfig.OnboardingAnalyticsVersion
+
+	if isNewProfile == true then
+		profile.Analytics.OnboardingStarted = true
+		profile.__dirty = true
+		session.isInitialProfileSession = true
+		session.onboardingActive = profile.Analytics.OnboardingCompleted ~= true
+		GameAnalyticsService.ObserveOnboarding(player, "JoinedGame")
+	else
+		session.isInitialProfileSession = false
+	end
+
+	session.onboardingActive = profile.Analytics.OnboardingStarted == true
+		and profile.Analytics.OnboardingCompleted ~= true
+
+	if session.onboardingActive then
+		local sentOnboarding = profile.Analytics.Onboarding
+		if type(sentOnboarding) == "table" then
+			for stepName, sent in pairs(sentOnboarding) do
+				if sent == true then
+					session.onboardingObserved[stepName] = true
+				end
+			end
+		end
+		drainOnboarding(player)
+	end
+
+	local summerVersion = tonumber(profile.Analytics.SummerZoneVersion) or 0
+	if summerVersion < AnalyticsConfig.SummerZoneAnalyticsVersion then
+		profile.Analytics.SummerZone = {}
+		profile.Analytics.SummerZoneFunnelSessionId = HttpService:GenerateGUID(false)
+		profile.Analytics.SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion
+		profile.__dirty = true
+	elseif profile.Analytics.SummerZoneFunnelSessionId == nil
+		or profile.Analytics.SummerZoneFunnelSessionId == "" then
+		profile.Analytics.SummerZoneFunnelSessionId = HttpService:GenerateGUID(false)
+		profile.__dirty = true
+	end
+
+	local sentSummer = profile.Analytics.SummerZone
+	if type(sentSummer) == "table" then
+		for _, step in ipairs(AnalyticsConfig.SummerSteps) do
+			if sentSummer[step.name] == true then
+				session.summerObserved[step.name] = true
+			end
+		end
+	end
+
 	GameAnalyticsService.EnsureBagValueCoverage(profile)
+
+	local level = profile.Level or 1
+	if level >= ZoneDefs.GetRequiredLevel("SummerZone") then
+		GameAnalyticsService.OnSummerRequiredLevelReached(player)
+	end
 end
 
 function GameAnalyticsService.FlushAndRemovePlayer(player: Player)
