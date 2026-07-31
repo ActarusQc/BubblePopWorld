@@ -121,13 +121,10 @@ ZoneDefs.SummerZone = {
 	SizeZ = BubbleRows,
 	FloorColor = Color3.fromRGB(210, 185, 130),
 	BorderColor = Color3.fromRGB(40, 190, 200),
+	-- Normales : orange vif (voir GameConfig.ZoneBubblePalettes.SummerZone).
+	-- Raretés : couleurs globales BubbleTypes (inchangées).
 	BubbleTintVariants = {
-		Color3.fromRGB(80, 220, 230),
-		Color3.fromRGB(130, 210, 255),
-		Color3.fromRGB(255, 220, 90),
-		Color3.fromRGB(255, 140, 130),
-		Color3.fromRGB(160, 240, 120),
-		Color3.fromRGB(235, 210, 160),
+		Color3.fromRGB(255, 145, 35),
 	},
 	Ambiance = {
 		ColorCorrection = {

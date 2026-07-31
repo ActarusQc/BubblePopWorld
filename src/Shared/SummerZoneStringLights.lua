@@ -16,21 +16,22 @@
 -- Toute la géométrie passe par les helpers AABB monde ci-dessous : le pivot des
 -- assets importés n'est jamais supposé centré ni au sol.
 
-local InsertService = game:GetService("InsertService")
 local RunService = game:GetService("RunService")
 
 local SummerZoneConfig = require(script.Parent.SummerZoneConfig)
+local SummerDecorConfig = require(script.Parent.SummerDecorConfig)
+local SummerDecorAssetImporter = require(script.Parent.SummerDecorAssetImporter)
 
 local SummerZoneStringLights = {}
 
 local GENERATOR_ID = "SummerZoneStringLights"
 local ATTR_FLAG = "SummerPerimeterLights"
 
-local POST_ASSET_ID = 18953379883
-local STRING_ASSET_ID = 93169410099587
+local POST_ASSET_ID = SummerDecorConfig.Placement.PostAssetId
+local STRING_ASSET_ID = SummerDecorConfig.Placement.StringAssetId
 
 -- Périmètre
-local POST_SPACING = SummerZoneConfig.LightPerimeterSpacing
+local POST_SPACING = SummerDecorConfig.Placement.LightPerimeterSpacing or SummerZoneConfig.LightPerimeterSpacing
 local OUTER_INSET = 5
 local BOARD_CLEARANCE = 3
 local ENTRANCE_EXTRA_CLEAR = 10
@@ -362,55 +363,46 @@ local function flipAboutAxis(axis: string): CFrame
 end
 
 --------------------------------------------------------------------
--- Chargement d’assets (Studio plugin → GetObjects ; sinon InsertService)
+-- Templates sécurisés (cache SummerDecorAssets uniquement)
 --------------------------------------------------------------------
 
-local function unwrapAsset(loaded: any): Instance?
-	if typeof(loaded) ~= "Instance" then
-		if type(loaded) == "table" and loaded[1] and typeof(loaded[1]) == "Instance" then
-			return loaded[1] :: Instance
-		end
-		return nil
+-- Templates uniquement depuis ServerStorage.SummerDecorAssets (copie promue).
+-- Aucun InsertService / GetObjects / LoadAssetAsync.
+function SummerZoneStringLights.CanGenerateLights(): boolean
+	local postKey = tostring(POST_ASSET_ID) .. "_1"
+	local stringKey = tostring(STRING_ASSET_ID) .. "_1"
+	local postOk = SummerDecorConfig.IsTemplateApproved(postKey) or SummerDecorConfig.IsApproved(POST_ASSET_ID)
+	local stringOk = SummerDecorConfig.IsTemplateApproved(stringKey) or SummerDecorConfig.IsApproved(STRING_ASSET_ID)
+	if not postOk or not stringOk then
+		return false
 	end
-	local inst = loaded :: Instance
-	if inst:IsA("Model") or inst:IsA("Folder") then
-		local children = inst:GetChildren()
-		if #children == 1 and (children[1]:IsA("Model") or children[1]:IsA("BasePart") or children[1]:IsA("Folder")) then
-			local only = children[1]
-			only.Parent = nil
-			inst:Destroy()
-			return only
-		end
+	if SummerDecorAssetImporter.FindApprovedCached(POST_ASSET_ID) == nil then
+		return false
 	end
-	return inst
+	if SummerDecorAssetImporter.FindApprovedCached(STRING_ASSET_ID) == nil then
+		return false
+	end
+	return true
 end
 
+function SummerZoneStringLights.GetApprovedTemplate(assetId: number): Instance?
+	local key1 = tostring(assetId) .. "_1"
+	if not (SummerDecorConfig.IsTemplateApproved(key1) or SummerDecorConfig.IsApproved(assetId)) then
+		warn(("[SummerZoneStringLights] Template %s / asset %d non approuvé — génération annulée."):format(key1, assetId))
+		return nil
+	end
+	local cached = SummerDecorAssetImporter.FindApprovedProp(key1)
+		or SummerDecorAssetImporter.FindApprovedCached(assetId)
+	if not cached then
+		warn(("[SummerDecorAssets] Approved asset missing from persistent cache: %d"):format(assetId))
+		return nil
+	end
+	return cached:Clone()
+end
+
+-- Compat nom historique : alias vers cache sécurisé uniquement.
 function SummerZoneStringLights.LoadAssetTemplate(assetId: number): Instance?
-	local okGet, getResult = pcall(function()
-		return (game :: any):GetObjects("rbxassetid://" .. tostring(assetId))
-	end)
-	if okGet then
-		local unwrapped = unwrapAsset(getResult)
-		if unwrapped then
-			return unwrapped
-		end
-	end
-
-	local okIns, insResult = pcall(function()
-		return InsertService:LoadAsset(assetId)
-	end)
-	if okIns then
-		local unwrapped = unwrapAsset(insResult)
-		if unwrapped then
-			return unwrapped
-		end
-	end
-
-	warn(string.format(
-		"[SummerZoneStringLights] Impossible de charger l'asset %d (GetObjects/InsertService).",
-		assetId
-	))
-	return nil
+	return SummerZoneStringLights.GetApprovedTemplate(assetId)
 end
 
 --------------------------------------------------------------------
@@ -1083,8 +1075,13 @@ local function report(result: CreateResult)
 end
 
 function SummerZoneStringLights.CreateSummerPerimeterLights(): CreateResult?
-	if RunService:IsRunning() then
-		warn("[SummerZoneStringLights] Create uniquement en mode Edit (pas en Play).")
+	if not (RunService:IsStudio() and RunService:IsEdit()) then
+		warn("[SummerZoneStringLights] Create uniquement en mode Studio Edit.")
+		return nil
+	end
+
+	if not SummerZoneStringLights.CanGenerateLights() then
+		warn("[SummerZoneStringLights] Abandon : poteaux/guirlandes non approuvés ou absents du cache SummerDecorAssets (pas de repli Marketplace).")
 		return nil
 	end
 
@@ -1099,10 +1096,10 @@ function SummerZoneStringLights.CreateSummerPerimeterLights(): CreateResult?
 	local decor = getSummerPreview().EnsureSummerZoneDecor()
 	local avoid = collectExistingDecorAvoid(decor, postsFolder, stringsFolder)
 
-	local postTemplate = SummerZoneStringLights.LoadAssetTemplate(POST_ASSET_ID)
-	local stringTemplate = SummerZoneStringLights.LoadAssetTemplate(STRING_ASSET_ID)
+	local postTemplate = SummerZoneStringLights.GetApprovedTemplate(POST_ASSET_ID)
+	local stringTemplate = SummerZoneStringLights.GetApprovedTemplate(STRING_ASSET_ID)
 	if not postTemplate or not stringTemplate then
-		warn("[SummerZoneStringLights] Abandon : assets introuvables.")
+		warn("[SummerZoneStringLights] Abandon : templates cache introuvables.")
 		if postTemplate then
 			postTemplate:Destroy()
 		end
@@ -1162,8 +1159,8 @@ end
 -- (L'ancien Refresh ne faisait que corriger la hauteur des poteaux existants — d'où le
 -- contour resté calé sur l'ancienne emprise après un redimensionnement de zone.)
 function SummerZoneStringLights.RefreshSummerPerimeterLights(): CreateResult?
-	if RunService:IsRunning() then
-		warn("[SummerZoneStringLights] Refresh uniquement en mode Edit (pas en Play).")
+	if not (RunService:IsStudio() and RunService:IsEdit()) then
+		warn("[SummerZoneStringLights] Refresh uniquement en mode Studio Edit.")
 		return nil
 	end
 

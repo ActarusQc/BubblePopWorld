@@ -50,45 +50,45 @@ end
 function TravelService.GetDestinationsForPlayer(player: Player, currentArea: string): { DestinationCard }
 	local level = DataService.GetPlayerLevel(player)
 	local area = normalizeArea(currentArea)
-	local cards: { DestinationCard } = {}
+	return TravelConfig.BuildDestinationCards(level, area) :: { DestinationCard }
+end
 
-	for _, def in ipairs(TravelConfig.GetSortedDestinations()) do
-		if not def.Enabled then
-			continue
+local function resolveAreaForTransit(transitId: string, terminal: Model?): string
+	if terminal then
+		local areaAttr = terminal:GetAttribute("CurrentArea")
+		if type(areaAttr) == "string" and areaAttr ~= "" then
+			return normalizeArea(areaAttr)
 		end
-
-		local isCurrent = def.AreaName == area
-		if area == "Lobby" then
-			if not def.ShowFromLobby then
-				continue
-			end
-		else
-			-- Zone thématique : Lobby + toutes zones activées (inclut la courante).
-			-- Rien à filtrer de plus.
-		end
-
-		table.insert(cards, {
-			Id = def.Id,
-			DisplayName = def.DisplayName,
-			Description = def.Description,
-			RequiredLevel = def.RequiredLevel,
-			IsCurrent = isCurrent,
-			IsLocked = level < def.RequiredLevel,
-			IsLobby = def.Id == "Lobby",
-			SortOrder = def.SortOrder,
-		})
 	end
-
-	return cards
+	local placement = TravelConfig.GetPlacementByTransitId(transitId)
+	if placement and type(placement.CurrentArea) == "string" then
+		return normalizeArea(placement.CurrentArea)
+	end
+	return "Lobby"
 end
 
 local function sendList(player: Player, transitId: string, currentArea: string)
-	local cards = TravelService.GetDestinationsForPlayer(player, currentArea)
+	local area = normalizeArea(currentArea)
+	local cards = TravelService.GetDestinationsForPlayer(player, area)
+	-- Tableau dense explicite : évite toute ambiguïté de sérialisation RemoteEvent.
+	local destinations = table.create(#cards)
+	for i, card in ipairs(cards) do
+		destinations[i] = {
+			Id = card.Id,
+			DisplayName = card.DisplayName,
+			Description = card.Description,
+			RequiredLevel = card.RequiredLevel,
+			IsCurrent = card.IsCurrent == true,
+			IsLocked = card.IsLocked == true,
+			IsLobby = card.IsLobby == true,
+			SortOrder = card.SortOrder,
+		}
+	end
 	Remotes.Event("DestinationListUpdated"):FireClient(player, {
 		TransitId = transitId,
-		CurrentArea = currentArea,
+		CurrentArea = area,
 		PlayerLevel = DataService.GetPlayerLevel(player),
-		Destinations = cards,
+		Destinations = destinations,
 	})
 end
 
@@ -123,6 +123,15 @@ local function resolveAreaFromPosition(pos: Vector3): string
 	return "GameRoom"
 end
 
+local function pointInPart(point: Vector3, part: BasePart, inflate: number?): boolean
+	local pad = inflate or 0
+	local localPoint = part.CFrame:PointToObjectSpace(point)
+	local half = part.Size * 0.5 + Vector3.new(pad, pad, pad)
+	return math.abs(localPoint.X) <= half.X
+		and math.abs(localPoint.Y) <= half.Y
+		and math.abs(localPoint.Z) <= half.Z
+end
+
 local function playerNearTerminal(player: Player, terminal: Model): boolean
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -130,12 +139,15 @@ local function playerNearTerminal(player: Player, terminal: Model): boolean
 		return false
 	end
 	local trigger = BubbleTransitBuilder.GetTrigger(terminal)
-	local anchor = trigger or terminal.PrimaryPart
+	if trigger then
+		-- Même test OBB que le client (+ marge) — la sphère excluait parfois les coins.
+		return pointInPart(hrp.Position, trigger, 1.5)
+	end
+	local anchor = terminal.PrimaryPart
 	if not anchor then
 		return false
 	end
-	local maxDist = TravelConfig.TerminalProximityStuds
-	return (hrp.Position - anchor.Position).Magnitude <= maxDist
+	return (hrp.Position - anchor.Position).Magnitude <= TravelConfig.TerminalProximityStuds
 end
 
 local function characterReady(player: Player): (Model?, BasePart?, Humanoid?)
@@ -273,23 +285,24 @@ function TravelService.Start()
 	BubbleTransitBuilder.EnsureTerminals()
 
 	Remotes.Event("RequestDestinationList").OnServerEvent:Connect(function(player: Player, transitId: unknown)
-		if typeof(transitId) ~= "string" then
+		if typeof(transitId) ~= "string" or transitId == "" then
 			return
 		end
 		local suppressUntil = travelSuppressedUntil[player]
 		if suppressUntil and os.clock() < suppressUntil then
 			return
 		end
+		-- La liste ne dépend PAS de la position du pad. Toujours répondre pour
+		-- éviter un panneau vide si le check de proximité échoue après un déplacement.
 		local terminal = BubbleTransitBuilder.FindTerminalByTransitId(transitId)
-		if not terminal then
-			return
-		end
-		if not playerNearTerminal(player, terminal) then
-			return
-		end
-		local areaAttr = terminal:GetAttribute("CurrentArea")
-		local area = if type(areaAttr) == "string" then areaAttr else ZoneService.GetPlayerZone(player)
-		debugLog("Opened", "terminal=" .. transitId, "player=" .. player.Name, "area=" .. tostring(area))
+		local area = resolveAreaForTransit(transitId, terminal)
+		debugLog(
+			"Opened",
+			"terminal=" .. transitId,
+			"player=" .. player.Name,
+			"area=" .. area,
+			"near=" .. tostring(terminal ~= nil and playerNearTerminal(player, terminal))
+		)
 		sendList(player, transitId, area)
 	end)
 

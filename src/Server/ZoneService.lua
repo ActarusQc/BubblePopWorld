@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local ZoneDefs = require(Shared.ZoneDefs)
+local TravelConfig = require(Shared.TravelConfig)
 local L10n = require(Shared.LocalizationStrings)
 local L10nUtil = require(Shared.LocalizationUtil)
 
@@ -815,17 +816,19 @@ local function buildSellBooth(decor: Folder, root: Vector3)
 	--------------------------------------------------------------------
 	-- Estrade + pad de vente (bas de plaza légèrement enfoncé dans le sol lobby)
 	--------------------------------------------------------------------
+	local plazaSize = booth.PlazaSize
+	local plazaOffset = booth.PlazaLocalOffset
 	attachPart(decor, {
 		Name = "SellPlaza",
-		Size = Vector3.new(24, 1.2, 22),
-		CFrame = sellLocalCF(base, Vector3.new(0, -1.6, 0.6)),
+		Size = plazaSize,
+		CFrame = sellLocalCF(base, plazaOffset),
 		Color = SELL_NAVY,
 		Material = Enum.Material.SmoothPlastic,
 	})
 	attachPart(decor, {
 		Name = "SellPlazaTrim",
-		Size = Vector3.new(24.6, 0.18, 22.6),
-		CFrame = sellLocalCF(base, Vector3.new(0, -0.95, 0.6)),
+		Size = Vector3.new(plazaSize.X + 0.6, 0.18, plazaSize.Z + 0.6),
+		CFrame = sellLocalCF(base, Vector3.new(plazaOffset.X, -0.95, plazaOffset.Z)),
 		Color = SELL_CYAN,
 		Material = Enum.Material.Neon,
 		Transparency = 0.45,
@@ -1394,15 +1397,12 @@ end
 
 local SellKioskBuilder = require(script.Parent.SellKioskBuilder)
 
--- Face avant (-Z local) vers le spawn : yaw Y uniquement, jamais de pitch/roll.
-local function boardCFrameFacingSpawn(boardPos: Vector3, spawnPos: Vector3): CFrame
-	local lookTarget = Vector3.new(spawnPos.X, boardPos.Y, spawnPos.Z)
-	local delta = lookTarget - boardPos
-	if delta.Magnitude < 0.05 then
-		return CFrame.new(boardPos)
-	end
-	local _, yaw = CFrame.lookAt(boardPos, lookTarget):ToOrientation()
-	return CFrame.new(boardPos) * CFrame.Angles(0, yaw, 0)
+-- Mur du fond (sud) : orientation commune (yaw seul). LookVector = +Z vers le lobby.
+-- Ne jamais dériver le yaw via lookAt(spawn) — chaque panneau aurait un angle différent.
+local BOARD_WALL_YAW_DEGREES = 180
+
+local function boardCFrameOnBackWall(boardPos: Vector3): CFrame
+	return CFrame.new(boardPos) * CFrame.Angles(0, math.rad(BOARD_WALL_YAW_DEGREES), 0)
 end
 
 local function _clearSurfaceGuis(part: BasePart)
@@ -1456,15 +1456,46 @@ local function upsertBoardPart(
 	return frame
 end
 
+-- Panneaux du mur du fond (sud) : même profondeur / yaw mural.
+-- Disposition vue depuis le spawn :
+--   [ TOP COIN COLLECTORS ]  [ BUBBLE TRANSIT ]  [ HOW TO PLAY ]
+local BOARD_WALL_INSET = 6.8
+local BOARD_WALL_STANDOFF = 0.35 -- devant le plan du garde-corps sud (LookVector mur)
+local INSTRUCTION_PANEL_SIZE = Vector3.new(12, 7.2, 0.55)
+local INSTRUCTION_BOARD_X = 18 -- inchangé (droite de Bubble Transit)
+local LEADERBOARD_TRANSIT_GAP = 4.5 -- studs libres entre transit et classement (3–6)
+
 local function buildLeaderboardBoard(decor: Folder, root: Vector3)
-	-- Panneau est (mur +X), face vers le spawn. SurfaceGui Front via LeaderboardService.
+	-- À gauche de Bubble Transit (X négatif), même orientation murale que HOW TO PLAY.
 	local L = Config.Lobby
-	local spawnPos = root + L.SpawnOffset
 	local size = Vector3.new(12, 14, 0.6)
-	local wallInset = 3.2
-	-- Est, légèrement au sud du centre : visible en tournant à gauche depuis le spawn (-Z).
-	local boardPos = root + Vector3.new(L.FloorSize.X / 2 - wallInset, size.Y / 2, -8)
-	local cf = boardCFrameFacingSpawn(boardPos, spawnPos)
+	local wallNormal = (CFrame.Angles(0, math.rad(BOARD_WALL_YAW_DEGREES), 0)).LookVector
+	local wallZ = root.Z - (L.FloorSize.Z / 2 - BOARD_WALL_INSET)
+	local depth = wallZ + wallNormal.Z * BOARD_WALL_STANDOFF
+
+	local lobbyPad = TravelConfig.CapsulePlacements.Lobby
+	local transitCF = TravelConfig.ResolveWorldCFrame(lobbyPad)
+	local transitPos = transitCF.Position
+	local transitHalfX = TravelConfig.PadDimensions.PadDiameter * 0.5
+	local boardHalfX = size.X * 0.5
+	-- Vu du spawn face au mur : gauche = -X. Centre classement à l'ouest du pad.
+	local boardX = transitPos.X - (transitHalfX + LEADERBOARD_TRANSIT_GAP + boardHalfX)
+	local boardPos = Vector3.new(boardX, root.Y + size.Y / 2, depth)
+	local cf = boardCFrameOnBackWall(boardPos)
+
+	local edgeGap = (transitPos.X - transitHalfX) - (boardPos.X + boardHalfX)
+	if edgeGap < 3 or edgeGap > 6 then
+		warn(string.format(
+			"[ZoneService] classement : %.2f studs de Bubble Transit (attendu 3 à 6).",
+			edgeGap
+		))
+	end
+	if boardPos.X - boardHalfX < root.X - L.FloorSize.X / 2 + 1.2 then
+		warn("[ZoneService] classement : le panneau dépasse le bord ouest du lobby.")
+	end
+	if boardPos.Z - size.Z / 2 < root.Z - L.FloorSize.Z / 2 + 1.2 then
+		warn("[ZoneService] classement : le panneau traverse le garde-corps sud.")
+	end
 
 	local frame = upsertBoardPart(
 		decor,
@@ -1480,13 +1511,12 @@ local function buildLeaderboardBoard(decor: Folder, root: Vector3)
 
 	local headerSize = Vector3.new(12.2, 1.8, 0.5)
 	local headerPos = boardPos + Vector3.new(0, size.Y / 2 + headerSize.Y / 2 + 0.12, 0)
-	local headerCF = boardCFrameFacingSpawn(headerPos, spawnPos)
 	upsertBoardPart(
 		decor,
 		{ "LeaderboardHeader" },
 		"LeaderboardHeader",
 		headerSize,
-		headerCF,
+		boardCFrameOnBackWall(headerPos),
 		PALETTE.Violet,
 		false
 	)
@@ -1496,22 +1526,24 @@ local function buildLeaderboardBoard(decor: Folder, root: Vector3)
 	end
 end
 
-local function buildSpawnRing(decor: Folder, root: Vector3)
+local function buildSpawnAccent(decor: Folder, root: Vector3)
 	local L = Config.Lobby
 	local pos = root + L.SpawnOffset
-	local ring = makePart({
-		Name = "SpawnRing",
-		Size = Vector3.new(10, 0.35, 10),
-		CFrame = CFrame.new(pos.X, root.Y + 0.2, pos.Z),
-		Color = PALETTE.Cyan,
-		Material = Enum.Material.Neon,
-		Transparency = 0.25,
-		CanCollide = false,
-		CanQuery = false,
-		Shape = Enum.PartType.Cylinder,
-	})
-	ring.CFrame = CFrame.new(pos.X, root.Y + 0.2, pos.Z) * CFrame.Angles(0, 0, math.rad(90))
-	ring.Parent = decor
+	-- Ancien SpawnRing : Size (10, 0.35, 10) + rot Z90 → poteau vertical 10×0.35 (bug).
+	local staleRing = decor:FindFirstChild("SpawnRing")
+	if staleRing then
+		staleRing:Destroy()
+	end
+
+	local existing = decor:FindFirstChild("SpawnAccent")
+	if existing and existing:IsA("BasePart") then
+		existing.Size = Vector3.new(14, 0.25, 14)
+		existing.CFrame = CFrame.new(pos.X, root.Y + 0.15, pos.Z)
+		return
+	end
+	if existing then
+		existing:Destroy()
+	end
 
 	local pad = makePart({
 		Name = "SpawnAccent",
@@ -1525,10 +1557,9 @@ local function buildSpawnRing(decor: Folder, root: Vector3)
 	pad.Parent = decor
 end
 
--- Panneau d'instructions (sud-est) : assemblage local + PivotTo (yaw seul).
+-- Panneau d'instructions (sud-est) : assemblage local + PivotTo (yaw mural commun).
 local function buildInstructionBoard(decor: Folder, root: Vector3)
 	local L = Config.Lobby
-	local spawnPos = root + L.SpawnOffset
 
 	-- Réutiliser le Model existant (pas de doublon).
 	local group = decor:FindFirstChild("InstructionBoard")
@@ -1555,10 +1586,15 @@ local function buildInstructionBoard(decor: Folder, root: Vector3)
 		end
 	end
 
-	local panelSize = Vector3.new(12, 7.2, 0.55)
-	local wallInset = 6.8
-	local boardPos = root + Vector3.new(18, panelSize.Y / 2 + 1.1, -(L.FloorSize.Z / 2 - wallInset))
-	local baseCF = boardCFrameFacingSpawn(boardPos, spawnPos)
+	local panelSize = INSTRUCTION_PANEL_SIZE
+	local wallNormal = (CFrame.Angles(0, math.rad(BOARD_WALL_YAW_DEGREES), 0)).LookVector
+	local wallZ = root.Z - (L.FloorSize.Z / 2 - BOARD_WALL_INSET)
+	local boardPos = Vector3.new(
+		root.X + INSTRUCTION_BOARD_X,
+		root.Y + panelSize.Y / 2 + 1.1,
+		wallZ + wallNormal.Z * BOARD_WALL_STANDOFF
+	)
+	local baseCF = boardCFrameOnBackWall(boardPos)
 
 	local halfW, halfH = panelSize.X / 2, panelSize.Y / 2
 	local groundY = root.Y
@@ -1909,10 +1945,10 @@ local function buildLobby(lobby: Folder)
 		if codeBooth then
 			buildSellBooth(decor, root)
 		end
-		buildSpawnRing(decor, root)
 	end
 
-	-- Panneaux lobby : toujours (ré)alignés face au spawn (idempotent).
+	-- Accent sol spawn + purge poteau SpawnRing legacy + panneaux (yaw mural commun).
+	buildSpawnAccent(decor, root)
 	buildInstructionBoard(decor, root)
 	buildLeaderboardBoard(decor, root)
 

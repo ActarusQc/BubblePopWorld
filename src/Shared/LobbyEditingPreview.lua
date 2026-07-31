@@ -154,16 +154,6 @@ function LobbyEditingPreview.CreateLobbyEditingPreview()
 	})
 	spawnMarker.Parent = preview
 
-	local spawnPole = ghostPart({
-		Name = "LobbySpawnPole",
-		Size = Vector3.new(0.6, 8, 0.6),
-		CFrame = CFrame.new(root + L.SpawnOffset + Vector3.new(0, 4, 0)),
-		Color = Color3.fromRGB(80, 255, 120),
-		Material = Enum.Material.Neon,
-		Transparency = 0.35,
-	})
-	spawnPole.Parent = preview
-
 	ghostPart({
 		Name = "GameEntranceMarker",
 		Size = L.EntranceSize,

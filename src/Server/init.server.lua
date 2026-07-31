@@ -60,6 +60,42 @@ do
 	if okTravel and travelTests and travelTests.Run then
 		travelTests.Run()
 	end
+	local okBagValue, bagValueTests = pcall(function()
+		return require(Shared.BubbleValueTests)
+	end)
+	if okBagValue and bagValueTests and bagValueTests.Run then
+		bagValueTests.Run()
+	end
+	local okZoneGameplay, zoneGameplayTests = pcall(function()
+		return require(Shared.ZoneGameplayTests)
+	end)
+	if okZoneGameplay and zoneGameplayTests and zoneGameplayTests.Run then
+		zoneGameplayTests.Run()
+	end
+	local okDecorCfg, decorCfgTests = pcall(function()
+		return require(Shared.SummerDecorConfigTests)
+	end)
+	if okDecorCfg and decorCfgTests and decorCfgTests.Run then
+		decorCfgTests.Run()
+	end
+	local okDecorSec, decorSecTests = pcall(function()
+		return require(Shared.SummerDecorSecurityTests)
+	end)
+	if okDecorSec and decorSecTests and decorSecTests.Run then
+		decorSecTests.Run()
+	end
+	local okPropSplit, propSplitTests = pcall(function()
+		return require(Shared.SummerDecorPropSplitTests)
+	end)
+	if okPropSplit and propSplitTests and propSplitTests.Run then
+		propSplitTests.Run()
+	end
+	local okScene, sceneTests = pcall(function()
+		return require(Shared.SummerDecorSceneClassifierTests)
+	end)
+	if okScene and sceneTests and sceneTests.Run then
+		sceneTests.Run()
+	end
 end
 
 print("[Bubble Pop World] serveur prêt.")

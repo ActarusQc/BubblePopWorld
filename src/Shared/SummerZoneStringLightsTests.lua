@@ -20,6 +20,10 @@ function SummerZoneStringLightsTests.Run(): boolean
 
 	check(Lights.POST_ASSET_ID == 18953379883, "post asset id")
 	check(Lights.STRING_ASSET_ID == 93169410099587, "string asset id")
+	check(type(Lights.CanGenerateLights) == "function", "CanGenerateLights")
+	check(Lights.CanGenerateLights() == false, "lights blocked when ApprovedAssetIds empty / cache missing")
+	check(type(Lights.GetApprovedTemplate) == "function", "GetApprovedTemplate")
+	check(Lights.GetApprovedTemplate(18953379883) == nil, "no marketplace fallback for posts")
 	check(Lights.POST_TARGET_HEIGHT >= 9 and Lights.POST_TARGET_HEIGHT <= 12, "hauteur poteau 9–12")
 	check(Lights.STRING_LOWEST_TARGET >= 7 and Lights.STRING_LOWEST_TARGET <= 9, "point bas ampoules 7–9")
 	check(Lights.STRING_LOWEST_MIN >= 7, "plancher ampoules >= 7 (au-dessus des têtes)")

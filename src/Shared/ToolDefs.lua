@@ -79,9 +79,85 @@ ToolDefs.RarityColor = {
 	Mythic = Color3.fromRGB(255, 90, 220),
 }
 
+-- Pools d'apparition par zone (poids relatifs au sein du pool).
+-- GameRoom = planche ClassicZone : objets à faible impact uniquement.
+-- SummerZone : objets de base + objets puissants (plus rares).
+ToolDefs.ZoneItemPools = {
+	GameRoom = {
+		{ ItemId = "Epingle", Weight = 60 },
+		{ ItemId = "Marteau", Weight = 40 },
+	},
+	SummerZone = {
+		{ ItemId = "Epingle", Weight = 42 },
+		{ ItemId = "Marteau", Weight = 28 },
+		{ ItemId = "Bombe", Weight = 14 },
+		{ ItemId = "Ailes", Weight = 8 },
+		{ ItemId = "MegaRouleau", Weight = 5 },
+		{ ItemId = "Laser", Weight = 4 },
+		{ ItemId = "Singularite", Weight = 1 },
+	},
+}
+
 local totalWeight = 0
 for _, def in pairs(ToolDefs.List) do totalWeight += def.Weight end
 
+local poolTotals: { [string]: number } = {}
+for poolKey, entries in pairs(ToolDefs.ZoneItemPools) do
+	local sum = 0
+	for _, entry in ipairs(entries) do
+		sum += entry.Weight
+	end
+	poolTotals[poolKey] = sum
+end
+
+-- ClassicZone (planche GameRoom) → pool GameRoom.
+function ToolDefs.PoolKeyForZone(zoneId: string): string
+	if zoneId == "ClassicZone" or zoneId == "GameRoom" then
+		return "GameRoom"
+	end
+	return zoneId
+end
+
+function ToolDefs.GetZonePool(zoneId: string): { { ItemId: string, Weight: number } }?
+	return ToolDefs.ZoneItemPools[ToolDefs.PoolKeyForZone(zoneId)]
+end
+
+function ToolDefs.IsInZonePool(zoneId: string, itemId: string): boolean
+	local pool = ToolDefs.GetZonePool(zoneId)
+	if not pool then
+		return false
+	end
+	for _, entry in ipairs(pool) do
+		if entry.ItemId == itemId then
+			return true
+		end
+	end
+	return false
+end
+
+function ToolDefs.RollForZone(zoneId: string, rng: Random?): (string, any)
+	local poolKey = ToolDefs.PoolKeyForZone(zoneId)
+	local pool = ToolDefs.ZoneItemPools[poolKey]
+	local poolTotal = poolTotals[poolKey]
+	if not pool or not poolTotal or poolTotal <= 0 then
+		return "Epingle", ToolDefs.List.Epingle
+	end
+	local roll = if rng then rng:NextNumber(0, poolTotal) else math.random() * poolTotal
+	local acc = 0
+	for _, entry in ipairs(pool) do
+		acc += entry.Weight
+		if roll <= acc then
+			local def = ToolDefs.List[entry.ItemId]
+			if def then
+				return entry.ItemId, def
+			end
+		end
+	end
+	local fallbackId = pool[1].ItemId
+	return fallbackId, ToolDefs.List[fallbackId] or ToolDefs.List.Epingle
+end
+
+-- Legacy : tirage global (boutique / tests). Les drops monde utilisent RollForZone.
 function ToolDefs.Roll(rng: Random?): (string, any)
 	local roll = if rng then rng:NextNumber(0, totalWeight) else math.random() * totalWeight
 	local acc = 0

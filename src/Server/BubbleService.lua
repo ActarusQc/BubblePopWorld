@@ -11,6 +11,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local ZoneDefs = require(Shared.ZoneDefs)
 local BubbleTypes = require(Shared.BubbleTypes)
+local BubbleValue = require(Shared.BubbleValue)
 local Remotes = require(Shared.Remotes)
 
 local DataService = require(script.Parent.DataService)
@@ -155,6 +156,41 @@ local function clearStaleVisuals(bubble: BasePart)
 	end
 end
 
+local function normalizeCommonTints(common: any): { Color3 }?
+	if common == nil then
+		return nil
+	end
+	if typeof(common) == "Color3" then
+		return { common :: Color3 }
+	end
+	if type(common) == "table" then
+		local asTable = common :: { any }
+		-- Liste de variantes (TintVariants) vs Color3 unique (champs R/G/B).
+		if asTable[1] ~= nil then
+			return asTable :: { Color3 }
+		end
+		if type(asTable.R) == "number" then
+			return { common :: Color3 }
+		end
+	end
+	return nil
+end
+
+-- Palette Normal par zone ; raretés restent sur BubbleTypes.
+local function tintVariantsForZone(zoneId: string, zoneDef: any): { Color3 }
+	local palettes = Config.ZoneBubblePalettes
+	local paletteKey = if zoneId == "ClassicZone" then "GameRoom" else zoneId
+	local palette = palettes and palettes[paletteKey]
+	local fromPalette = palette and normalizeCommonTints(palette.Common)
+	if fromPalette then
+		return fromPalette
+	end
+	if zoneDef and zoneDef.BubbleTintVariants and #zoneDef.BubbleTintVariants > 0 then
+		return zoneDef.BubbleTintVariants
+	end
+	return B.Appearance.TintVariants
+end
+
 local function resolveBubbleColor(def, tintIndex: number, tintVariants: { Color3 }): Color3
 	local A = B.Appearance
 	if def.Id == "Normal" then
@@ -258,6 +294,8 @@ local function buildBubble(board: BoardState, x: number, z: number)
 	part:SetAttribute("CellZ", z)
 	part:SetAttribute("Alive", true)
 	part:SetAttribute("ZoneId", board.zoneId)
+	-- Area : GameRoom (ClassicZone) ou SummerZone — identification explicite hors position joueur.
+	part:SetAttribute("Area", if board.zoneId == "SummerZone" then "SummerZone" else "GameRoom")
 	part:SetAttribute("ThemeId", board.themeId)
 	part.CanQuery = true
 	part.CanTouch = true
@@ -331,7 +369,7 @@ function BubbleService.BuildBoard(zoneDef: any)
 	local zoneId = zoneDef.Id :: string
 	destroyBoard(zoneId)
 
-	local tintVariants = zoneDef.BubbleTintVariants or B.Appearance.TintVariants
+	local tintVariants = tintVariantsForZone(zoneId, zoneDef)
 	local folder = resolveParentFolder(zoneId) :: Folder
 	local sizeX = zoneDef.SizeX or G.SizeX
 	local sizeZ = zoneDef.SizeZ or G.SizeZ
@@ -469,10 +507,30 @@ end
 type PopContext = {
 	coinMult: number,
 	worldMult: number,
-	zoneMult: number,
 	extra: number,
 	combo: () -> number,
 }
+
+-- Zone de la bulle (attribut / métadonnée cellule) — jamais la position du joueur.
+local function resolveBubbleZoneId(cell: any): string
+	local part = cell and cell.part
+	if part then
+		local attr = part:GetAttribute("ZoneId")
+		if type(attr) == "string" and ZoneDefs.Get(attr) then
+			return attr
+		end
+		local area = part:GetAttribute("Area")
+		if area == "SummerZone" then
+			return "SummerZone"
+		elseif area == "GameRoom" then
+			return "ClassicZone"
+		end
+	end
+	if type(cell.zoneId) == "string" and ZoneDefs.Get(cell.zoneId) then
+		return cell.zoneId
+	end
+	return defaultZoneId
+end
 
 local function popClaimedCell(player: Player, cell: any, x: number, z: number, ctx: PopContext): (string, any?)
 	if not cell.alive then return "skip" end
@@ -485,8 +543,14 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 		return "full"
 	end
 
-	local baseSell = positiveNumber(def.SellValue, positiveNumber(def.Coins, 1))
-	local raw = baseSell * ctx.coinMult * ctx.worldMult * ctx.zoneMult * ctx.extra * ctx.combo()
+	-- Valeur sac centralisée (SummerZone ×2). RewardMultiplier / XP inchangés.
+	local zoneId = resolveBubbleZoneId(cell)
+	local baseSell = BubbleValue.GetBaseBubbleValue(def.Id)
+	local zoneBagMult = BubbleValue.GetZoneMultiplier(zoneId)
+	local bagValue = BubbleValue.GetBubbleBagValue(def.Id, zoneId)
+	BubbleValue.DebugLog(zoneId, def.Id, baseSell, zoneBagMult, bagValue)
+
+	local raw = bagValue * ctx.coinMult * ctx.worldMult * ctx.extra * ctx.combo()
 	local sellValue = BackpackService.RoundSellValue(raw, baseSell)
 	if not sellValue or sellValue <= 0 then return "skip" end
 
@@ -515,13 +579,10 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 
 	local coinMult = DataService.Multipliers(player)
 	local comboMult: number? = nil
-	local defaultBoard = boards[zoneIdHint or defaultZoneId] or boards[defaultZoneId]
-	local zoneMult = if defaultBoard then defaultBoard.rewardMult else 1
 
 	local ctx: PopContext = {
 		coinMult = coinMult,
 		worldMult = currentWorld.Mult,
-		zoneMult = zoneMult,
 		extra = multiplier or 1,
 		combo = function(): number
 			if not comboMult then
@@ -546,7 +607,6 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 			local board = boards[zid]
 			local cell = board and board.grid[x] and board.grid[x][z]
 			if cell then
-				ctx.zoneMult = board.rewardMult
 				local token = tryClaim(cell)
 				if token then
 					local status: string? = nil
@@ -605,6 +665,33 @@ local function checkBudget(player: Player): boolean
 	return true
 end
 
+-- Résout la planche via ZoneId client ou cellule vivante — pas uniquement la position joueur.
+local function resolvePopBoardZone(x: number, z: number, zoneIdArg: any): string?
+	if type(zoneIdArg) == "string" and ZoneDefs.Get(zoneIdArg) and BubbleService.InBounds(x, z, zoneIdArg) then
+		local board = boards[zoneIdArg]
+		local cell = board and board.grid[x] and board.grid[x][z]
+		if cell then
+			return zoneIdArg
+		end
+	end
+	for _, board in ipairs(boardList) do
+		if BubbleService.InBounds(x, z, board.zoneId) then
+			local cell = board.grid[x] and board.grid[x][z]
+			if cell and cell.alive then
+				local attr = cell.part and cell.part:GetAttribute("ZoneId")
+				if type(attr) == "string" and ZoneDefs.Get(attr) then
+					return attr
+				end
+				return board.zoneId
+			end
+		end
+	end
+	if type(zoneIdArg) == "string" and ZoneDefs.Get(zoneIdArg) and BubbleService.InBounds(x, z, zoneIdArg) then
+		return zoneIdArg
+	end
+	return nil
+end
+
 local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 	if type(x) ~= "number" or type(z) ~= "number" then return end
 	x, z = math.floor(x), math.floor(z)
@@ -614,13 +701,8 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not root then return end
 
-	local zoneId: string
-	if type(zoneIdArg) == "string" and ZoneDefs.Get(zoneIdArg) then
-		zoneId = zoneIdArg
-	else
-		zoneId = BubbleService.GetZoneIdAt(root.Position)
-	end
-	if not BubbleService.InBounds(x, z, zoneId) then return end
+	local zoneId = resolvePopBoardZone(x, z, zoneIdArg)
+	if not zoneId then return end
 
 	local target = BubbleService.CellToWorld(x, z, zoneId)
 	local maxRange = if player:GetAttribute("HasWings") == true then B.WingPopRange else B.MaxPopRange
@@ -674,6 +756,19 @@ function BubbleService.CurrentWorld() return currentWorld end
 function BubbleService.WorldFolder()
 	local board = boards[defaultZoneId]
 	return if board then board.folder else nil
+end
+
+function BubbleService.BoardFolder(zoneId: string): Folder?
+	local board = boards[zoneId]
+	return if board then board.folder else nil
+end
+
+function BubbleService.ListBoardZoneIds(): { string }
+	local ids = {}
+	for _, board in ipairs(boardList) do
+		table.insert(ids, board.zoneId)
+	end
+	return ids
 end
 
 function BubbleService.IsAlive(x: number, z: number, zoneId: string?): boolean

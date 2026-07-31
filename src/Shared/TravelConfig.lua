@@ -3,6 +3,7 @@
 -- RequiredLevel SummerZone = ZoneDefs (même source que la barrière).
 
 local ZoneDefs = require(script.Parent.ZoneDefs)
+local GameConfig = require(script.Parent.GameConfig)
 
 export type DestinationDef = {
 	Id: string,
@@ -20,11 +21,13 @@ export type CapsulePlacement = {
 	TransitId: string,
 	CurrentArea: string,
 	ArrivalMarkerName: string,
-	-- Position monde absolue, relative au Gate, ou centre du pont Summer.
+	-- Position monde absolue, ou offset si RelativeTo* est true.
 	Position: Vector3,
 	YawDegrees: number,
 	RelativeToSummerGate: boolean?,
 	RelativeToSummerBridge: boolean?,
+	-- Bout nord de LobbyPath (plateforme spawn), centré largeur, marge bord.
+	RelativeToLobbySpawnPlatform: boolean?,
 }
 
 local TravelConfig = {}
@@ -82,14 +85,26 @@ TravelConfig.Destinations = {
 --------------------------------------------------------------------
 -- Une pastille visible par zone (= départ + arrivée)
 --------------------------------------------------------------------
+-- Plateforme spawn : StairsEnd = nord (+Z, marches Bubble Room) ;
+-- BackWallEnd = sud (-Z, HOW TO PLAY). La pastille lobby utilise BackWallEnd uniquement.
+TravelConfig.LobbySpawnPlatform = {
+	PathLocalOffset = Vector3.new(0, 0.15, 10),
+	PathSize = Vector3.new(16, 1.5, 56),
+	EdgeMarginStuds = 4, -- 3–5 studs du bord sud
+	-- true = BackWallEnd (HOW TO PLAY) ; false serait StairsEnd (interdit).
+	UseBackWallEnd = true,
+}
+
 TravelConfig.CapsulePlacements = {
 	Lobby = {
 		TransitId = "LobbyTransit",
 		CurrentArea = "Lobby",
 		ArrivalMarkerName = "LobbyTravelArrival",
-		Position = Vector3.new(38, 0, -258),
-		YawDegrees = -90, -- face kiosques / centre lobby
-		RelativeToSummerGate = false,
+		-- Offset additionnel sur BackWallEnd (centré largeur).
+		Position = Vector3.new(0, 0, 0),
+		-- Face le joueur qui arrive depuis le spawn (LookVector = +Z).
+		YawDegrees = 180,
+		RelativeToLobbySpawnPlatform = true,
 	},
 	SummerZone = {
 		TransitId = "SummerZoneTransit",
@@ -120,6 +135,80 @@ function TravelConfig.GetSortedDestinations(): { DestinationDef }
 	return list
 end
 
+function TravelConfig.GetPlacementByTransitId(transitId: string): CapsulePlacement?
+	for _, placement in pairs(TravelConfig.CapsulePlacements) do
+		if placement.TransitId == transitId then
+			return placement
+		end
+	end
+	return nil
+end
+
+export type DestinationCardDef = {
+	Id: string,
+	DisplayName: string,
+	Description: string,
+	RequiredLevel: number,
+	IsCurrent: boolean,
+	IsLocked: boolean,
+	IsLobby: boolean,
+	SortOrder: number,
+}
+
+-- Liste UI : dépend du niveau + CurrentArea du terminal, jamais de la position du pad.
+function TravelConfig.BuildDestinationCards(playerLevel: number, currentArea: string): { DestinationCardDef }
+	local area = currentArea
+	if area == "GameRoom" or area == "ClassicZone" then
+		area = "GameRoom"
+	end
+	local cards: { DestinationCardDef } = {}
+	for _, def in ipairs(TravelConfig.GetSortedDestinations()) do
+		if not def.Enabled then
+			continue
+		end
+		if area == "Lobby" and not def.ShowFromLobby then
+			continue
+		end
+		table.insert(cards, {
+			Id = def.Id,
+			DisplayName = def.DisplayName,
+			Description = def.Description,
+			RequiredLevel = def.RequiredLevel,
+			IsCurrent = def.AreaName == area,
+			IsLocked = playerLevel < def.RequiredLevel,
+			IsLobby = def.Id == "Lobby",
+			SortOrder = def.SortOrder,
+		})
+	end
+	return cards
+end
+
+-- BackWallEnd : bord sud du plancher (près HOW TO PLAY), jamais StairsEnd / marches.
+function TravelConfig.ResolveLobbySpawnPlatformPosition(offset: Vector3?): Vector3
+	local L = GameConfig.Lobby
+	local P = TravelConfig.LobbySpawnPlatform
+	local root = L.RootOffset
+	local padRadius = TravelConfig.PadDimensions.PadDiameter * 0.5
+	local margin = P.EdgeMarginStuds
+
+	local floorSouthZ = root.Z - L.FloorSize.Z * 0.5
+	local floorNorthZ = root.Z + L.FloorSize.Z * 0.5
+	local z: number
+	if P.UseBackWallEnd ~= false then
+		-- Sud = mur du fond / HOW TO PLAY.
+		z = floorSouthZ + margin + padRadius
+	else
+		-- StairsEnd (nord) — non utilisé pour le lobby.
+		z = floorNorthZ - margin - padRadius
+	end
+
+	local pos = Vector3.new(root.X, root.Y, z)
+	if offset then
+		pos = pos + offset
+	end
+	return pos
+end
+
 function TravelConfig.ResolveWorldCFrame(placement: CapsulePlacement): CFrame
 	local pos = placement.Position
 	if placement.RelativeToSummerBridge then
@@ -128,6 +217,8 @@ function TravelConfig.ResolveWorldCFrame(placement: CapsulePlacement): CFrame
 	elseif placement.RelativeToSummerGate then
 		local layout = ZoneDefs.GetSummerBridgeLayout()
 		pos = Vector3.new(layout.GateX, layout.Y, layout.ArchZ) + placement.Position
+	elseif placement.RelativeToLobbySpawnPlatform then
+		pos = TravelConfig.ResolveLobbySpawnPlatformPosition(placement.Position)
 	end
 	return CFrame.new(pos) * CFrame.Angles(0, math.rad(placement.YawDegrees), 0)
 end

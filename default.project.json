@@ -17,6 +17,10 @@
         "Client": { "$path": "src/Client" }
       }
     },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "SummerDecorAssets": { "$path": "assets/summer-decor" }
+    },
     "Workspace": { "$className": "Workspace", "$properties": { "StreamingEnabled": true } },
     "Lighting": { "$className": "Lighting" }
   }

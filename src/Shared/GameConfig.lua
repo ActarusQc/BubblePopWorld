@@ -113,14 +113,18 @@ GameConfig.World = {
 -- ne doit jamais recouvrir SpawnPad / ExitPad (Z ∈ [-192, -152]).
 -- Size 40, Spacing 6 → halfZ=120, MinZ=-120.
 local lobbyRoot = Vector3.new(0, 0, -240)
--- Layout façade ouest (yaw 90°, vue joueur vers -X) :
---   GAUCHE (Z plus grand) = ItemShop / achat
---   DROITE (Z plus petit) = SellBooth / vente auto
-local lobbyItemShopOffset = Vector3.new(-34, 0, 6)
-local lobbySellOffset = Vector3.new(-34, 2, -27)
+-- Les deux bâtiments encadrent l'allée centrale du lobby (axe X = 0) :
+--   OUEST (X négatif) = SellBooth / vente auto
+--   EST  (X positif)  = ItemShop / achat
+-- Le kiosque de vente est la référence validée ; la boutique en est le miroir
+-- exact par rapport à l'axe central, façade retournée vers l'allée.
+local lobbySellOffset = Vector3.new(-34, 2, 10)
+local lobbyItemShopOffset = Vector3.new(-lobbySellOffset.X, 0, lobbySellOffset.Z)
 local lobbyEntranceOffset = Vector3.new(0, 3, 36)
--- Yaw 90° = façade tournée à droite (vers le spawn / +X local après rotation).
+-- Yaw 90° = façade tournée vers le centre du lobby (+X local après rotation).
 local sellBoothYawDegrees = 90
+-- Miroir du kiosque : la façade de la boutique regarde l'allée depuis l'est.
+local itemShopYawDegrees = (sellBoothYawDegrees + 180) % 360
 -- Pad posé sur le dessus de SellPlaza (plus de plancher avant flottant).
 local sellPadLocalOffset = Vector3.new(0, -0.8, 6.8)
 local sellBoothOrigin = lobbyRoot + lobbySellOffset
@@ -140,11 +144,15 @@ GameConfig.Lobby = {
 	SellBooth = {
 		-- "Code" : kiosque assemblé par ZoneService.buildSellBooth.
 		-- "StudioModel" : kiosque = Model manuel Lobby.SellKiosk, branché par SellKioskBuilder.
-		-- Position DROITE du duo de kiosques (vente automatique du sac).
+		-- Côté OUEST de l'allée centrale (vente automatique du sac).
 		Mode = "Code",
 		YawDegrees = sellBoothYawDegrees,
 		OriginOffset = lobbySellOffset,
 		PadLocalOffset = sellPadLocalOffset,
+		-- Estrade au sol : source unique partagée par ZoneService (construction)
+		-- et ItemShopBuilder (mesure du passage central).
+		PlazaSize = Vector3.new(24, 1.2, 22),
+		PlazaLocalOffset = Vector3.new(0, -1.6, 0.6),
 		TankBubbleCount = 10,
 		CounterSize = Vector3.new(16.5, 4.2, 6.2),
 		CanopySize = Vector3.new(18.5, 1.1, 10.5),
@@ -161,16 +169,28 @@ GameConfig.Lobby = {
 	},
 	-- Boutique d'upgrades / items : bâtiment distinct du kiosque de vente.
 	-- Aucune logique de vente de bulles (SellBooth / SellZone uniquement).
-	-- Position GAUCHE du duo (même X/yaw, allée entre les plazas).
+	-- Côté EST de l'allée centrale, en miroir du kiosque de vente.
 	ItemShop = {
 		OriginOffset = lobbyItemShopOffset,
-		YawDegrees = 90, -- même orientation que SellBooth (façade vers +X)
+		YawDegrees = itemShopYawDegrees, -- miroir de SellBooth : façade vers -X
 		-- Footprint walk-in (local X = largeur, local Z = profondeur ; entrée = +Z).
-		Width = 22,
-		Depth = 18,
-		Height = 12,
-		DoorWidth = 10,
-		WallThickness = 0.6,
+		Width = 32,
+		Depth = 26,
+		Height = 15,
+		DoorWidth = 13,
+		WallThickness = 1,
+		ForecourtDepth = 6,
+		ExteriorSideOverhang = 0.5,
+		MinSellBoothClearance = 10,
+		-- Studio-first : la coque visuelle vit dans Workspace.StudioDecoration.ItemShopVisual
+		-- et n'est JAMAIS générée ni modifiée par le code.
+		--   true  + ItemShopVisual     → guides fonctionnels invisibles seulement
+		--   true  sans ItemShopVisual  → guides fonctionnels + FallbackShell minimal
+		-- La décoration procédurale a été retirée : false dégrade vers le fallback.
+		UseStudioVisual = true,
+		VisualModelName = "ItemShopVisual",
+		StudioDecorationRoot = "StudioDecoration",
+		ShellVersion = 1,
 		SignText = "SHOP",
 		TaglineText = "BUY BUBBLES & ITEMS",
 		InteriorTagline = "Buy cool items to boost your adventure!",

@@ -17,6 +17,9 @@ local Remotes = require(Shared.Remotes)
 local L10n = require(Shared.LocalizationStrings)
 local L10nUtil = require(Shared.LocalizationUtil)
 local ShopBrowseLogic = require(Shared.ShopBrowseLogic)
+local ShopBrowseLayout = require(Shared.ShopBrowseLayout)
+local ShopViewportModels = require(Shared.ShopViewportModels)
+local ShopAvatarVisibility = require(script.Parent.ShopAvatarVisibility)
 
 local player = Players.LocalPlayer
 local ShopUI = {}
@@ -56,12 +59,6 @@ type SavedState = {
 
 local CATEGORY_IDS: { CategoryId } = { "Skills", "Items", "Cosmetics" }
 
-local ACCENT: { [string]: Color3 } = {
-	Skills = Color3.fromRGB(80, 230, 255),
-	Items = Color3.fromRGB(255, 185, 60),
-	Cosmetics = Color3.fromRGB(28, 105, 255),
-}
-
 local CATEGORY_LABEL_KEY: { [string]: string } = {
 	Skills = "Skills",
 	Items = "Items",
@@ -91,10 +88,11 @@ local ACTION_OFF = Color3.fromRGB(58, 64, 78)
 local DISPLAY_ORDER = 105
 local TWEEN_TIME = 0.55
 
-local function corner(parent: Instance, r: number?)
+local function corner(parent: Instance, r: number?): UICorner
 	local c = Instance.new("UICorner")
 	c.CornerRadius = UDim.new(0, r or 12)
 	c.Parent = parent
+	return c
 end
 
 local function comma(n: number): string
@@ -124,6 +122,7 @@ local browse = {
 	saved = nil :: SavedState?,
 	controls = nil :: any,
 	promptEnabled = {} :: { [ProximityPrompt]: boolean },
+	localTransparency = {} :: { [BasePart]: number },
 	tempConns = {} :: { RBXScriptConnection },
 	cameraTween = nil :: Tween?,
 	actionGeneration = 0,
@@ -155,7 +154,7 @@ function ShopUI.Start()
 	panel.Visible = false
 	panel.ZIndex = 2
 	panel.Parent = gui
-	corner(panel, 18)
+	local panelCorner = corner(panel, 18)
 
 	local sizeConstraint = Instance.new("UISizeConstraint")
 	sizeConstraint.MinSize = Vector2.new(300, 190)
@@ -230,7 +229,7 @@ function ShopUI.Start()
 	closeBtn.ZIndex = 4
 	closeBtn.Parent = header
 	L10nUtil.dynamic(closeBtn, L10n.Close)
-	corner(closeBtn, 10)
+	local closeCorner = corner(closeBtn, 10)
 
 	-- Corps : flèche gauche | viewport + texte | flèche droite
 	local body = Instance.new("Frame")
@@ -256,7 +255,7 @@ function ShopUI.Start()
 	leftBtn.Selectable = true
 	leftBtn.ZIndex = 4
 	leftBtn.Parent = body
-	corner(leftBtn, 14)
+	local leftCorner = corner(leftBtn, 14)
 
 	local rightBtn = Instance.new("TextButton")
 	rightBtn.Name = "RightArrow"
@@ -273,7 +272,7 @@ function ShopUI.Start()
 	rightBtn.Selectable = true
 	rightBtn.ZIndex = 4
 	rightBtn.Parent = body
-	corner(rightBtn, 14)
+	local rightCorner = corner(rightBtn, 14)
 
 	local content = Instance.new("Frame")
 	content.Name = "Content"
@@ -283,41 +282,74 @@ function ShopUI.Start()
 	content.ZIndex = 3
 	content.Parent = body
 
-	-- Présentoir local : ViewportFrame + part colorée (jamais Display_* serveur).
+	-- Présentoir local : ViewportFrame + modèle stylisé (jamais Display_* serveur).
+	local VIEWPORT_SIZE = 116
+	local VIEWPORT_FOV = 40
+
+	local defaultBackground = ShopViewportModels.GetBackground(nil)
+
+	-- Le dégradé vit sur ce Frame, jamais sur le ViewportFrame : un UIGradient
+	-- enfant d'un ViewportFrame multiplie aussi l'image 3D rendue.
+	local previewBackground = Instance.new("Frame")
+	previewBackground.Name = "PreviewBackground"
+	previewBackground.Size = UDim2.fromOffset(VIEWPORT_SIZE, VIEWPORT_SIZE)
+	previewBackground.Position = UDim2.new(0, 0, 0.5, -VIEWPORT_SIZE / 2)
+	previewBackground.BackgroundColor3 = Color3.new(1, 1, 1)
+	previewBackground.BackgroundTransparency = 0
+	previewBackground.BorderSizePixel = 0
+	previewBackground.ZIndex = 3
+	previewBackground.Parent = content
+	local previewCorner = corner(previewBackground, 14)
+
+	local viewportGradient = Instance.new("UIGradient")
+	viewportGradient.Color = ColorSequence.new(defaultBackground.Top, defaultBackground.Bottom)
+	viewportGradient.Rotation = 90
+	viewportGradient.Parent = previewBackground
+
+	local backgroundStroke = Instance.new("UIStroke")
+	backgroundStroke.Thickness = 1
+	backgroundStroke.Color = Color3.fromRGB(96, 116, 150)
+	backgroundStroke.Transparency = 0.3
+	backgroundStroke.Parent = previewBackground
+
 	local viewport = Instance.new("ViewportFrame")
 	viewport.Name = "Presentation"
-	viewport.Size = UDim2.fromOffset(92, 92)
-	viewport.Position = UDim2.new(0, 0, 0.5, -46)
-	viewport.BackgroundColor3 = Color3.fromRGB(10, 14, 24)
-	viewport.BackgroundTransparency = 0.1
+	viewport.Size = UDim2.fromOffset(VIEWPORT_SIZE - 6, VIEWPORT_SIZE - 6)
+	viewport.Position = UDim2.new(0, 3, 0.5, -(VIEWPORT_SIZE - 6) / 2)
+	viewport.BackgroundColor3 = ShopViewportModels.GetViewportBackground(nil)
+	viewport.BackgroundTransparency = 0
 	viewport.BorderSizePixel = 0
-	viewport.ZIndex = 3
+	viewport.ZIndex = 4
 	viewport.Parent = content
-	corner(viewport, 12)
+	local viewportCorner = corner(viewport, 12)
 
 	local vpCamera = Instance.new("Camera")
-	vpCamera.FieldOfView = 45
+	vpCamera.FieldOfView = VIEWPORT_FOV
 	vpCamera.Parent = viewport
 	viewport.CurrentCamera = vpCamera
-	vpCamera.CFrame = CFrame.new(Vector3.new(0, 0, 5.5), Vector3.new(0, 0, 0))
+	vpCamera.CFrame = CFrame.new(Vector3.new(0, 0, 6), Vector3.new(0, 0, 0))
 
-	local presentPart = Instance.new("Part")
-	presentPart.Name = "PresentPart"
-	presentPart.Anchored = true
-	presentPart.CanCollide = false
-	presentPart.CanQuery = false
-	presentPart.CanTouch = false
-	presentPart.CastShadow = false
-	presentPart.Material = Enum.Material.Neon
-	presentPart.Size = Vector3.new(2, 2, 2)
-	presentPart.CFrame = CFrame.new(0, 0, 0)
-	presentPart.Color = ACCENT.Skills
-	presentPart.Parent = viewport
+	-- Modèle courant de la preview : reconstruit à chaque changement d'item.
+	-- Le fond (halo + socle) est un modèle distinct : il ne tourne pas.
+	local previewModel: Model? = nil
+	local previewBackdrop: Model? = nil
+	local previewSpin = 0
+
+	local function clearPreview()
+		if previewModel then
+			previewModel:Destroy()
+			previewModel = nil
+		end
+		if previewBackdrop then
+			previewBackdrop:Destroy()
+			previewBackdrop = nil
+		end
+	end
 
 	local textArea = Instance.new("Frame")
 	textArea.Name = "TextArea"
-	textArea.Size = UDim2.new(1, -104, 1, 0)
-	textArea.Position = UDim2.new(0, 104, 0, 0)
+	textArea.Size = UDim2.new(1, -132, 1, 0)
+	textArea.Position = UDim2.new(0, 132, 0, 0)
 	textArea.BackgroundTransparency = 1
 	textArea.ZIndex = 3
 	textArea.Parent = content
@@ -381,8 +413,191 @@ function ShopUI.Start()
 	actionBtn.Selectable = true
 	actionBtn.ZIndex = 3
 	actionBtn.Parent = panel
-	corner(actionBtn, 10)
+	local actionCorner = corner(actionBtn, 10)
 	L10nUtil.dynamic(actionBtn, "")
+
+	--------------------------------------------------------------------
+	-- Disposition responsive : Mobile / Desktop / Console (ten-foot UI)
+	--------------------------------------------------------------------
+
+	local currentLayout = ShopBrowseLayout.Resolve(ShopBrowseLayout.Modes.Desktop, { X = 1280, Y = 720 })
+	local layoutPending = false
+
+	-- PreferredInput n'existe pas sur les clients les plus anciens : on retombe
+	-- alors sur TouchEnabled, ce qui préserve le comportement actuel.
+	local function readPreferredInput(): string?
+		local ok, value = pcall(function()
+			return (UserInputService :: any).PreferredInput
+		end)
+		if ok and typeof(value) == "EnumItem" then
+			return value.Name
+		end
+		return nil
+	end
+
+	local function readViewportSize(): Vector2
+		local camera = Workspace.CurrentCamera
+		if camera then
+			return camera.ViewportSize
+		end
+		return Vector2.new(1280, 720)
+	end
+
+	-- AbsoluteSize du ScreenGui : tient déjà compte de l'inset supérieur, donc
+	-- l'échelle calculée correspond au panneau réellement affiché.
+	local function readContainerSize(): Vector2
+		local size = gui.AbsoluteSize
+		if size.X >= 1 and size.Y >= 1 then
+			return size
+		end
+		return readViewportSize()
+	end
+
+	local appliedMode: string? = nil
+	local appliedWidth = 0
+	local appliedHeight = 0
+
+	local function applyResponsiveBrowseLayout(force: boolean?)
+		local mode = ShopBrowseLayout.ResolveMode(readPreferredInput(), readViewportSize(), UserInputService.TouchEnabled)
+		local container = readContainerSize()
+		if force ~= true and mode == appliedMode and container.X == appliedWidth and container.Y == appliedHeight then
+			return
+		end
+		appliedMode = mode
+		appliedWidth = container.X
+		appliedHeight = container.Y
+
+		local layout = ShopBrowseLayout.Resolve(mode, container)
+		currentLayout = layout
+
+		local p = layout.Panel
+		panel.Size = UDim2.new(p.WidthScale, p.WidthOffset, p.HeightScale, p.HeightOffset)
+		panel.Position = UDim2.new(p.XScale, p.XOffset, p.YScale, p.YOffset)
+		sizeConstraint.MinSize = Vector2.new(p.MinSize.X, p.MinSize.Y)
+		sizeConstraint.MaxSize = Vector2.new(p.MaxSize.X, p.MaxSize.Y)
+		panelCorner.CornerRadius = UDim.new(0, p.Corner)
+
+		local h = layout.Header
+		header.Size = UDim2.new(1, -h.InsetX * 2, 0, h.Height)
+		header.Position = UDim2.new(0, h.InsetX, 0, h.OffsetY)
+		categoryTitle.Size = UDim2.new(h.TitleWidthScale, 0, 1, 0)
+		categoryTitle.TextSize = h.TitleSize
+		positionLabel.Size = UDim2.new(h.CounterWidthScale, 0, 1, 0)
+		positionLabel.Position = UDim2.new(h.CounterXScale, 0, 0, 0)
+		positionLabel.TextSize = h.CounterSize
+		coinsLabel.Size = UDim2.new(h.CoinsWidthScale, -h.CoinsInset, 1, 0)
+		coinsLabel.Position = UDim2.new(h.CoinsXScale, 0, 0, 0)
+		coinsLabel.TextSize = h.CoinsSize
+		closeBtn.Size = UDim2.fromOffset(h.CloseSize, h.CloseSize)
+		closeBtn.Position = UDim2.new(1, -h.CloseSize, 0, h.CloseOffsetY)
+		closeBtn.TextSize = h.CloseTextSize
+		closeCorner.CornerRadius = UDim.new(0, h.CloseCorner)
+
+		local b = layout.Body
+		body.Size = UDim2.new(1, -b.InsetX * 2, b.HeightScale, b.HeightOffset)
+		body.Position = UDim2.new(0, b.InsetX, 0, b.OffsetY)
+		content.Size = UDim2.new(1, b.ContentWidthOffset, 1, 0)
+		content.Position = UDim2.new(0, b.ContentLeft, 0, 0)
+
+		local a = layout.Arrow
+		leftBtn.Size = UDim2.fromOffset(a.Size, a.Size)
+		leftBtn.TextSize = a.TextSize
+		leftCorner.CornerRadius = UDim.new(0, a.Corner)
+		rightBtn.Size = UDim2.fromOffset(a.Size, a.Size)
+		rightBtn.TextSize = a.TextSize
+		rightCorner.CornerRadius = UDim.new(0, a.Corner)
+
+		local v = layout.Preview
+		previewBackground.Size = UDim2.fromOffset(v.Width, v.Height)
+		previewBackground.Position = UDim2.new(0, 0, 0.5, -v.Height / 2)
+		previewCorner.CornerRadius = UDim.new(0, v.Corner)
+		local innerWidth = v.Width - v.Inset * 2
+		local innerHeight = v.Height - v.Inset * 2
+		viewport.Size = UDim2.fromOffset(innerWidth, innerHeight)
+		viewport.Position = UDim2.new(0, v.Inset, 0.5, -innerHeight / 2)
+		viewportCorner.CornerRadius = UDim.new(0, v.InnerCorner)
+
+		local t = layout.Text
+		textArea.Size = UDim2.new(1, -t.InsetX, 1, 0)
+		textArea.Position = UDim2.new(0, t.InsetX, 0, 0)
+		nameLabel.Size = UDim2.new(1, 0, 0, t.NameHeight)
+		nameLabel.TextSize = t.NameSize
+		descLabel.Size = UDim2.new(1, 0, 0, t.DescHeight)
+		descLabel.Position = UDim2.new(0, 0, 0, t.DescOffsetY)
+		descLabel.TextSize = t.DescSize
+		priceLabel.Size = UDim2.new(t.PriceWidthScale, 0, 0, t.PriceHeight)
+		priceLabel.Position = UDim2.new(0, 0, t.PriceYScale, t.PriceYOffset)
+		priceLabel.TextSize = t.PriceSize
+
+		local act = layout.Action
+		actionBtn.AnchorPoint = Vector2.new(act.AnchorX, act.AnchorY)
+		actionBtn.Size = UDim2.fromOffset(act.Width, act.Height)
+		actionBtn.Position = UDim2.new(act.XScale, act.XOffset, act.YScale, act.YOffset)
+		actionBtn.TextSize = act.TextSize
+		actionCorner.CornerRadius = UDim.new(0, act.Corner)
+	end
+
+	-- Plusieurs événements d'entrée peuvent arriver en rafale : on temporise, et
+	-- on ne reconstruit jamais la preview 3D.
+	local function requestLayoutRefresh()
+		if layoutPending then
+			return
+		end
+		layoutPending = true
+		task.delay(0.1, function()
+			layoutPending = false
+			applyResponsiveBrowseLayout()
+		end)
+	end
+
+	--------------------------------------------------------------------
+	-- Navigation manette : graphe fermé, aucune sortie du panneau
+	--------------------------------------------------------------------
+
+	local function selectionStroke(button: GuiButton): UIStroke
+		local outline = Instance.new("UIStroke")
+		outline.Name = "SelectionOutline"
+		outline.Thickness = 3
+		outline.Color = Color3.fromRGB(255, 255, 255)
+		outline.Transparency = 1
+		outline.Parent = button
+
+		button.SelectionGained:Connect(function()
+			outline.Transparency = 0.1
+		end)
+		button.SelectionLost:Connect(function()
+			outline.Transparency = 1
+		end)
+		return outline
+	end
+
+	for _, button in ipairs({ leftBtn, rightBtn, actionBtn, closeBtn }) do
+		selectionStroke(button)
+	end
+
+	leftBtn.NextSelectionLeft = leftBtn
+	leftBtn.NextSelectionRight = actionBtn
+	leftBtn.NextSelectionUp = closeBtn
+	leftBtn.NextSelectionDown = leftBtn
+
+	actionBtn.NextSelectionLeft = leftBtn
+	actionBtn.NextSelectionRight = rightBtn
+	actionBtn.NextSelectionUp = closeBtn
+	actionBtn.NextSelectionDown = actionBtn
+
+	rightBtn.NextSelectionLeft = actionBtn
+	rightBtn.NextSelectionRight = rightBtn
+	rightBtn.NextSelectionUp = closeBtn
+	rightBtn.NextSelectionDown = rightBtn
+
+	closeBtn.NextSelectionLeft = closeBtn
+	closeBtn.NextSelectionRight = closeBtn
+	closeBtn.NextSelectionUp = closeBtn
+	closeBtn.NextSelectionDown = actionBtn
+
+	local function isPanelButton(instance: Instance?): boolean
+		return instance == leftBtn or instance == rightBtn or instance == actionBtn or instance == closeBtn
+	end
 
 	--------------------------------------------------------------------
 	-- Présentoir : rotation douce pendant le browse (connexion temporaire)
@@ -390,7 +605,11 @@ function ShopUI.Start()
 
 	local function startSpin()
 		local conn = RunService.RenderStepped:Connect(function(dt)
-			presentPart.CFrame = presentPart.CFrame * CFrame.Angles(0, dt * 0.8, 0)
+			previewSpin = (previewSpin + dt * 0.55) % (math.pi * 2)
+			local model = previewModel
+			if model then
+				model:PivotTo(CFrame.Angles(0, previewSpin, 0))
+			end
 		end)
 		table.insert(browse.tempConns, conn)
 	end
@@ -431,16 +650,37 @@ function ShopUI.Start()
 	-- Rendu
 	--------------------------------------------------------------------
 
+	local presentedKey: string? = nil
+
 	local function updatePresentation(item: ShopRow?)
-		local accent = if browse.category then ACCENT[browse.category] else ACCENT.Skills
-		presentPart.Color = accent
-		if item and item.Type == "Backpack" then
-			presentPart.Shape = Enum.PartType.Block
-		elseif item and item.Type == "Cosmetic" then
-			presentPart.Shape = Enum.PartType.Cylinder
-		else
-			presentPart.Shape = Enum.PartType.Ball
+		local wantedId = if item then item.Id else nil
+		local key = (wantedId or "-") .. "|" .. (browse.category or "-")
+		if previewModel and presentedKey == key then
+			return
 		end
+		presentedKey = key
+
+		clearPreview()
+
+		local category = browse.category
+		local background = ShopViewportModels.GetBackground(category)
+		viewportGradient.Color = ColorSequence.new(background.Top, background.Bottom)
+		viewport.BackgroundColor3 = ShopViewportModels.GetViewportBackground(category)
+
+		local lighting = ShopViewportModels.GetLighting(category)
+		viewport.Ambient = lighting.Ambient
+		viewport.LightColor = lighting.LightColor
+		viewport.LightDirection = lighting.LightDirection
+
+		local model, bounds = ShopViewportModels.Build(wantedId, if item then item.Type else nil, category)
+		vpCamera.CFrame = ShopViewportModels.GetCameraCFrame(bounds, VIEWPORT_FOV)
+		model:PivotTo(CFrame.Angles(0, previewSpin, 0))
+		model.Parent = viewport
+		previewModel = model
+
+		local backdrop = ShopViewportModels.BuildBackdrop(category, bounds, VIEWPORT_FOV)
+		backdrop.Parent = viewport
+		previewBackdrop = backdrop
 	end
 
 	local function refreshPresentation()
@@ -496,6 +736,8 @@ function ShopUI.Start()
 		local canNavigate = count > 1
 		leftBtn.Active = canNavigate
 		rightBtn.Active = canNavigate
+		leftBtn.Selectable = canNavigate
+		rightBtn.Selectable = canNavigate
 		leftBtn.AutoButtonColor = canNavigate
 		rightBtn.AutoButtonColor = canNavigate
 		leftBtn.BackgroundColor3 = if canNavigate then ARROW_BG else ARROW_BG_DISABLED
@@ -503,6 +745,19 @@ function ShopUI.Start()
 
 		if UserInputService.GamepadEnabled and canInvoke then
 			GuiService.SelectedObject = actionBtn
+		end
+
+		-- Console : la sélection ne doit jamais rester sur un bouton inactif.
+		if currentLayout.Mode == ShopBrowseLayout.Modes.Console then
+			local selected = GuiService.SelectedObject
+			local stale = selected == nil
+				or (isPanelButton(selected) and not (selected :: GuiButton).Selectable)
+			if stale then
+				GuiService.SelectedObject = if canInvoke
+					then actionBtn
+					elseif canNavigate then rightBtn
+					else closeBtn
+			end
 		end
 	end
 
@@ -517,6 +772,15 @@ function ShopUI.Start()
 		exiting = true
 
 		local ok = pcall(function()
+			for _, conn in ipairs(browse.tempConns) do
+				if conn.Connected then
+					conn:Disconnect()
+				end
+			end
+			table.clear(browse.tempConns)
+
+			ShopAvatarVisibility.Restore(browse.localTransparency)
+
 			if browse.cameraTween then
 				browse.cameraTween:Cancel()
 				browse.cameraTween = nil
@@ -556,11 +820,12 @@ function ShopUI.Start()
 
 			panel.Visible = false
 			GuiService.SelectedObject = nil
-
-			for _, conn in ipairs(browse.tempConns) do
-				conn:Disconnect()
-			end
+			clearPreview()
+			presentedKey = nil
 		end)
+
+		-- Filet de sécurité idempotent si une autre restauration a levé une erreur.
+		ShopAvatarVisibility.Restore(browse.localTransparency)
 
 		if not ok then
 			warn("[ShopUI] ExitBrowse restore error (best-effort)")
@@ -648,7 +913,19 @@ function ShopUI.Start()
 		}
 		browse.controls = controls
 
-		-- 2) Mémoriser Enabled original de CHAQUE prompt ItemShop avant de tout désactiver.
+		-- 2) Mémoriser puis masquer localement corps, accessoires et outils équipés.
+		table.clear(browse.localTransparency)
+		ShopAvatarVisibility.HideCharacter(character, browse.localTransparency)
+		table.insert(
+			browse.tempConns,
+			character.DescendantAdded:Connect(function(descendant)
+				if descendant:IsA("BasePart") then
+					ShopAvatarVisibility.HidePart(descendant, browse.localTransparency)
+				end
+			end)
+		)
+
+		-- 3) Mémoriser Enabled original de CHAQUE prompt ItemShop avant de tout désactiver.
 		table.clear(browse.promptEnabled)
 		for _, descendant in ipairs(itemShop:GetDescendants()) do
 			if descendant:IsA("ProximityPrompt") then
@@ -656,7 +933,7 @@ function ShopUI.Start()
 			end
 		end
 
-		-- 3) Freeze local (pas de téléport).
+		-- 4) Freeze local (pas de téléport).
 		humanoid.WalkSpeed = 0
 		humanoid.JumpPower = 0
 		humanoid.JumpHeight = 0
@@ -667,12 +944,12 @@ function ShopUI.Start()
 			end)
 		end
 
-		-- 4) Désactiver localement tous les prompts ItemShop (jamais côté serveur).
+		-- 5) Désactiver localement tous les prompts ItemShop (jamais côté serveur).
 		for prompt in pairs(browse.promptEnabled) do
 			prompt.Enabled = false
 		end
 
-		-- 5) Tween caméra Scriptable vers CameraPoint_<Category>, LookAt Display_<Category>.
+		-- 6) Tween caméra Scriptable vers CameraPoint_<Category>, LookAt Display_<Category>.
 		camera.CameraType = Enum.CameraType.Scriptable
 		local lookAtPos = cameraPoint.Position + cameraPoint.CFrame.LookVector * 5
 		if display then
@@ -693,7 +970,7 @@ function ShopUI.Start()
 		browse.cameraTween = tween
 		tween:Play()
 
-		-- 6) Charger les données catégorie, index 1, UI compacte visible.
+		-- 7) Charger les données catégorie, index 1, UI compacte visible.
 		local ok, data = pcall(function()
 			return Remotes.Func("GetShopData"):InvokeServer()
 		end)
@@ -713,6 +990,7 @@ function ShopUI.Start()
 		browse.coins = if type(data.Coins) == "number" then data.Coins else 0
 
 		panel.Visible = true
+		applyResponsiveBrowseLayout(true)
 		startSpin()
 		refreshPresentation()
 
@@ -853,12 +1131,53 @@ function ShopUI.Start()
 		local keyCode = input.KeyCode
 		if keyCode == Enum.KeyCode.Escape or keyCode == Enum.KeyCode.ButtonB then
 			exitBrowse()
-		elseif keyCode == Enum.KeyCode.Left or keyCode == Enum.KeyCode.Q or keyCode == Enum.KeyCode.DPadLeft then
+		elseif
+			keyCode == Enum.KeyCode.Left
+			or keyCode == Enum.KeyCode.Q
+			or keyCode == Enum.KeyCode.DPadLeft
+			or keyCode == Enum.KeyCode.ButtonL1
+		then
 			navigate(-1)
-		elseif keyCode == Enum.KeyCode.Right or keyCode == Enum.KeyCode.E or keyCode == Enum.KeyCode.DPadRight then
+		elseif
+			keyCode == Enum.KeyCode.Right
+			or keyCode == Enum.KeyCode.E
+			or keyCode == Enum.KeyCode.DPadRight
+			or keyCode == Enum.KeyCode.ButtonR1
+		then
 			navigate(1)
 		end
 	end)
+
+	--------------------------------------------------------------------
+	-- Suivi des changements d'entrée et d'écran (jamais de rebuild 3D)
+	--------------------------------------------------------------------
+
+	applyResponsiveBrowseLayout(true)
+
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(requestLayoutRefresh)
+	UserInputService.GamepadConnected:Connect(requestLayoutRefresh)
+	UserInputService.GamepadDisconnected:Connect(requestLayoutRefresh)
+	UserInputService.LastInputTypeChanged:Connect(requestLayoutRefresh)
+
+	pcall(function()
+		UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(requestLayoutRefresh)
+	end)
+
+	local cameraConnection: RBXScriptConnection? = nil
+	local function watchCamera()
+		if cameraConnection then
+			cameraConnection:Disconnect()
+			cameraConnection = nil
+		end
+		local camera = Workspace.CurrentCamera
+		if camera then
+			cameraConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(requestLayoutRefresh)
+		end
+		requestLayoutRefresh()
+	end
+
+	Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchCamera)
+	watchCamera()
 
 	player.CharacterAdded:Connect(function()
 		if browse.active then

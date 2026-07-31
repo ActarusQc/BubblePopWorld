@@ -147,9 +147,10 @@ local function openMenu(transitId: string)
 	menuOpen = true
 	activeTransitId = transitId
 	lastRequestedTransit = transitId
-	statusLabel.Text = ""
-	statusLabel.Visible = false
-	clearCards()
+	statusLabel.Text = "Loading destinations..."
+	statusLabel.TextColor3 = MUTED
+	statusLabel.Visible = true
+	-- Ne pas clearCards ici : si la réponse serveur échoue, l'UI resterait vide.
 	tweenPanel(true)
 	Remotes.Event("RequestDestinationList"):FireServer(transitId)
 	debugLog("Opened", "terminal=" .. transitId, "player=" .. player.Name)
@@ -261,9 +262,9 @@ local function buildCard(dest: any): Frame
 		meta.Text = "YOU ARE HERE"
 		meta.TextColor3 = GREEN
 	elseif locked then
-		meta.Text = string.format("UNLOCKS AT LEVEL %d", dest.RequiredLevel)
-	else
 		meta.Text = string.format("Requires Level %d", dest.RequiredLevel)
+	else
+		meta.Text = "Available"
 	end
 	meta.Parent = card
 
@@ -276,11 +277,15 @@ local function buildCard(dest: any): Frame
 	action.Font = Enum.Font.GothamBlack
 	action.TextSize = 15
 	action.AutoButtonColor = true
+	action.Selectable = true
+	action.ZIndex = 6
 	action.Parent = card
 	corner(action, 10)
 
 	local canTravel = (not locked) and (not current)
 	action:SetAttribute("CanTravel", canTravel)
+	action:SetAttribute("IsLocked", locked)
+	action:SetAttribute("IsAvailable", canTravel)
 
 	if current then
 		action.Text = "HERE"
@@ -305,8 +310,10 @@ local function buildCard(dest: any): Frame
 		action.Text = "TRAVEL"
 	end
 
+	table.insert(cardButtons, action)
 	if canTravel then
-		action.MouseButton1Click:Connect(function()
+		-- Activated couvre souris, tactile et manette (éviter MouseButton1Click en double).
+		action.Activated:Connect(function()
 			requestTravel(dest.Id)
 		end)
 		action.MouseEnter:Connect(function()
@@ -319,10 +326,30 @@ local function buildCard(dest: any): Frame
 				BackgroundColor3 = if isLobby then VIOLET else CYAN,
 			}):Play()
 		end)
-		table.insert(cardButtons, action)
 	end
 
+	card.ZIndex = 5
 	return card
+end
+
+local function eachDestination(destinations: any, visit: (any) -> ())
+	if type(destinations) ~= "table" then
+		return
+	end
+	-- ipairs d'abord (tableau dense), puis pairs pour tolérer une désérialisation map.
+	local seen: { [any]: boolean } = {}
+	for _, dest in ipairs(destinations) do
+		if type(dest) == "table" and type(dest.Id) == "string" and not seen[dest] then
+			seen[dest] = true
+			visit(dest)
+		end
+	end
+	for _, dest in pairs(destinations) do
+		if type(dest) == "table" and type(dest.Id) == "string" and not seen[dest] then
+			seen[dest] = true
+			visit(dest)
+		end
+	end
 end
 
 local function populateDestinations(payload: any)
@@ -338,22 +365,37 @@ local function populateDestinations(payload: any)
 	activeArea = if type(payload.CurrentArea) == "string" then payload.CurrentArea else activeArea
 	clearCards()
 	local destinations = payload.Destinations
-	if type(destinations) ~= "table" then
-		return
-	end
-	for _, dest in ipairs(destinations) do
+	local count = 0
+	eachDestination(destinations, function(dest)
 		buildCard(dest)
+		count += 1
+	end)
+
+	if count == 0 then
+		statusLabel.Visible = true
+		statusLabel.TextColor3 = RED
+		statusLabel.Text = "No destinations available"
+	else
+		statusLabel.Text = ""
+		statusLabel.Visible = false
 	end
 
-	-- Console : sélectionner le premier bouton accessible
+	-- Manette : première dispo, sinon première verrouillée, sinon X.
 	if UserInputService.GamepadEnabled then
+		local pick: TextButton? = nil
 		for _, btn in ipairs(cardButtons) do
-			GuiService.SelectedObject = btn
-			break
+			if btn:GetAttribute("IsAvailable") == true then
+				pick = btn
+				break
+			end
 		end
-		if #cardButtons == 0 then
-			GuiService.SelectedObject = closeBtn
+		if not pick then
+			for _, btn in ipairs(cardButtons) do
+				pick = btn
+				break
+			end
 		end
+		GuiService.SelectedObject = pick or closeBtn
 	end
 end
 
@@ -555,15 +597,20 @@ local function buildGui()
 	listFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 	listFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	listFrame.ScrollingDirection = Enum.ScrollingDirection.Y
+	listFrame.ZIndex = 4
+	listFrame.Visible = true
 	listFrame.Parent = mainPanel
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Padding = UDim.new(0, 10)
 	layout.Parent = listFrame
 
 	pad(listFrame, 4, 8, 12, 8)
+
+	closeBtn.Selectable = true
 end
 
 function TravelController.Start()
