@@ -38,6 +38,7 @@ local function buildAnalyticsProfile(overrides: { [string]: any }?): any
 			Onboarding = {},
 			SummerZone = {},
 			BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 },
+			LastProgressionLevel = 0,
 			Lifetime = { FirstSpecialBubble = false },
 		}),
 	}
@@ -55,10 +56,27 @@ local function buildAnalyticsProfile(overrides: { [string]: any }?): any
 	return profile
 end
 
+type EconomyEntry = {
+	flowType: any,
+	currencyType: string,
+	amount: number,
+	endingBalance: number,
+	transactionType: string,
+	itemSku: string?,
+}
+
+type ProgressionEntry = {
+	path: string,
+	level: number,
+	levelName: string,
+}
+
 type RecordingSink = {
 	onboarding: { { step: number, stepName: string } },
 	funnel: { { funnelName: string, sessionId: string, step: number, stepName: string, fields: any? } },
 	custom: { { name: string, value: number? } },
+	economy: { EconomyEntry },
+	progression: { ProgressionEntry },
 }
 
 local function newRecordingSink(): RecordingSink
@@ -66,6 +84,8 @@ local function newRecordingSink(): RecordingSink
 		onboarding = {},
 		funnel = {},
 		custom = {},
+		economy = {},
+		progression = {},
 	}
 end
 
@@ -86,8 +106,23 @@ local function attachRecordingSink(recording: RecordingSink)
 		logCustom = function(_player, name, value, _fields)
 			table.insert(recording.custom, { name = name, value = value })
 		end,
-		logEconomy = function() end,
-		logProgressionComplete = function() end,
+		logEconomy = function(_player, flowType, currencyType, amount, endingBalance, transactionType, itemSku, _fields)
+			table.insert(recording.economy, {
+				flowType = flowType,
+				currencyType = currencyType,
+				amount = amount,
+				endingBalance = endingBalance,
+				transactionType = transactionType,
+				itemSku = itemSku,
+			})
+		end,
+		logProgressionComplete = function(_player, path, level, levelName, _fields)
+			table.insert(recording.progression, {
+				path = path,
+				level = level,
+				levelName = levelName,
+			})
+		end,
 	})
 end
 
@@ -146,6 +181,36 @@ local function funnelStepNames(recording: RecordingSink): { string }
 		table.insert(names, entry.stepName)
 	end
 	return names
+end
+
+local function countEconomy(recording: RecordingSink, itemSku: string?): number
+	local count = 0
+	for _, entry in ipairs(recording.economy) do
+		if itemSku == nil or entry.itemSku == itemSku then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function countProgression(recording: RecordingSink, level: number): number
+	local count = 0
+	for _, entry in ipairs(recording.progression) do
+		if entry.level == level then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function economyFlowName(flowType: any): string
+	if type(flowType) == "string" then
+		return flowType
+	end
+	if type(flowType) == "userdata" and type(flowType.Name) == "string" then
+		return flowType.Name
+	end
+	return tostring(flowType)
 end
 
 local function onboardingStepNames(recording: RecordingSink): { string }
@@ -1016,6 +1081,183 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(sumCustomValues(recording, "SessionNormalPops") == 2, "Task7 FlushAndRemovePlayer → deltas restants")
 	check(hasCustom(recording, "FirstSessionDuration"), "Task7 FlushAndRemovePlayer initial → FirstSessionDuration")
 	check(not GameAnalyticsService.HasSession(playerA), "Task7 FlushAndRemovePlayer → session supprimée")
+
+	-- Task 8 — cas 1 : LogCoinSource valide
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.FlushAllPlayers()
+	local economyProfile = buildAnalyticsProfile({ Coins = 150 })
+	GameAnalyticsService.InitPlayer(playerA, economyProfile, false)
+	local sourceOk = GameAnalyticsService.LogCoinSource(playerA, {
+		amount = 25,
+		endingBalance = 150,
+		transactionType = "Gameplay",
+		itemSku = "BubbleSale_GameRoom",
+	})
+	check(sourceOk, "Task8 LogCoinSource valide → retourne true")
+	check(#recording.economy == 1, "Task8 LogCoinSource → un emit economy")
+	local economyEntry = recording.economy[1]
+	check(
+		economyFlowName(economyEntry.flowType) == "Source"
+			and economyEntry.currencyType == AnalyticsConfig.CurrencyType
+			and economyEntry.amount == 25
+			and economyEntry.endingBalance == 150
+			and economyEntry.itemSku == "BubbleSale_GameRoom",
+		"Task8 LogCoinSource → Source, Coins, amount, endingBalance, sku"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 8 — cas 2 : validations LogCoinSource
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	GameAnalyticsService.LogCoinSource(playerA, {
+		amount = 10,
+		endingBalance = 10,
+		transactionType = "Gameplay",
+		itemSku = "NotAllowedSku",
+	})
+	GameAnalyticsService.LogCoinSource(playerA, {
+		amount = 0,
+		endingBalance = 10,
+		transactionType = "Gameplay",
+		itemSku = "BubbleSale_GameRoom",
+	})
+	GameAnalyticsService.LogCoinSource(playerA, {
+		amount = 10,
+		endingBalance = -1,
+		transactionType = "Gameplay",
+		itemSku = "BubbleSale_GameRoom",
+	})
+	check(#recording.economy == 0, "Task8 invalid sku/amount/ending → aucun emit economy")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 8 — cas 3 : LogCoinSink
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({ Coins = 80 }), false)
+	local sinkOk = GameAnalyticsService.LogCoinSink(playerA, {
+		amount = 15,
+		endingBalance = 80,
+		transactionType = "Gameplay",
+		itemSku = "Chest",
+	})
+	check(sinkOk, "Task8 LogCoinSink valide → retourne true")
+	check(#recording.economy == 1, "Task8 LogCoinSink → un emit economy")
+	check(
+		economyFlowName(recording.economy[1].flowType) == "Sink"
+			and recording.economy[1].itemSku == "Chest",
+		"Task8 LogCoinSink → Sink flow et sku Chest"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 8 — cas 4 : LogBackpackSaleEconomy portions + reset
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local saleProfile = buildAnalyticsProfile({
+		Coins = 200,
+		Analytics = {
+			BagValueByZone = { GameRoom = 10, SummerZone = 5, Unknown = 3 },
+			SummerZoneFunnelSessionId = "sale-economy-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleProfile, false)
+	GameAnalyticsService.LogBackpackSaleEconomy(playerA, saleProfile)
+	check(countEconomy(recording, "BubbleSale_GameRoom") == 1, "Task8 sale → BubbleSale_GameRoom")
+	check(countEconomy(recording, "BubbleSale_SummerZone") == 1, "Task8 sale → BubbleSale_SummerZone")
+	check(countEconomy(recording, "BubbleSale_Mixed") == 1, "Task8 sale → BubbleSale_Mixed")
+	check(#recording.economy == 3, "Task8 sale → trois emits source")
+	check(
+		saleProfile.Analytics.BagValueByZone.GameRoom == 0
+			and saleProfile.Analytics.BagValueByZone.SummerZone == 0
+			and saleProfile.Analytics.BagValueByZone.Unknown == 0,
+		"Task8 sale → BagValueByZone remis à zéro"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 8 — cas 5 : OnLevelReached dedup + nouveaux niveaux
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local progressionProfile = buildAnalyticsProfile({
+		Level = 1,
+		Analytics = {
+			LastProgressionLevel = 0,
+			SummerZoneFunnelSessionId = "progression-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, progressionProfile, false)
+	GameAnalyticsService.OnLevelReached(playerA, 2)
+	check(countProgression(recording, 2) == 1, "Task8 OnLevelReached(2) → progression une fois")
+	check(countCustom(recording, "PlayerLevelReached") == 1, "Task8 OnLevelReached(2) → custom une fois")
+	local levelReachedValue: number? = nil
+	for _, entry in ipairs(recording.custom) do
+		if entry.name == "PlayerLevelReached" then
+			levelReachedValue = entry.value
+		end
+	end
+	check(levelReachedValue == 2, "Task8 OnLevelReached(2) → PlayerLevelReached value 2")
+	local progressionAfter2 = #recording.progression
+	local customAfter2 = countCustom(recording, "PlayerLevelReached")
+	GameAnalyticsService.OnLevelReached(playerA, 2)
+	check(#recording.progression == progressionAfter2, "Task8 second OnLevelReached(2) → pas de doublon progression")
+	check(
+		countCustom(recording, "PlayerLevelReached") == customAfter2,
+		"Task8 second OnLevelReached(2) → pas de doublon custom"
+	)
+	GameAnalyticsService.OnLevelReached(playerA, 3)
+	check(countProgression(recording, 3) == 1, "Task8 OnLevelReached(3) → nouveau progression")
+	check(countCustom(recording, "PlayerLevelReached") == 2, "Task8 OnLevelReached(3) → second custom")
+	check(progressionProfile.Analytics.LastProgressionLevel == 3, "Task8 progression → LastProgressionLevel persisté")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 8 — cas 6 : OnLevelReached n'ajoute pas d'onboarding
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local levelOnboardingProfile = buildAnalyticsProfile({
+		Level = 2,
+		Analytics = {
+			OnboardingStarted = true,
+			OnboardingCompleted = false,
+			Onboarding = { JoinedGame = true },
+			LastProgressionLevel = 0,
+			SummerZoneFunnelSessionId = "level-onboarding-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, levelOnboardingProfile, false)
+	local onboardingBeforeProgression = #recording.onboarding
+	GameAnalyticsService.OnLevelReached(playerA, 2)
+	check(
+		#recording.onboarding == onboardingBeforeProgression,
+		"Task8 OnLevelReached → aucune étape onboarding"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 8 — cas 7 : sink economy throw → LogCoinSource false sans throw
+	GameAnalyticsService.SetSink({
+		logOnboarding = function() end,
+		logFunnel = function() end,
+		logCustom = function() end,
+		logEconomy = function()
+			error("economy fail")
+		end,
+		logProgressionComplete = function() end,
+	})
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	local throwOk, throwResult = pcall(function()
+		return GameAnalyticsService.LogCoinSource(playerA, {
+			amount = 5,
+			endingBalance = 5,
+			transactionType = "Gameplay",
+			itemSku = "BubbleSale_GameRoom",
+		})
+	end)
+	check(throwOk, "Task8 sink economy throw → pas d'exception vers l'appelant")
+	check(throwResult == false, "Task8 sink economy throw → LogCoinSource retourne false")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+	attachRecordingSink(recording)
 
 	local source = script.Parent:WaitForChild("GameAnalyticsService").Source
 	check(string.find(source, "DataService") == nil, "GameAnalyticsService ne require pas DataService")

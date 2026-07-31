@@ -8,6 +8,13 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local AnalyticsConfig = require(Shared.AnalyticsConfig)
 local ZoneDefs = require(Shared.ZoneDefs)
 
+export type CoinEconomyContext = {
+	amount: number,
+	endingBalance: number,
+	transactionType: string,
+	itemSku: string,
+}
+
 export type SessionTotals = {
 	normalPops: number,
 	specialPops: number,
@@ -35,6 +42,7 @@ export type PlayerSession = {
 	areaEnteredAt: number?,
 	sessionFirstBubbleSent: boolean,
 	sessionFirstSaleSent: boolean,
+	lastProgressionLevelReported: number?,
 	-- Gates SecondsToFirst* (session initiale) : jamais renvoyés deux fois
 	firstTimingSent: { [string]: boolean },
 }
@@ -75,6 +83,7 @@ local ANALYTICS_TEMPLATE = {
 	Onboarding = {},
 	SummerZone = {},
 	BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 },
+	LastProgressionLevel = 0,
 	Lifetime = { FirstSpecialBubble = false },
 }
 
@@ -360,8 +369,8 @@ local function _logEconomy(
 	transactionType: string,
 	itemSku: string?,
 	fields: any?
-)
-	invokeSink("logEconomy", function()
+): boolean
+	return invokeSink("logEconomy", function()
 		getSink().logEconomy(
 			player,
 			flowType,
@@ -381,10 +390,82 @@ local function _logProgressionComplete(
 	level: number,
 	levelName: string,
 	fields: any?
-)
-	invokeSink("logProgressionComplete", function()
+): boolean
+	return invokeSink("logProgressionComplete", function()
 		getSink().logProgressionComplete(player, path, level, levelName, fields)
 	end)
+end
+
+local function getEconomyFlowType(flowName: "Source" | "Sink"): any
+	local ok, enumItem = pcall(function()
+		if flowName == "Source" then
+			return Enum.AnalyticsEconomyFlowType.Source
+		end
+		return Enum.AnalyticsEconomyFlowType.Sink
+	end)
+	if ok and enumItem ~= nil then
+		return enumItem
+	end
+	return flowName
+end
+
+local function getGameplayTransactionType(): string
+	local ok, enumItem = pcall(function()
+		return Enum.AnalyticsEconomyTransactionType.Gameplay
+	end)
+	if ok and enumItem ~= nil then
+		return enumItem.Name
+	end
+	return "Gameplay"
+end
+
+local function isFiniteNumber(value: any): boolean
+	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
+local function warnEconomyDrop(player: Player, apiName: string, reason: string)
+	warnHandler("[GameAnalytics] economy drop:", player.Name, apiName, reason)
+end
+
+local function validateCoinEconomyContext(player: Player, ctx: CoinEconomyContext, apiName: string): boolean
+	if not sessions[player] then
+		GameAnalyticsService.WarnNoSession(player, apiName)
+		return false
+	end
+	if type(ctx) ~= "table" then
+		warnEconomyDrop(player, apiName, "invalid ctx")
+		return false
+	end
+	if not isFiniteNumber(ctx.amount) then
+		warnEconomyDrop(player, apiName, "invalid amount")
+		return false
+	end
+	local amount = math.floor(ctx.amount)
+	if amount <= 0 then
+		warnEconomyDrop(player, apiName, "amount <= 0")
+		return false
+	end
+	if not isFiniteNumber(ctx.endingBalance) then
+		warnEconomyDrop(player, apiName, "invalid endingBalance")
+		return false
+	end
+	if ctx.endingBalance < 0 then
+		warnEconomyDrop(player, apiName, "negative endingBalance")
+		return false
+	end
+	if type(ctx.transactionType) ~= "string" or ctx.transactionType == "" then
+		warnEconomyDrop(player, apiName, "invalid transactionType")
+		return false
+	end
+	if type(ctx.itemSku) ~= "string" or ctx.itemSku == "" then
+		warnEconomyDrop(player, apiName, "invalid itemSku")
+		return false
+	end
+	if not AnalyticsConfig.IsEconomySkuAllowed(ctx.itemSku) then
+		warnEconomyDrop(player, apiName, "sku not allowed")
+		return false
+	end
+	return true
 end
 
 local function secondsSinceJoin(session: PlayerSession): number
@@ -717,7 +798,124 @@ function GameAnalyticsService.OnUpgradePurchased(player: Player, _ctx: any?)
 	GameAnalyticsService.ObserveOnboarding(player, "PurchasedFirstUpgrade")
 end
 
+function GameAnalyticsService.LogCoinSource(player: Player, ctx: CoinEconomyContext): boolean
+	if not validateCoinEconomyContext(player, ctx, "LogCoinSource") then
+		return false
+	end
+	local amount = math.floor(ctx.amount)
+	return _logEconomy(
+		player,
+		getEconomyFlowType("Source"),
+		AnalyticsConfig.CurrencyType,
+		amount,
+		ctx.endingBalance,
+		ctx.transactionType,
+		ctx.itemSku,
+		nil
+	)
+end
+
+function GameAnalyticsService.LogCoinSink(player: Player, ctx: CoinEconomyContext): boolean
+	if not validateCoinEconomyContext(player, ctx, "LogCoinSink") then
+		return false
+	end
+	local amount = math.floor(ctx.amount)
+	return _logEconomy(
+		player,
+		getEconomyFlowType("Sink"),
+		AnalyticsConfig.CurrencyType,
+		amount,
+		ctx.endingBalance,
+		ctx.transactionType,
+		ctx.itemSku,
+		nil
+	)
+end
+
+-- Économie vente sac uniquement. Après vente réussie, appeler aussi
+-- OnBackpackSold (onboarding) et OnBackpackSoldAnalytics (session + summer).
+function GameAnalyticsService.LogBackpackSaleEconomy(player: Player, profile: any)
+	if type(profile) ~= "table" then
+		return
+	end
+	ensureAnalytics(profile)
+	local bag = profile.Analytics.BagValueByZone
+	if type(bag) ~= "table" then
+		return
+	end
+
+	local endingBalance = math.max(0, math.floor(tonumber(profile.Coins) or 0))
+	local transactionType = getGameplayTransactionType()
+	local portions = {
+		{ key = "GameRoom", sku = "BubbleSale_GameRoom" },
+		{ key = "SummerZone", sku = "BubbleSale_SummerZone" },
+		{ key = "Unknown", sku = "BubbleSale_Mixed" },
+	}
+
+	local hadAny = false
+	for _, portion in ipairs(portions) do
+		local amount = math.max(0, math.floor(tonumber(bag[portion.key]) or 0))
+		if amount > 0 then
+			hadAny = true
+			GameAnalyticsService.LogCoinSource(player, {
+				amount = amount,
+				endingBalance = endingBalance,
+				transactionType = transactionType,
+				itemSku = portion.sku,
+			})
+		end
+	end
+
+	if hadAny then
+		bag.GameRoom = 0
+		bag.SummerZone = 0
+		bag.Unknown = 0
+		profile.__dirty = true
+	end
+end
+
 function GameAnalyticsService.OnLevelReached(player: Player, level: number)
+	local session = sessions[player]
+	if not session then
+		GameAnalyticsService.WarnNoSession(player, "OnLevelReached")
+		return
+	end
+	if not isFiniteNumber(level) then
+		return
+	end
+	level = math.floor(level)
+	if level < 1 then
+		return
+	end
+
+	local profile = session.profile
+	if type(profile) ~= "table" then
+		return
+	end
+	ensureAnalytics(profile)
+
+	session.lastProgressionLevelReported = session.lastProgressionLevelReported or 0
+	local persistedLast = tonumber(profile.Analytics.LastProgressionLevel) or 0
+	local lastReported = math.max(session.lastProgressionLevelReported, persistedLast)
+	if level <= lastReported then
+		return
+	end
+
+	local progressionOk = _logProgressionComplete(
+		player,
+		AnalyticsConfig.ProgressionPath,
+		level,
+		"Level_" .. tostring(level),
+		nil
+	)
+	local customOk = _logCustom(player, "PlayerLevelReached", level, nil)
+
+	if progressionOk or customOk then
+		session.lastProgressionLevelReported = level
+		profile.Analytics.LastProgressionLevel = math.max(persistedLast, level)
+		profile.__dirty = true
+	end
+
 	if level >= ZoneDefs.GetRequiredLevel("SummerZone") then
 		GameAnalyticsService.OnSummerRequiredLevelReached(player)
 	end
@@ -872,6 +1070,7 @@ function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProf
 		areaEnteredAt = nil,
 		sessionFirstBubbleSent = false,
 		sessionFirstSaleSent = false,
+		lastProgressionLevelReported = tonumber(profile.Analytics.LastProgressionLevel) or 0,
 		firstTimingSent = {},
 	}
 	sessions[player] = session
