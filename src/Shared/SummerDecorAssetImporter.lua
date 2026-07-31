@@ -22,7 +22,20 @@ local GENERATED_BY = "SummerDecorAssetImporter"
 local GENERATOR_DECOR = "SummerZoneDecorationGenerator"
 
 function SummerDecorAssetImporter.AssertEditMode(): boolean
-	return RunService:IsStudio() and RunService:IsEdit()
+	-- IsEdit requires Plugin capability; Play/server must treat that as not-edit (block import).
+	local studioOk, isStudio = pcall(function()
+		return RunService:IsStudio()
+	end)
+	if not studioOk or isStudio ~= true then
+		return false
+	end
+	local editOk, isEdit = pcall(function()
+		return RunService:IsEdit()
+	end)
+	if not editOk then
+		return false
+	end
+	return isEdit == true
 end
 
 local function ensureFolder(name: string): Folder

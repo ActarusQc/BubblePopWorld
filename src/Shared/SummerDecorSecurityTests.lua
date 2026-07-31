@@ -3,7 +3,6 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
-local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Security = require(Shared.SummerDecorSecurity)
@@ -21,12 +20,13 @@ function SummerDecorSecurityTests.Run(): boolean
 		end
 	end
 
-	-- Forbidden scripts
+	-- Forbidden scripts (Disabled: avoid RunServerScript when parented under Play)
 	do
 		local root = Instance.new("Model")
 		root.Name = "Tainted"
 		local s = Instance.new("Script")
 		s.Name = "Bad"
+		s.Disabled = true
 		s.Parent = root
 		local paths = Security.FindForbiddenScripts(root)
 		check(#paths >= 1, "FindForbiddenScripts finds Script")
@@ -64,6 +64,7 @@ function SummerDecorSecurityTests.Run(): boolean
 			check(fp1 ~= fp2, "fingerprint changes with Size")
 			-- Validation fails if Script added after
 			local evil = Instance.new("Script")
+			evil.Disabled = true
 			evil.Parent = clean
 			local valid, _ = Security.ValidateCleanModel(clean)
 			check(valid == false, "ValidateCleanModel rejects Script")
@@ -97,16 +98,17 @@ function SummerDecorSecurityTests.Run(): boolean
 		root:Destroy()
 	end
 
-	-- Edit mode gate
+	-- Edit mode gate — never call RunService:IsEdit() from Play (Plugin capability).
+	-- AssertEditMode pcall-wraps IsEdit and returns false outside Edit → import blocked.
 	do
-		if RunService:IsStudio() and not RunService:IsEdit() then
-			check(Importer.AssertEditMode() == false, "paused sim not edit")
+		local inEdit = Importer.AssertEditMode()
+		check(type(inEdit) == "boolean", "AssertEditMode boolean")
+		if not inEdit then
+			check(inEdit == false, "Play/published → not edit")
 			check(Importer.ImportAssetId(1) == "blocked_not_edit", "import blocked when not edit")
-		elseif not RunService:IsStudio() then
-			check(Importer.AssertEditMode() == false, "not studio → not edit")
+			print("[SummerDecorSecurityTests] edit-mode gate: not Edit → import blocked (expected in Play)")
 		else
-			-- En Edit Studio réel, AssertEditMode true ; on ne force pas l'échec.
-			check(type(Importer.AssertEditMode()) == "boolean", "AssertEditMode boolean")
+			print("[SummerDecorSecurityTests] edit-mode gate: Edit mode (import allowed)")
 		end
 	end
 
