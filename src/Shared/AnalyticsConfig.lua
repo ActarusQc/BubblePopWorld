@@ -111,7 +111,7 @@ function AnalyticsConfig.BuildEconomySkuSet(): { [string]: boolean }
 		set[sku] = true
 	end
 	if type(GameConfig.Upgrades) == "table" then
-		for upgradeId in GameConfig.Upgrades do
+		for upgradeId, _ in pairs(GameConfig.Upgrades) do
 			if type(upgradeId) == "string" then
 				set[upgradeId] = true
 			end
