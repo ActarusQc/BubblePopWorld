@@ -103,6 +103,24 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(not GameAnalyticsService.HasSession(playerA), "FlushAllPlayers purge playerA")
 	check(not GameAnalyticsService.HasSession(playerB), "FlushAllPlayers purge playerB")
 
+	local bagProfile = {
+		Analytics = {
+			BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 },
+			SummerZoneFunnelSessionId = "",
+		},
+		PendingSellValue = 50,
+	}
+	GameAnalyticsService.InitPlayer(playerA, bagProfile, false)
+	check(
+		bagProfile.Analytics.BagValueByZone.Unknown == 50,
+		"EnsureBagValueCoverage : PendingSellValue 50 → Unknown 50"
+	)
+	check(
+		bagProfile.Analytics.SummerZoneFunnelSessionId == "",
+		"SummerZoneFunnelSessionId reste vide (Task 4)"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
 	local source = script.Parent:WaitForChild("GameAnalyticsService").Source
 	check(string.find(source, "DataService") == nil, "GameAnalyticsService ne require pas DataService")
 

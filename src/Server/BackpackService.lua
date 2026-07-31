@@ -260,7 +260,7 @@ local function doSell(player: Player): (number?, number?, string?)
 	local sold = d.CurrentBubbles
 	local earned = d.PendingSellValue
 
-	local credited = DataService.AddCoins(player, earned, "BubbleSale")
+	local credited, _endingBalance = DataService.AddCoins(player, earned, "BubbleSale")
 	if not credited then
 		return nil, nil, "credit_failed"
 	end

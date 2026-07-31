@@ -244,8 +244,30 @@ function GameAnalyticsService.Start()
 	end
 end
 
-function GameAnalyticsService.InitPlayer(player: Player, _profile: any, isNewProfile: boolean)
-	-- _profile réservé Task 3+ (flags Analytics) ; aucune mutation ici.
+function GameAnalyticsService.EnsureBagValueCoverage(profile: any)
+	if type(profile) ~= "table" then
+		return
+	end
+	if type(profile.Analytics) ~= "table" then
+		return
+	end
+	local bag = profile.Analytics.BagValueByZone
+	if type(bag) ~= "table" then
+		profile.Analytics.BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 }
+		bag = profile.Analytics.BagValueByZone
+	end
+	bag.GameRoom = bag.GameRoom or 0
+	bag.SummerZone = bag.SummerZone or 0
+	bag.Unknown = bag.Unknown or 0
+	local pending = math.max(0, math.floor(tonumber(profile.PendingSellValue) or 0))
+	local sum = (bag.GameRoom or 0) + (bag.SummerZone or 0) + (bag.Unknown or 0)
+	if pending > sum then
+		bag.Unknown = (bag.Unknown or 0) + (pending - sum)
+		profile.__dirty = true
+	end
+end
+
+function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProfile: boolean)
 	local emptyTotals = createEmptyTotals()
 	local session: PlayerSession = {
 		sessionId = HttpService:GenerateGUID(false),
@@ -263,6 +285,7 @@ function GameAnalyticsService.InitPlayer(player: Player, _profile: any, isNewPro
 		sessionFirstSaleSent = false,
 	}
 	sessions[player] = session
+	GameAnalyticsService.EnsureBagValueCoverage(profile)
 end
 
 function GameAnalyticsService.FlushAndRemovePlayer(player: Player)

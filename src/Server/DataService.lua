@@ -59,6 +59,17 @@ local TEMPLATE = {
 	PendingSellValue = 0,
 	MusicMuted = false,
 	Version = 1,
+	Analytics = {
+		OnboardingVersion = 1,
+		SummerZoneVersion = 1,
+		SummerZoneFunnelSessionId = "",
+		OnboardingStarted = false,
+		OnboardingCompleted = false,
+		Onboarding = {},
+		SummerZone = {},
+		BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 },
+		Lifetime = { FirstSpecialBubble = false },
+	},
 }
 
 local function deepCopy(src)
@@ -187,18 +198,46 @@ function DataService.SetMutationWaiter(waiter: ((Player, number) -> boolean)?)
 	mutationWaiter = waiter
 end
 
+-- Nouveau profil réel : GetAsync a réussi et aucune table sauvegardée.
+-- Échec DataStore (ok == false) : pas un nouveau joueur analytics (évite faux onboarding).
+function DataService.IsNewProfileFromLoadResult(ok: boolean, saved: any): boolean
+	return (ok == true) and (type(saved) ~= "table")
+end
+
+function DataService.ReconcileProfileForTests(saved: any, loadOk: boolean?): any
+	local ok = if loadOk == nil then true else loadOk
+	local isNewProfile = DataService.IsNewProfileFromLoadResult(ok, saved)
+	local data = if type(saved) == "table" then reconcile(saved, TEMPLATE) else deepCopy(TEMPLATE)
+	reconcileOwnedItems(data)
+	reconcileBackpack(data)
+	reconcileProgression(data)
+	data.MusicMuted = data.MusicMuted == true
+	data.__isNewProfile = isNewProfile
+	return data
+end
+
+function DataService.SetProfileForTests(player: Player, profile: any)
+	profiles[player] = profile
+end
+
+function DataService.ClearProfileForTests(player: Player)
+	profiles[player] = nil
+end
+
 function DataService.Load(player: Player)
 	local ok, saved = retry(function()
 		return store:GetAsync(Config.PlayerKey(player.UserId))
 	end)
 
-	local data = if ok and type(saved) == "table" then reconcile(saved, TEMPLATE) else deepCopy(TEMPLATE)
+	local isNewProfile = DataService.IsNewProfileFromLoadResult(ok, saved)
+	local data = if type(saved) == "table" then reconcile(saved, TEMPLATE) else deepCopy(TEMPLATE)
 	reconcileOwnedItems(data)
 	reconcileBackpack(data)
 	reconcileProgression(data)
 	data.MusicMuted = data.MusicMuted == true
 	data.__loaded = ok            -- si false : on ne sauvegarde PAS (évite d'écraser)
 	data.__joinClock = os.clock()
+	data.__isNewProfile = isNewProfile
 	profiles[player] = data
 
 	-- leaderstats (classement natif Roblox)
@@ -215,6 +254,14 @@ function DataService.Load(player: Player)
 	if data.__loaded then
 		notifyCoinsChanged(player)
 	end
+
+	local gasOk, GameAnalyticsService = pcall(function()
+		return require(script.Parent.GameAnalyticsService)
+	end)
+	if gasOk and GameAnalyticsService and GameAnalyticsService.InitPlayer then
+		GameAnalyticsService.InitPlayer(player, data, data.__isNewProfile == true)
+	end
+
 	return data
 end
 
@@ -239,7 +286,7 @@ function DataService.Save(player: Player)
 	data.__joinClock = os.clock()
 
 	local payload = deepCopy(data)
-	payload.__loaded, payload.__joinClock, payload.__dirty = nil, nil, nil
+	payload.__loaded, payload.__joinClock, payload.__dirty, payload.__isNewProfile = nil, nil, nil, nil
 
 	retry(function()
 		store:SetAsync(Config.PlayerKey(player.UserId), payload)
@@ -323,19 +370,19 @@ local CREDIT_SOURCES = {
 	Admin = true,
 }
 
-function DataService.AddCoins(player: Player, amount: number, source: string?): boolean
+function DataService.AddCoins(player: Player, amount: number, source: string?): (boolean, number?)
 	local d = profiles[player]
-	if not d then return false end
-	if type(amount) ~= "number" or amount ~= amount or amount == math.huge then return false end
+	if not d then return false, nil end
+	if type(amount) ~= "number" or amount ~= amount or amount == math.huge then return false, nil end
 	amount = math.floor(amount)
-	if amount <= 0 then return false end
+	if amount <= 0 then return false, nil end
 	if source ~= nil and not CREDIT_SOURCES[source] then
 		warn("[DataService] source inconnue:", source)
 	end
 	d.Coins = math.max(0, d.Coins + amount)
 	d.__dirty = true
 	notifyCoinsChanged(player)
-	return true
+	return true, d.Coins
 end
 
 -- Unique source de progression permanente : les bulles réellement vendues au kiosque.
