@@ -181,22 +181,15 @@ local function createDefaultSink(): AnalyticsSink
 	}
 end
 
-local function getSink(): AnalyticsSink?
-	if sink then
-		return sink
-	end
-	if started then
+-- Sink lazy : InitPlayer peut tourner avant Start() (ordre DataService actuel jusqu'à Task 9).
+local function getSink(): AnalyticsSink
+	if not sink then
 		sink = createDefaultSink()
-		return sink
 	end
-	return nil
+	return sink
 end
 
 local function invokeSink(methodName: string, fn: () -> ()): boolean
-	local activeSink = getSink()
-	if not activeSink then
-		return false
-	end
 	local ok, err = pcall(fn)
 	if not ok then
 		if AnalyticsConfig.DebugEnabled then
@@ -210,10 +203,7 @@ end
 
 local function _logOnboarding(player: Player, step: number, stepName: string, fields: any?): boolean
 	return invokeSink("logOnboarding", function()
-		local activeSink = getSink()
-		if activeSink then
-			activeSink.logOnboarding(player, step, stepName, fields)
-		end
+		getSink().logOnboarding(player, step, stepName, fields)
 	end)
 end
 
@@ -226,19 +216,13 @@ local function _logFunnel(
 	fields: any?
 ): boolean
 	return invokeSink("logFunnel", function()
-		local activeSink = getSink()
-		if activeSink then
-			activeSink.logFunnel(player, funnelName, sessionId, step, stepName, fields)
-		end
+		getSink().logFunnel(player, funnelName, sessionId, step, stepName, fields)
 	end)
 end
 
 local function _logCustom(player: Player, name: string, value: number?, fields: any?)
 	invokeSink("logCustom", function()
-		local activeSink = getSink()
-		if activeSink then
-			activeSink.logCustom(player, name, value, fields)
-		end
+		getSink().logCustom(player, name, value, fields)
 	end)
 end
 
@@ -253,19 +237,16 @@ local function _logEconomy(
 	fields: any?
 )
 	invokeSink("logEconomy", function()
-		local activeSink = getSink()
-		if activeSink then
-			activeSink.logEconomy(
-				player,
-				flowType,
-				currencyType,
-				amount,
-				endingBalance,
-				transactionType,
-				itemSku,
-				fields
-			)
-		end
+		getSink().logEconomy(
+			player,
+			flowType,
+			currencyType,
+			amount,
+			endingBalance,
+			transactionType,
+			itemSku,
+			fields
+		)
 	end)
 end
 
@@ -277,10 +258,7 @@ local function _logProgressionComplete(
 	fields: any?
 )
 	invokeSink("logProgressionComplete", function()
-		local activeSink = getSink()
-		if activeSink then
-			activeSink.logProgressionComplete(player, path, level, levelName, fields)
-		end
+		getSink().logProgressionComplete(player, path, level, levelName, fields)
 	end)
 end
 
