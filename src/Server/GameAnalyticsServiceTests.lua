@@ -120,6 +120,24 @@ local function countCustom(recording: RecordingSink, name: string): number
 	return count
 end
 
+local function countFunnel(recording: RecordingSink, stepName: string): number
+	local count = 0
+	for _, entry in ipairs(recording.funnel) do
+		if entry.stepName == stepName then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function funnelStepNames(recording: RecordingSink): { string }
+	local names: { string } = {}
+	for _, entry in ipairs(recording.funnel) do
+		table.insert(names, entry.stepName)
+	end
+	return names
+end
+
 local function onboardingStepNames(recording: RecordingSink): { string }
 	local names: { string } = {}
 	for _, entry in ipairs(recording.onboarding) do
@@ -647,6 +665,234 @@ function GameAnalyticsServiceTests.Run(): boolean
 		end
 	end
 	check(timingValue ~= nil and timingValue >= 0, "session initiale → SecondsToFirstBubble >= 0")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 6 — cas 1 : out of order summer (pop avant arrivée)
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.FlushAllPlayers()
+	local summerOutOfOrder = buildAnalyticsProfile({
+		Level = summerLevel,
+		Analytics = {
+			SummerZoneFunnelSessionId = "summer-oof-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, summerOutOfOrder, false)
+	check(
+		countFunnel(recording, "ReachedRequiredLevel") == 1,
+		"Task6 out-of-order → ReachedRequiredLevel envoyé à l'init"
+	)
+	GameAnalyticsService.OnSummerBubblePopped(playerA)
+	check(
+		countFunnel(recording, "PoppedFirstSummerBubble") == 0,
+		"Task6 out-of-order → pop avant arrivée n'envoie pas step 3"
+	)
+	GameAnalyticsService.OnArrivedAtSummerBridge(playerA)
+	local summerOofNames = funnelStepNames(recording)
+	local arrivedIdx: number? = nil
+	local popIdx: number? = nil
+	for i, name in ipairs(summerOofNames) do
+		if name == "ArrivedAtSummerBridge" then
+			arrivedIdx = i
+		elseif name == "PoppedFirstSummerBubble" then
+			popIdx = i
+		end
+	end
+	check(
+		arrivedIdx ~= nil and popIdx ~= nil and arrivedIdx < popIdx,
+		"Task6 out-of-order → après arrivée drain envoie step 2 puis 3"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 6 — cas 2 : Saw une fois par version
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local sawProfile = buildAnalyticsProfile({
+		Analytics = {
+			SummerZoneFunnelSessionId = "saw-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, sawProfile, false)
+	GameAnalyticsService.OnSawSummerZoneRequirement(playerA)
+	GameAnalyticsService.OnSawSummerZoneRequirement(playerA)
+	check(countCustom(recording, "SawSummerZoneRequirement") == 1, "Task6 Saw → un seul custom")
+	check(sawProfile.Analytics.SummerZone.SawSummerZoneRequirement == true, "Task6 Saw → flag persisté")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+	sawProfile.Analytics.SummerZoneVersion = 0
+	sawProfile.Analytics.SummerZone = { SawSummerZoneRequirement = true }
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	GameAnalyticsService.InitPlayer(playerA, sawProfile, false)
+	check(next(sawProfile.Analytics.SummerZone) == nil, "Task6 Saw bump → SummerZone vidé")
+	GameAnalyticsService.OnSawSummerZoneRequirement(playerA)
+	check(countCustom(recording, "SawSummerZoneRequirement") == 1, "Task6 Saw bump → peut refire après bump")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 6 — cas 3 : pending persiste reconnect + vente efface
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local pendingProfile = buildAnalyticsProfile({
+		Level = summerLevel,
+		Analytics = {
+			SummerZoneFunnelSessionId = "pending-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, pendingProfile, false)
+	GameAnalyticsService.OnArrivedAtSummerBridge(playerA)
+	GameAnalyticsService.OnSummerBubblePopped(playerA)
+	GameAnalyticsService.OnSummerBackpackFilled(playerA)
+	check(
+		pendingProfile.Analytics.SummerZone.pendingSummerFullBackpackSale == true,
+		"Task6 pending → OnSummerBackpackFilled met pending true"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+	GameAnalyticsService.InitPlayer(playerA, pendingProfile, false)
+	check(
+		pendingProfile.Analytics.SummerZone.pendingSummerFullBackpackSale == true,
+		"Task6 pending → survit FlushAndRemove + reconnect"
+	)
+	local funnelBeforeSale = #recording.funnel
+	GameAnalyticsService.OnBackpackSoldAnalytics(playerA)
+	check(
+		countFunnel(recording, "SoldFirstSummerBackpack") == 1,
+		"Task6 pending → OnBackpackSoldAnalytics envoie SoldFirstSummerBackpack"
+	)
+	check(
+		pendingProfile.Analytics.SummerZone.pendingSummerFullBackpackSale ~= true,
+		"Task6 pending → effacé après Sold marqué"
+	)
+	check(
+		pendingProfile.Analytics.SummerZone.SoldFirstSummerBackpack == true,
+		"Task6 pending → SoldFirstSummerBackpack persisté"
+	)
+	check(funnelBeforeSale < #recording.funnel, "Task6 pending → au moins un funnel émis à la vente")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 6 — cas 4 : vente sans étapes summer → pending conservé
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local earlySaleProfile = buildAnalyticsProfile({
+		Analytics = {
+			SummerZoneFunnelSessionId = "early-sale-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, earlySaleProfile, false)
+	GameAnalyticsService.OnSummerBackpackFilled(playerA)
+	check(
+		earlySaleProfile.Analytics.SummerZone.pendingSummerFullBackpackSale == true,
+		"Task6 early sale → pending true après fill"
+	)
+	GameAnalyticsService.OnBackpackSoldAnalytics(playerA)
+	check(
+		countFunnel(recording, "SoldFirstSummerBackpack") == 0,
+		"Task6 early sale → Sold pas envoyé sans étapes préalables"
+	)
+	check(
+		earlySaleProfile.Analytics.SummerZone.pendingSummerFullBackpackSale == true,
+		"Task6 early sale → pending conservé si Sold non marqué"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 6 — cas 5 : OnBackpackReset efface pending
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local resetProfile = buildAnalyticsProfile({
+		Analytics = {
+			SummerZoneFunnelSessionId = "reset-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, resetProfile, false)
+	GameAnalyticsService.OnSummerBackpackFilled(playerA)
+	GameAnalyticsService.OnBackpackReset(playerA)
+	check(
+		resetProfile.Analytics.SummerZone.pendingSummerFullBackpackSale ~= true,
+		"Task6 reset → pending effacé"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 6 — cas 6 : Selected custom répétable ; Arrived funnel
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local selectProfile = buildAnalyticsProfile({
+		Level = summerLevel,
+		Analytics = {
+			SummerZoneFunnelSessionId = "select-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = { ReachedRequiredLevel = true },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, selectProfile, false)
+	local customBeforeSelect = #recording.custom
+	GameAnalyticsService.OnSelectedSummerZone(playerA)
+	GameAnalyticsService.OnSelectedSummerZone(playerA)
+	check(
+		countCustom(recording, "SelectedSummerZone") == 2,
+		"Task6 Selected → custom session à chaque appel"
+	)
+	GameAnalyticsService.OnArrivedAtSummerBridge(playerA)
+	check(
+		countFunnel(recording, "ArrivedAtSummerBridge") == 1,
+		"Task6 Arrived → funnel ObserveSummer"
+	)
+	check(#recording.custom == customBeforeSelect + 2, "Task6 Selected → n'ajoute pas de funnel")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 6 — cas 7 : Selected sans Arrived → pas d'étape Arrived
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local selectOnlyProfile = buildAnalyticsProfile({
+		Analytics = {
+			SummerZoneFunnelSessionId = "select-only-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, selectOnlyProfile, false)
+	GameAnalyticsService.OnSelectedSummerZone(playerA)
+	check(
+		countFunnel(recording, "ArrivedAtSummerBridge") == 0,
+		"Task6 Selected seul → pas d'étape Arrived"
+	)
+	check(countCustom(recording, "SelectedSummerZone") == 1, "Task6 Selected seul → custom envoyé")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task 6 — cas 8 : champ version sur premier emit funnel summer
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	local versionProfile = buildAnalyticsProfile({
+		Level = summerLevel,
+		Analytics = {
+			SummerZoneFunnelSessionId = "version-guid",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, versionProfile, false)
+	check(#recording.funnel >= 1, "Task6 version → au moins un funnel summer")
+	local firstFields = recording.funnel[1].fields
+	check(
+		type(firstFields) == "table"
+			and firstFields.CustomField1 == "v" .. tostring(AnalyticsConfig.SummerZoneAnalyticsVersion),
+		"Task6 version → CustomField1 sur premier emit funnel summer"
+	)
+	GameAnalyticsService.OnArrivedAtSummerBridge(playerA)
+	local versionFieldCount = 0
+	for _, entry in ipairs(recording.funnel) do
+		if type(entry.fields) == "table" and entry.fields.CustomField1 ~= nil then
+			versionFieldCount += 1
+		end
+	end
+	check(versionFieldCount == 1, "Task6 version → champ version une seule fois")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	local source = script.Parent:WaitForChild("GameAnalyticsService").Source

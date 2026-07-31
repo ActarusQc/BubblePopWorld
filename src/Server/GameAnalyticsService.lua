@@ -476,6 +476,10 @@ function GameAnalyticsService.OnBubblePopped(
 )
 	GameAnalyticsService.ObserveOnboarding(player, "PoppedFirstBubble")
 
+	if ctx and ctx.zoneId == "SummerZone" then
+		GameAnalyticsService.OnSummerBubblePopped(player)
+	end
+
 	local session = sessions[player]
 	if not session then
 		return
@@ -527,6 +531,130 @@ end
 function GameAnalyticsService.OnLevelReached(player: Player, level: number)
 	if level >= ZoneDefs.GetRequiredLevel("SummerZone") then
 		GameAnalyticsService.OnSummerRequiredLevelReached(player)
+	end
+end
+
+function GameAnalyticsService.OnSawSummerZoneRequirement(player: Player)
+	local session = sessions[player]
+	if not session then
+		GameAnalyticsService.WarnNoSession(player, "OnSawSummerZoneRequirement")
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return
+	end
+	local summerZone = profile.Analytics.SummerZone
+	if type(summerZone) ~= "table" then
+		profile.Analytics.SummerZone = {}
+		summerZone = profile.Analytics.SummerZone
+	end
+	if summerZone.SawSummerZoneRequirement == true then
+		return
+	end
+	local version = tonumber(profile.Analytics.SummerZoneVersion) or AnalyticsConfig.SummerZoneAnalyticsVersion
+	if _logCustom(player, "SawSummerZoneRequirement", 1, AnalyticsConfig.VersionCustomField(version)) then
+		summerZone.SawSummerZoneRequirement = true
+		profile.__dirty = true
+	end
+end
+
+function GameAnalyticsService.OnOpenedBubbleTransit(player: Player)
+	if not sessions[player] then
+		GameAnalyticsService.WarnNoSession(player, "OnOpenedBubbleTransit")
+		return
+	end
+	_logCustom(player, "OpenedBubbleTransit", 1, nil)
+end
+
+function GameAnalyticsService.OnSelectedSummerZone(player: Player)
+	if not sessions[player] then
+		GameAnalyticsService.WarnNoSession(player, "OnSelectedSummerZone")
+		return
+	end
+	_logCustom(player, "SelectedSummerZone", 1, nil)
+end
+
+function GameAnalyticsService.OnArrivedAtSummerBridge(player: Player)
+	GameAnalyticsService.ObserveSummer(player, "ArrivedAtSummerBridge")
+end
+
+function GameAnalyticsService.OnSummerBubblePopped(player: Player)
+	GameAnalyticsService.ObserveSummer(player, "PoppedFirstSummerBubble")
+end
+
+function GameAnalyticsService.OnSummerBackpackFilled(player: Player)
+	local session = sessions[player]
+	if not session then
+		GameAnalyticsService.WarnNoSession(player, "OnSummerBackpackFilled")
+		return
+	end
+	GameAnalyticsService.ObserveSummer(player, "FilledFirstSummerBackpack")
+	local profile = session.profile
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return
+	end
+	local summerZone = profile.Analytics.SummerZone
+	if type(summerZone) ~= "table" then
+		profile.Analytics.SummerZone = {}
+		summerZone = profile.Analytics.SummerZone
+	end
+	summerZone.pendingSummerFullBackpackSale = true
+	profile.__dirty = true
+end
+
+-- Appeler uniquement après une vente réussie ; ne pas appeler si la vente a échoué.
+function GameAnalyticsService.OnBackpackSoldAnalytics(player: Player, _ctx: any?)
+	local session = sessions[player]
+	if not session then
+		GameAnalyticsService.WarnNoSession(player, "OnBackpackSoldAnalytics")
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return
+	end
+	local summerZone = profile.Analytics.SummerZone
+	if type(summerZone) ~= "table" then
+		profile.Analytics.SummerZone = {}
+		summerZone = profile.Analytics.SummerZone
+	end
+
+	if summerZone.SoldFirstSummerBackpack == true then
+		if summerZone.pendingSummerFullBackpackSale == true then
+			summerZone.pendingSummerFullBackpackSale = nil
+			profile.__dirty = true
+		end
+		return
+	end
+
+	if summerZone.pendingSummerFullBackpackSale ~= true then
+		return
+	end
+
+	GameAnalyticsService.ObserveSummer(player, "SoldFirstSummerBackpack")
+	if summerZone.SoldFirstSummerBackpack == true then
+		summerZone.pendingSummerFullBackpackSale = nil
+		profile.__dirty = true
+	end
+end
+
+function GameAnalyticsService.OnBackpackReset(player: Player)
+	local session = sessions[player]
+	if not session then
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return
+	end
+	local summerZone = profile.Analytics.SummerZone
+	if type(summerZone) ~= "table" then
+		return
+	end
+	if summerZone.pendingSummerFullBackpackSale == true then
+		summerZone.pendingSummerFullBackpackSale = nil
+		profile.__dirty = true
 	end
 end
 
