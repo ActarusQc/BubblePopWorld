@@ -532,6 +532,9 @@ local function notifyBubblePoppedAnalytics(player: Player, zoneId: string, rarit
 			isSpecial = isSpecialRarity(rarityId),
 		})
 	end)
+	pcall(function()
+		require(script.Parent.OnboardingService).Refresh(player)
+	end)
 end
 
 local function notifyBubblesAddedToBagAnalytics(

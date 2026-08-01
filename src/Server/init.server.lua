@@ -50,6 +50,8 @@ end
 
 local services = {
 	DataService,
+	-- Après DataService / GameAnalyticsService, avant ZoneService (spawn première session).
+	require(script.OnboardingService),
 	require(script.BackpackService),
 	require(script.ZoneService),
 	require(script.TravelService),
@@ -73,6 +75,9 @@ end
 
 -- Validations (dev) — hors analytics (déjà exécutées avant Start en Studio).
 do
+	runSuite("OnboardingConfigTests", function()
+		return require(Shared.OnboardingConfigTests)
+	end)
 	runSuite("ZoneAccessTests", function()
 		return require(Shared.ZoneAccessTests)
 	end)

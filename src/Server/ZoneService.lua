@@ -2283,6 +2283,26 @@ local function buildGameRoom(gameRoom: Folder)
 	end)
 	gameRoomSpawnPart = spawn
 
+	-- SpawnLocation réel : place le personnage sur le SpawnPad face à la grille (+Z),
+	-- sans apparition parasite au centre du plateau. GeneratedByCode via ensurePart.
+	ensurePart(gameRoom, "GameRoomSpawnLocation", function()
+		local p = Instance.new("SpawnLocation")
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.Transparency = 1
+		p.Size = Vector3.new(12, 1, 12)
+		p.Neutral = true
+		p.Duration = 0
+		p.AllowTeamChangeOnTouch = false
+		p.Enabled = true
+		-- Face au plateau : la grille est au nord (+Z) du SpawnPad.
+		local base = Vector3.new(spawnPos.X, padTopY + 0.5, spawnPos.Z)
+		p.CFrame = CFrame.lookAt(base, base + Vector3.new(0, 0, 10))
+		return p
+	end)
+
 	-- Ancien trigger de téléport : désactivé (marqueur décoratif invisible seulement).
 	local exitZone = ensurePart(gameRoom, "ExitZone", function()
 		local p = Instance.new("Part")
@@ -2499,8 +2519,16 @@ local function onCharacterAdded(player: Player)
 		while not DataService.Get(player) and os.clock() < deadline do
 			task.wait()
 		end
-		-- Seul téléport de gameplay : apparition initiale dans le lobby.
-		ZoneService.TeleportToLobby(player, true)
+		-- Profil non chargé → traité comme vétéran : repli lobby (comportement actuel).
+		-- Nouveau joueur avant premier pop → reste sur le SpawnLocation (aucun téléport).
+		local stayInRoom = false
+		pcall(function()
+			local OnboardingService = require(script.Parent.OnboardingService)
+			stayInRoom = OnboardingService.ShouldSpawnInGameRoom(player)
+		end)
+		if not stayInRoom then
+			ZoneService.TeleportToLobby(player, true)
+		end
 		spawningInProgress[player] = nil
 	end)
 end
