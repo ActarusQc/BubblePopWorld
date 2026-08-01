@@ -69,19 +69,35 @@ local function release(player: Player)
 	locks[player] = nil
 end
 
--- Exécute `body` sous le verrou du joueur. Retourne (false) si le verrou n'a pas pu être
--- acquis (timeout) ou si `body` a levé une erreur ; sinon (true, ...résultats de body).
+-- Exécute `body` sous le verrou du joueur. Le verrou est toujours libéré (succès, erreur métier,
+-- throw analytics/Remote). Retourne (false) si timeout d'acquire ou si body a levé ; sinon
+-- (true, ...résultats de body).
 local function runLocked(player: Player, body: () -> ...any): (boolean, ...any)
 	if not acquire(player) then
 		return false
 	end
-	local packed = table.pack(pcall(body))
+	local packed = table.pack(xpcall(body, debug.traceback))
 	release(player)
 	if not packed[1] then
 		warn(("[BackpackService] erreur sous verrou (%s) : %s"):format(player.Name, tostring(packed[2])))
 		return false
 	end
 	return true, table.unpack(packed, 2, packed.n)
+end
+
+-- FireClient exige une Instance Player ; les tests utilisent des tables.
+local function safeFireClient(eventName: string, player: Player, ...: any)
+	local args = table.pack(...)
+	local ok, err = pcall(function()
+		Remotes.Event(eventName):FireClient(player, table.unpack(args, 1, args.n))
+	end)
+	if not ok then
+		warn(("[BackpackService] FireClient(%s) ignoré pour %s : %s"):format(
+			eventName,
+			tostring(player.Name),
+			tostring(err)
+		))
+	end
 end
 
 function BackpackService.IsLocked(player: Player): boolean
@@ -159,7 +175,7 @@ function BackpackService.NotifyFull(player: Player)
 		return
 	end
 	lastFullNotify[player] = now
-	Remotes.Event("Announce"):FireClient(player, L10n.BackpackFullSell, "backpack_full")
+	safeFireClient("Announce", player, L10n.BackpackFullSell, "backpack_full")
 end
 
 -- Doit être appelé sous le verrou (voir AddBubbles).
@@ -313,7 +329,8 @@ function BackpackService.Sell(player: Player): (number?, number?, string?)
 			task.spawn(DataService.Save, player)
 		end
 
-		Remotes.Event("Announce"):FireClient(
+		safeFireClient(
+			"Announce",
 			player,
 			("You sold %d bubbles for %d coins!"):format(sold, earned),
 			"sell"
@@ -322,7 +339,7 @@ function BackpackService.Sell(player: Player): (number?, number?, string?)
 	end
 
 	if err == "empty" then
-		Remotes.Event("Announce"):FireClient(player, L10n.BackpackEmpty, "sell")
+		safeFireClient("Announce", player, L10n.BackpackEmpty, "sell")
 	end
 	return nil, nil, err
 end

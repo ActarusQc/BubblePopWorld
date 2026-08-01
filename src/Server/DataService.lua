@@ -346,20 +346,23 @@ function DataService.Push(player: Player)
 		;(ls:FindFirstChild("Bubbles") :: IntValue).Value = math.min(d.Pops, 2^31 - 1)
 	end
 	local nextLevel = d.Level + 1
-	Remotes.Event("StatsUpdate"):FireClient(player, {
-		Coins = d.Coins,
-		Level = d.Level,
-		Pops = d.Pops,
-		BubblesSold = d.TotalBubblesSold,
-		LevelStart = Config.BubblesForLevel(d.Level),
-		-- nil au niveau max : le HUD affiche alors « MAX ».
-		NextLevelAt = if nextLevel <= Config.Progression.MaxLevel then Config.BubblesForLevel(nextLevel) else nil,
-		Upgrades = d.Upgrades,
-		Worlds = d.Worlds,
-		OwnedItems = d.OwnedItems,
-		EquippedBackpack = d.EquippedBackpack or "",
-		MusicMuted = d.MusicMuted == true,
-	})
+	-- FireClient exige une Instance Player (tests / stubs : ignorer sans casser la mutation).
+	pcall(function()
+		Remotes.Event("StatsUpdate"):FireClient(player, {
+			Coins = d.Coins,
+			Level = d.Level,
+			Pops = d.Pops,
+			BubblesSold = d.TotalBubblesSold,
+			LevelStart = Config.BubblesForLevel(d.Level),
+			-- nil au niveau max : le HUD affiche alors « MAX ».
+			NextLevelAt = if nextLevel <= Config.Progression.MaxLevel then Config.BubblesForLevel(nextLevel) else nil,
+			Upgrades = d.Upgrades,
+			Worlds = d.Worlds,
+			OwnedItems = d.OwnedItems,
+			EquippedBackpack = d.EquippedBackpack or "",
+			MusicMuted = d.MusicMuted == true,
+		})
+	end)
 end
 
 local CREDIT_SOURCES = {

@@ -81,6 +81,14 @@ function BackpackServiceTests.Run(): boolean
 	local origAdded = GameAnalyticsService.OnBubblesAddedToBag
 	local origSold = GameAnalyticsService.OnBackpackSold
 	local origReset = GameAnalyticsService.OnBackpackReset
+	local origAddCoins = DataService.AddCoins
+
+	local function restoreHooks()
+		GameAnalyticsService.OnBubblesAddedToBag = origAdded
+		GameAnalyticsService.OnBackpackSold = origSold
+		GameAnalyticsService.OnBackpackReset = origReset
+		DataService.AddCoins = origAddCoins
+	end
 
 	GameAnalyticsService.OnBubblesAddedToBag = function(player, ctx)
 		table.insert(addedCalls, { player = player, ctx = ctx })
@@ -95,7 +103,7 @@ function BackpackServiceTests.Run(): boolean
 		return origReset(player)
 	end
 
-	local restoreOk, restoreErr = pcall(function()
+	local restoreOk, restoreErr = xpcall(function()
 		-- AddBubbles refusé → aucun OnBubblesAddedToBag (hook BubbleService uniquement)
 		local playerRefuse = fakePlayer("BpRefuse", 71001)
 		local profileRefuse = buildProfile({
@@ -110,6 +118,7 @@ function BackpackServiceTests.Run(): boolean
 		check(addedOk == false, "Task11 AddBubbles refusé → false")
 		check(err == BackpackService.ErrorCodes.BackpackFull, "Task11 AddBubbles refusé → BackpackFull")
 		check(#addedCalls == 0, "Task11 AddBubbles refusé → aucun OnBubblesAddedToBag")
+		check(BackpackService.IsLocked(playerRefuse) ~= true, "Task11 AddBubbles refusé → verrou libéré")
 		GameAnalyticsService.FlushAndRemovePlayer(playerRefuse)
 		DataService.ClearProfileForTests(playerRefuse)
 
@@ -158,11 +167,10 @@ function BackpackServiceTests.Run(): boolean
 		GameAnalyticsService.FlushAndRemovePlayer(playerCredit)
 		GameAnalyticsService.InitPlayer(playerCredit, profileCredit, false)
 		soldCalls = {}
-		local origAddCoins = DataService.AddCoins
 		DataService.AddCoins = function()
 			return false, nil
 		end
-		local creditSellOk, creditSold, creditEarned, creditErr = pcall(function()
+		local creditSellOk, creditSold, _creditEarned, creditErr = pcall(function()
 			return BackpackService.Sell(playerCredit)
 		end)
 		DataService.AddCoins = origAddCoins
@@ -209,17 +217,15 @@ function BackpackServiceTests.Run(): boolean
 		GameAnalyticsService.FlushAndRemovePlayer(playerReset)
 		GameAnalyticsService.InitPlayer(playerReset, profileReset, false)
 		resetCalls = {}
-		pcall(function()
-			BackpackService.ResetSession(playerReset)
-		end)
+		local resetOk = BackpackService.ResetSession(playerReset)
+		check(resetOk == true, "Task11 reset → ResetSession true")
 		check(#resetCalls == 1, "Task11 reset → OnBackpackReset une fois")
+		check(BackpackService.IsLocked(playerReset) ~= true, "Task11 reset → verrou libéré")
 		GameAnalyticsService.FlushAndRemovePlayer(playerReset)
 		DataService.ClearProfileForTests(playerReset)
-	end)
+	end, debug.traceback)
 
-	GameAnalyticsService.OnBubblesAddedToBag = origAdded
-	GameAnalyticsService.OnBackpackSold = origSold
-	GameAnalyticsService.OnBackpackReset = origReset
+	restoreHooks()
 
 	if not restoreOk then
 		warn("[BackpackServiceTests] FAIL: suite error:", tostring(restoreErr))

@@ -63,7 +63,13 @@ local function rowById(rows: { any }, id: string): any
 	error("ligne absente : " .. id, 2)
 end
 
-function ShopServiceTests.Run(context: Context): boolean
+function ShopServiceTests.Run(context: Context?): boolean
+	-- Harnais hors Roblox (tools/test_shop_service.lua). Sans contexte → SKIP en Studio Play.
+	if type(context) ~= "table" or type(context.Callbacks) ~= "table" then
+		print("[ShopServiceTests] SKIP: nécessite tools/run_shop_service_tests.py (pas de Callbacks)")
+		return true
+	end
+
 	local passed, failed = 0, 0
 	local function check(condition: boolean, message: string)
 		if condition then
