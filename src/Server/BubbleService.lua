@@ -534,6 +534,26 @@ local function notifyBubblePoppedAnalytics(player: Player, zoneId: string, rarit
 	end)
 end
 
+local function notifyBubblesAddedToBagAnalytics(
+	player: Player,
+	storageAdded: number,
+	sellValueAdded: number,
+	zoneId: string,
+	becameFull: boolean,
+	wasBelowCapacity: boolean
+)
+	pcall(function()
+		local GAS = require(script.Parent.GameAnalyticsService)
+		GAS.OnBubblesAddedToBag(player, {
+			storageAdded = storageAdded,
+			sellValueAdded = sellValueAdded,
+			zoneId = analyticsZoneId(zoneId),
+			becameFull = becameFull,
+			wasBelowCapacity = wasBelowCapacity,
+		})
+	end)
+end
+
 -- Zone de la bulle (attribut / métadonnée cellule) — jamais la position du joueur.
 local function resolveBubbleZoneId(cell: any): string
 	local part = cell and cell.part
@@ -577,6 +597,7 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 	local sellValue = BackpackService.RoundSellValue(raw, baseSell)
 	if not sellValue or sellValue <= 0 then return "skip" end
 
+	local wasBelowCapacity = not BackpackService.IsFull(player)
 	local added, err, tx = BackpackService.AddBubbles(player, storage, sellValue)
 	if not added then
 		return if err == BackpackService.ErrorCodes.BackpackFull then "full" else "skip"
@@ -593,7 +614,9 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 		return "skip"
 	end
 
+	local becameFull = wasBelowCapacity and BackpackService.IsFull(player)
 	notifyBubblePoppedAnalytics(player, zoneId, def.Id)
+	notifyBubblesAddedToBagAnalytics(player, storage, sellValue, zoneId, becameFull, wasBelowCapacity)
 	return "ok", def
 end
 

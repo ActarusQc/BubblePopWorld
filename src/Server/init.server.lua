@@ -127,6 +127,9 @@ do
 	runSuite("ShopServiceTests", function()
 		return require(script.ShopServiceTests)
 	end)
+	runSuite("BackpackServiceTests", function()
+		return require(script.BackpackServiceTests)
+	end)
 end
 
 print("[Bubble Pop World] serveur prêt.")

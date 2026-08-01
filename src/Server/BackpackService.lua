@@ -260,7 +260,7 @@ local function doSell(player: Player): (number?, number?, string?)
 	local sold = d.CurrentBubbles
 	local earned = d.PendingSellValue
 
-	local credited, _endingBalance = DataService.AddCoins(player, earned, "BubbleSale")
+	local credited, endingBalance = DataService.AddCoins(player, earned, "BubbleSale")
 	if not credited then
 		return nil, nil, "credit_failed"
 	end
@@ -274,6 +274,18 @@ local function doSell(player: Player): (number?, number?, string?)
 
 	-- Progression permanente : seules les bulles réellement retirées du sac comptent.
 	DataService.AddBubblesSold(player, sold)
+
+	-- Analytics après crédit + reset sac réussis (jamais si endingBalance invalide).
+	if earned > 0 and isFiniteNumber(endingBalance) then
+		pcall(function()
+			local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+			GameAnalyticsService.OnBackpackSold(player, {
+				sold = sold,
+				earned = earned,
+				endingBalance = endingBalance,
+			})
+		end)
+	end
 
 	return sold, earned, nil
 end
@@ -326,6 +338,12 @@ function BackpackService.ResetSession(player: Player): boolean
 	if not locked then
 		warn("[BackpackService] réinitialisation ignorée pour " .. player.Name .. " : verrou occupé")
 		return false
+	end
+	if ok == true then
+		pcall(function()
+			local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+			GameAnalyticsService.OnBackpackReset(player)
+		end)
 	end
 	return ok == true
 end

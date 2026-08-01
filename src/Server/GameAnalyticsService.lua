@@ -775,8 +775,90 @@ function GameAnalyticsService.OnReturnedToLobby(player: Player)
 	end
 end
 
-function GameAnalyticsService.OnBackpackSold(player: Player, _ctx: any?)
+function GameAnalyticsService.OnBubblesAddedToBag(
+	player: Player,
+	ctx: {
+		storageAdded: number?,
+		sellValueAdded: number?,
+		zoneId: string?,
+		becameFull: boolean?,
+		wasBelowCapacity: boolean?,
+	}?
+)
+	local session = sessions[player]
+	if not session then
+		GameAnalyticsService.WarnNoSession(player, "OnBubblesAddedToBag")
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" then
+		return
+	end
+	if type(ctx) ~= "table" then
+		return
+	end
+	local sellValueAdded = math.floor(tonumber(ctx.sellValueAdded) or 0)
+	if sellValueAdded <= 0 then
+		return
+	end
+
+	ensureAnalytics(profile)
+	GameAnalyticsService.EnsureBagValueCoverage(profile)
+	local bag = profile.Analytics.BagValueByZone
+	if type(bag) ~= "table" then
+		return
+	end
+
+	local zoneId = ctx.zoneId
+	local key = "Unknown"
+	if zoneId == "GameRoom" or zoneId == "SummerZone" then
+		key = zoneId
+	end
+	bag[key] = math.max(0, math.floor(tonumber(bag[key]) or 0)) + sellValueAdded
+	profile.__dirty = true
+
+	if ctx.becameFull == true and ctx.wasBelowCapacity == true then
+		GameAnalyticsService.ObserveOnboarding(player, "BackpackFullFirstTime")
+		if zoneId == "SummerZone" then
+			GameAnalyticsService.OnSummerBackpackFilled(player)
+		end
+	end
+end
+
+function GameAnalyticsService.OnBackpackSold(
+	player: Player,
+	ctx: { sold: number?, earned: number?, endingBalance: number? }?
+)
+	local session = sessions[player]
+	if not session then
+		GameAnalyticsService.WarnNoSession(player, "OnBackpackSold")
+		return
+	end
+	local profile = session.profile
+	if type(profile) ~= "table" then
+		return
+	end
+	if type(ctx) ~= "table" then
+		return
+	end
+	local earned = math.floor(tonumber(ctx.earned) or 0)
+	local endingBalance = ctx.endingBalance
+	if earned <= 0 or not isFiniteNumber(endingBalance) or (endingBalance :: number) < 0 then
+		return
+	end
+
+	ensureAnalytics(profile)
+	GameAnalyticsService.LogBackpackSaleEconomy(player, profile, {
+		earned = earned,
+		endingBalance = endingBalance,
+	})
 	GameAnalyticsService.ObserveOnboarding(player, "SoldFirstBackpack")
+	GameAnalyticsService.OnBackpackSoldAnalytics(player, {
+		sold = ctx.sold,
+		earned = earned,
+		coinsEarned = earned,
+		endingBalance = endingBalance,
+	})
 end
 
 function GameAnalyticsService.OnUpgradePurchased(player: Player, _ctx: any?)
@@ -819,17 +901,59 @@ end
 
 -- Économie vente sac uniquement. Après vente réussie, appeler aussi
 -- OnBackpackSold (onboarding) et OnBackpackSoldAnalytics (session + summer).
-function GameAnalyticsService.LogBackpackSaleEconomy(player: Player, profile: any)
+-- ctx optionnel : { earned, endingBalance } — si earned fourni, réconcilie les portions.
+function GameAnalyticsService.LogBackpackSaleEconomy(player: Player, profile: any, ctx: any?)
 	if type(profile) ~= "table" then
 		return
 	end
 	ensureAnalytics(profile)
+	GameAnalyticsService.EnsureBagValueCoverage(profile)
 	local bag = profile.Analytics.BagValueByZone
 	if type(bag) ~= "table" then
 		return
 	end
 
-	local endingBalance = math.max(0, math.floor(tonumber(profile.Coins) or 0))
+	local endingBalance: number
+	if type(ctx) == "table" and isFiniteNumber(ctx.endingBalance) then
+		endingBalance = math.max(0, math.floor(ctx.endingBalance))
+	else
+		endingBalance = math.max(0, math.floor(tonumber(profile.Coins) or 0))
+	end
+
+	local earned: number? = nil
+	if type(ctx) == "table" and isFiniteNumber(ctx.earned) then
+		earned = math.max(0, math.floor(ctx.earned))
+	end
+
+	if earned ~= nil then
+		local gr = math.max(0, math.floor(tonumber(bag.GameRoom) or 0))
+		local sz = math.max(0, math.floor(tonumber(bag.SummerZone) or 0))
+		local unk = math.max(0, math.floor(tonumber(bag.Unknown) or 0))
+		local sum = gr + sz + unk
+		if sum < earned then
+			unk += earned - sum
+		elseif sum > earned then
+			local excess = sum - earned
+			warnHandler(
+				"[GameAnalytics] BagValueByZone sum exceeds earned; correcting",
+				player.Name,
+				"excess=" .. tostring(excess),
+				"earned=" .. tostring(earned)
+			)
+			local take = math.min(unk, excess)
+			unk -= take
+			excess -= take
+			take = math.min(sz, excess)
+			sz -= take
+			excess -= take
+			take = math.min(gr, excess)
+			gr -= take
+		end
+		bag.GameRoom = gr
+		bag.SummerZone = sz
+		bag.Unknown = unk
+	end
+
 	local transactionType = getGameplayTransactionType()
 	local portions = {
 		{ key = "GameRoom", sku = "BubbleSale_GameRoom" },
@@ -994,7 +1118,7 @@ function GameAnalyticsService.OnBackpackSoldAnalytics(player: Player, _ctx: any?
 
 	local coinsEarned: number? = nil
 	if type(_ctx) == "table" then
-		coinsEarned = _ctx.coinsEarned or _ctx.coins or _ctx.amount
+		coinsEarned = _ctx.coinsEarned or _ctx.earned or _ctx.coins or _ctx.amount
 	end
 	GameAnalyticsService.RecordSale(player, coinsEarned)
 
@@ -1023,17 +1147,22 @@ function GameAnalyticsService.OnBackpackReset(player: Player)
 		return
 	end
 	local profile = session.profile
-	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+	if type(profile) ~= "table" then
 		return
+	end
+	ensureAnalytics(profile)
+	GameAnalyticsService.EnsureBagValueCoverage(profile)
+	local bag = profile.Analytics.BagValueByZone
+	if type(bag) == "table" then
+		bag.GameRoom = 0
+		bag.SummerZone = 0
+		bag.Unknown = 0
 	end
 	local summerZone = profile.Analytics.SummerZone
-	if type(summerZone) ~= "table" then
-		return
-	end
-	if summerZone.pendingSummerFullBackpackSale == true then
+	if type(summerZone) == "table" and summerZone.pendingSummerFullBackpackSale == true then
 		summerZone.pendingSummerFullBackpackSale = nil
-		profile.__dirty = true
 	end
+	profile.__dirty = true
 end
 
 function GameAnalyticsService.InitPlayer(player: Player, profile: any, isNewProfile: boolean)

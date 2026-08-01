@@ -1241,6 +1241,470 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(throwResult == false, "Task8 sink economy throw → LogCoinSource retourne false")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
+	--------------------------------------------------------------------
+	-- Task 11 — Bag provenance / full / sell
+	--------------------------------------------------------------------
+
+	local function sumEconomyAmounts(rec: RecordingSink): number
+		local sum = 0
+		for _, entry in ipairs(rec.economy) do
+			sum += entry.amount
+		end
+		return sum
+	end
+
+	local function economySkuAmount(rec: RecordingSink, sku: string): number
+		local sum = 0
+		for _, entry in ipairs(rec.economy) do
+			if entry.itemSku == sku then
+				sum += entry.amount
+			end
+		end
+		return sum
+	end
+
+	-- Task11-1 : ajout GameRoom
+	beginIsolatedCase()
+	local bagAddProfile = buildAnalyticsProfile({ Coins = 0 })
+	GameAnalyticsService.InitPlayer(playerA, bagAddProfile, true)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 12,
+		zoneId = "GameRoom",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	check(bagAddProfile.Analytics.BagValueByZone.GameRoom == 12, "Task11 ajout GameRoom → BagValueByZone.GameRoom +12")
+	check(bagAddProfile.__dirty == true, "Task11 ajout GameRoom → __dirty")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-2 : ajout SummerZone
+	beginIsolatedCase()
+	local bagSummerProfile = buildAnalyticsProfile()
+	GameAnalyticsService.InitPlayer(playerA, bagSummerProfile, false)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 20,
+		zoneId = "SummerZone",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	check(bagSummerProfile.Analytics.BagValueByZone.SummerZone == 20, "Task11 ajout SummerZone → BagValueByZone.SummerZone +20")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-3 : zone inconnue / ClassicZone → Unknown
+	beginIsolatedCase()
+	local bagUnknownProfile = buildAnalyticsProfile()
+	GameAnalyticsService.InitPlayer(playerA, bagUnknownProfile, false)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 7,
+		zoneId = "ClassicZone",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 3,
+		zoneId = "SomewhereElse",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	check(bagUnknownProfile.Analytics.BagValueByZone.Unknown == 10, "Task11 zone inconnue → BagValueByZone.Unknown")
+	check(bagUnknownProfile.Analytics.BagValueByZone.GameRoom == 0, "Task11 ClassicZone → pas de clé GameRoom directe")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-4 : sellValue <= 0 → no-op
+	beginIsolatedCase()
+	local bagZeroProfile = buildAnalyticsProfile()
+	GameAnalyticsService.InitPlayer(playerA, bagZeroProfile, false)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 0,
+		zoneId = "GameRoom",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = -5,
+		zoneId = "GameRoom",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	check(
+		bagZeroProfile.Analytics.BagValueByZone.GameRoom == 0
+			and bagZeroProfile.Analytics.BagValueByZone.SummerZone == 0
+			and bagZeroProfile.Analytics.BagValueByZone.Unknown == 0,
+		"Task11 sellValue <= 0 → aucun changement BagValueByZone"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-5 : transition vers sac plein → BackpackFullFirstTime une fois
+	beginIsolatedCase()
+	local fullProfile = buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+			},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, fullProfile, true)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 5,
+		zoneId = "GameRoom",
+		becameFull = true,
+		wasBelowCapacity = true,
+	})
+	local sessionFull = GameAnalyticsService.GetSessionForTests(playerA)
+	check(
+		sessionFull ~= nil and sessionFull.onboardingObserved.BackpackFullFirstTime == true,
+		"Task11 transition plein → BackpackFullFirstTime observé"
+	)
+	check(countOnboarding(recording, "BackpackFullFirstTime") == 1, "Task11 transition plein → onboarding émis une fois")
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 5,
+		zoneId = "GameRoom",
+		becameFull = true,
+		wasBelowCapacity = true,
+	})
+	check(countOnboarding(recording, "BackpackFullFirstTime") == 1, "Task11 second full → pas de double onboarding")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-6 : déjà plein (wasBelowCapacity false) → aucun nouveau full
+	beginIsolatedCase()
+	local alreadyFullProfile = buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+			},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, alreadyFullProfile, true)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 4,
+		zoneId = "GameRoom",
+		becameFull = true,
+		wasBelowCapacity = false,
+	})
+	local sessionAlready = GameAnalyticsService.GetSessionForTests(playerA)
+	check(
+		sessionAlready ~= nil and sessionAlready.onboardingObserved.BackpackFullFirstTime ~= true,
+		"Task11 déjà plein → BackpackFullFirstTime non observé"
+	)
+	check(countOnboarding(recording, "BackpackFullFirstTime") == 0, "Task11 déjà plein → aucun onboarding full")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-7 : sac plein Summer → Filled + pending
+	beginIsolatedCase()
+	local summerFullProfile = buildAnalyticsProfile({
+		Level = ZoneDefs.GetRequiredLevel("SummerZone"),
+		Analytics = {
+			SummerZoneFunnelSessionId = "task11-summer-full",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {
+				ReachedRequiredLevel = true,
+				ArrivedAtSummerBridge = true,
+				PoppedFirstSummerBubble = true,
+			},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, summerFullProfile, false)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 9,
+		zoneId = "SummerZone",
+		becameFull = true,
+		wasBelowCapacity = true,
+	})
+	check(countFunnel(recording, "FilledFirstSummerBackpack") == 1, "Task11 sac plein Summer → FilledFirstSummerBackpack")
+	check(
+		summerFullProfile.Analytics.SummerZone.pendingSummerFullBackpackSale == true,
+		"Task11 sac plein Summer → pending true"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-8 : vente GameRoom
+	beginIsolatedCase()
+	local saleGrProfile = buildAnalyticsProfile({
+		Coins = 100,
+		Analytics = {
+			BagValueByZone = { GameRoom = 40, SummerZone = 0, Unknown = 0 },
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+			},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleGrProfile, true)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 5, earned = 40, endingBalance = 140 })
+	check(countEconomy(recording, "BubbleSale_GameRoom") == 1, "Task11 vente GameRoom → BubbleSale_GameRoom")
+	check(economySkuAmount(recording, "BubbleSale_GameRoom") == 40, "Task11 vente GameRoom → amount 40")
+	check(#recording.economy == 1, "Task11 vente GameRoom → un seul emit")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-9 : vente Summer
+	beginIsolatedCase()
+	local saleSzProfile = buildAnalyticsProfile({
+		Coins = 50,
+		Analytics = {
+			BagValueByZone = { GameRoom = 0, SummerZone = 25, Unknown = 0 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleSzProfile, false)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 3, earned = 25, endingBalance = 75 })
+	check(countEconomy(recording, "BubbleSale_SummerZone") == 1, "Task11 vente Summer → BubbleSale_SummerZone")
+	check(economySkuAmount(recording, "BubbleSale_SummerZone") == 25, "Task11 vente Summer → amount 25")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-10 : vente mixte
+	beginIsolatedCase()
+	local saleMixProfile = buildAnalyticsProfile({
+		Coins = 10,
+		Analytics = {
+			BagValueByZone = { GameRoom = 10, SummerZone = 15, Unknown = 5 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleMixProfile, false)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 8, earned = 30, endingBalance = 40 })
+	check(countEconomy(recording, "BubbleSale_GameRoom") == 1, "Task11 vente mixte → GameRoom")
+	check(countEconomy(recording, "BubbleSale_SummerZone") == 1, "Task11 vente mixte → SummerZone")
+	check(countEconomy(recording, "BubbleSale_Mixed") == 1, "Task11 vente mixte → Mixed")
+	check(sumEconomyAmounts(recording) == 30, "Task11 vente mixte → somme = earned")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-11 : portion Unknown → BubbleSale_Mixed
+	beginIsolatedCase()
+	local saleUnkProfile = buildAnalyticsProfile({
+		Coins = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 18 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleUnkProfile, false)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 2, earned = 18, endingBalance = 18 })
+	check(countEconomy(recording, "BubbleSale_Mixed") == 1, "Task11 Unknown → BubbleSale_Mixed")
+	check(economySkuAmount(recording, "BubbleSale_Mixed") == 18, "Task11 Unknown → amount 18")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-12 : somme provenance < earned → différence en Mixed
+	beginIsolatedCase()
+	local saleShortProfile = buildAnalyticsProfile({
+		Coins = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 10, SummerZone = 0, Unknown = 0 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleShortProfile, false)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 4, earned = 15, endingBalance = 15 })
+	check(economySkuAmount(recording, "BubbleSale_GameRoom") == 10, "Task11 shortfall → GameRoom 10")
+	check(economySkuAmount(recording, "BubbleSale_Mixed") == 5, "Task11 shortfall → Mixed +5")
+	check(sumEconomyAmounts(recording) == 15, "Task11 shortfall → somme = earned")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-13 : vente réussie → salesCount / coinsFromSales
+	beginIsolatedCase()
+	local saleCountProfile = buildAnalyticsProfile({
+		Coins = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 22, SummerZone = 0, Unknown = 0 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleCountProfile, false)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 2, earned = 22, endingBalance = 22 })
+	local sessionSale = GameAnalyticsService.GetSessionForTests(playerA)
+	check(
+		sessionSale ~= nil and sessionSale.sessionTotals.salesCount == 1,
+		"Task11 vente réussie → salesCount +1"
+	)
+	check(
+		sessionSale ~= nil and sessionSale.sessionTotals.coinsFromSales == 22,
+		"Task11 vente réussie → coinsFromSales += earned"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-14 : deuxième vente → SessionSecondsToFirstSale non répété
+	beginIsolatedCase()
+	local saleTwiceProfile = buildAnalyticsProfile({
+		Coins = 0,
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+			},
+			BagValueByZone = { GameRoom = 10, SummerZone = 0, Unknown = 0 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleTwiceProfile, true)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 1, earned = 10, endingBalance = 10 })
+	check(countCustom(recording, "SessionSecondsToFirstSale") == 1, "Task11 première vente → SessionSecondsToFirstSale")
+	saleTwiceProfile.Analytics.BagValueByZone = { GameRoom = 8, SummerZone = 0, Unknown = 0 }
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 1, earned = 8, endingBalance = 18 })
+	check(countCustom(recording, "SessionSecondsToFirstSale") == 1, "Task11 deuxième vente → SessionSecondsToFirstSale non répété")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-15 : crédit échoué (ctx invalide) → aucun hook économie / sale
+	beginIsolatedCase()
+	local saleFailProfile = buildAnalyticsProfile({
+		Coins = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 10, SummerZone = 0, Unknown = 0 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleFailProfile, false)
+	local invalidEndingCtx: any = { sold = 1, earned = 10 }
+	GameAnalyticsService.OnBackpackSold(playerA, invalidEndingCtx)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 1, earned = 0, endingBalance = 10 })
+	check(#recording.economy == 0, "Task11 crédit/ctx invalide → aucun economy")
+	local sessionFail = GameAnalyticsService.GetSessionForTests(playerA)
+	check(
+		sessionFail ~= nil and sessionFail.sessionTotals.salesCount == 0,
+		"Task11 crédit/ctx invalide → salesCount inchangé"
+	)
+	check(saleFailProfile.Analytics.BagValueByZone.GameRoom == 10, "Task11 crédit/ctx invalide → bag intact")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-16 : reset sans vente
+	beginIsolatedCase()
+	local resetBagProfile = buildAnalyticsProfile({
+		Analytics = {
+			BagValueByZone = { GameRoom = 11, SummerZone = 4, Unknown = 2 },
+			SummerZoneFunnelSessionId = "task11-reset",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = { pendingSummerFullBackpackSale = true },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, resetBagProfile, false)
+	local economyBeforeReset = #recording.economy
+	GameAnalyticsService.OnBackpackReset(playerA)
+	check(
+		resetBagProfile.Analytics.BagValueByZone.GameRoom == 0
+			and resetBagProfile.Analytics.BagValueByZone.SummerZone == 0
+			and resetBagProfile.Analytics.BagValueByZone.Unknown == 0,
+		"Task11 reset → BagValueByZone zéro"
+	)
+	check(
+		resetBagProfile.Analytics.SummerZone.pendingSummerFullBackpackSale ~= true,
+		"Task11 reset → pending false"
+	)
+	check(#recording.economy == economyBeforeReset, "Task11 reset → aucun événement économie")
+	check(countOnboarding(recording, "SoldFirstBackpack") == 0, "Task11 reset → aucun Sold funnel")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-17 : pending Summer survit reconnexion avant vente
+	beginIsolatedCase()
+	local pendingReconnectProfile = buildAnalyticsProfile({
+		Level = ZoneDefs.GetRequiredLevel("SummerZone"),
+		Analytics = {
+			SummerZoneFunnelSessionId = "task11-pending-reconnect",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {
+				ReachedRequiredLevel = true,
+				ArrivedAtSummerBridge = true,
+				PoppedFirstSummerBubble = true,
+			},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, pendingReconnectProfile, false)
+	GameAnalyticsService.OnSummerBackpackFilled(playerA)
+	check(
+		pendingReconnectProfile.Analytics.SummerZone.pendingSummerFullBackpackSale == true,
+		"Task11 pending → true après fill"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+	GameAnalyticsService.InitPlayer(playerA, pendingReconnectProfile, false)
+	check(
+		pendingReconnectProfile.Analytics.SummerZone.pendingSummerFullBackpackSale == true,
+		"Task11 pending → survit reconnexion avant vente"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-18 : vente avec étapes Summer manquantes → pending conservé
+	beginIsolatedCase()
+	local pendingKeepProfile = buildAnalyticsProfile({
+		Coins = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 0, SummerZone = 12, Unknown = 0 },
+			SummerZoneFunnelSessionId = "task11-pending-keep",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, pendingKeepProfile, false)
+	GameAnalyticsService.OnSummerBackpackFilled(playerA)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 2, earned = 12, endingBalance = 12 })
+	check(
+		countFunnel(recording, "SoldFirstSummerBackpack") == 0,
+		"Task11 pending keep → Sold Summer non envoyé"
+	)
+	check(
+		pendingKeepProfile.Analytics.SummerZone.pendingSummerFullBackpackSale == true,
+		"Task11 pending keep → pending conservé si Sold non marqué"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11-19 : pas de double comptage OnBubblesAddedToBag vs OnBubblePopped
+	beginIsolatedCase()
+	local noDoubleProfile = buildAnalyticsProfile()
+	GameAnalyticsService.InitPlayer(playerA, noDoubleProfile, true)
+	GameAnalyticsService.OnBubblePopped(playerA, {
+		zoneId = "GameRoom",
+		rarityId = "Normal",
+		isSpecial = false,
+	})
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 1,
+		sellValueAdded = 6,
+		zoneId = "GameRoom",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	local sessionNoDouble = GameAnalyticsService.GetSessionForTests(playerA)
+	check(
+		noDoubleProfile.Analytics.BagValueByZone.GameRoom == 6,
+		"Task11 no-double → BagValue une seule fois (+6)"
+	)
+	check(
+		sessionNoDouble ~= nil and sessionNoDouble.sessionTotals.normalPops == 1,
+		"Task11 no-double → RecordPop une seule fois via OnBubblePopped"
+	)
+	check(
+		sessionNoDouble ~= nil and sessionNoDouble.sessionTotals.salesCount == 0,
+		"Task11 no-double → ajout sac n'incrémente pas salesCount"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task11 excess sum > earned → correction déterministe + warn
+	beginIsolatedCase()
+	local saleExcessProfile = buildAnalyticsProfile({
+		Coins = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 20, SummerZone = 10, Unknown = 5 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, saleExcessProfile, false)
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 3, earned = 25, endingBalance = 25 })
+	check(sumEconomyAmounts(recording) == 25, "Task11 excess → somme envoyée = earned (pas plus)")
+	check(#warnCalls >= 1, "Task11 excess → warn Studio")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
 	GameAnalyticsService.SetWarnHandler(nil)
 	GameAnalyticsService.SetSink(nil)
 	GameAnalyticsService.StopFlushLoopForTests()
