@@ -820,6 +820,7 @@ dépôt selon décision au point d'arrêt de la phase 2.
 | 2026-08-01 | — | plan créé | aucun asset produit, aucun script de production modifié |
 | 2026-08-01 | 0 | exécutée, commit en attente | P0.1 à P0.4, P0.6, P0.7 faites ; P0.2 et P0.5 bloquées sur des images à fournir |
 | 2026-08-01 | 0 | **terminée** | 8 images présentes et validées, plugin testé en Edit et en Test (F5), écarts documentés, Phase 1 non commencée |
+| 2026-08-01 | 1 | **terminée** | contrat d'import + garde-fous : 288 tests OK, aucun script de production modifié, Phase 2 non commencée |
 
 ### P0.1 — État du dépôt de référence (2026-08-01)
 
@@ -951,3 +952,25 @@ confirmée en Studio sur le premier asset importé avant de détailler les faces
   et les 8 images ;
 - **Phase 1 non commencée** ; prochain pas : commit
   `docs(hub): reference camera plugin and prototype baseline captures`.
+
+### État final de la Phase 1 (2026-08-01)
+
+- `HEAD` de départ : `a53417e6587f3a54a1cafd89ab62e00846c24f14` (Phase 0) ;
+- `src/Shared/HubAssetContract.lua` : contrat pur (12 modules, attributs, `Validate`,
+  `Decide`, `ValidateAll`, `MarkPrototypeVisual`, `CompareWithAnchor`) — **aucune
+  dépendance** à `GameConfig` / `HubLayout`, aucun service au chargement ;
+- comportements P1.4 vérifiés : absent → silence + prototype ; `UseImported=false` →
+  info + prototype ; valide → pas de prototype ; invalide → prototype conservé +
+  `[HubAssetContract] <Model> refusé : …` une seule fois (`ReportOnce`) ;
+- `src/Shared/HubAssetContractTests.lua` + `tools/test_hub_asset_contract.lua` +
+  `tools/run_hub_asset_tests.py` : **288 réussis, 0 échoué** ;
+- cas couverts : nom, bbox, yaw inversé, pivot, face manquante, Script/LocalScript,
+  SurfaceGui, collision non déclarée, module absent, double import (`HubDeckShell1`),
+  fallback attribute, symétrie Sell/Shop, budgets 55 000 triangles / 10 lumières ;
+- revue P1.7 : les 12 fiches (ModelName, enfants, faces, pivots, notes, format) sont
+  dérivables du contrat sans information manquante ;
+- **aucun script de production modifié ni require** : `CentralHubBuilder`, `HubLayout`,
+  `GameConfig`, `init.server.lua` intacts ; le câblage reste en Phase 8 ;
+- changements préexistants (11 fichiers, hub central / summer-decor / onboarding)
+  toujours non stagés et intacts ;
+- **Phase 2 non commencée** (pas de Blender, pas de `HubDeckShell`, pas d'asset 3D).
