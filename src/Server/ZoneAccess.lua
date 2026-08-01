@@ -229,6 +229,13 @@ function ZoneAccess.NotifyBlocked(player: Player, zoneId: string)
 	end
 	lastGateNotify[player] = now
 
+	if zoneId == "SummerZone" then
+		pcall(function()
+			local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+			GameAnalyticsService.OnSawSummerZoneRequirement(player)
+		end)
+	end
+
 	local required = ZoneDefs.GetRequiredLevel(zoneId)
 	local level = ZoneAccess.GetPlayerLevel(player)
 	Remotes.Event("Announce"):FireClient(

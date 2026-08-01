@@ -2514,6 +2514,47 @@ local function fallResetToLobby(player: Player): boolean
 	return Config.World.FallResetDestination == "Lobby"
 end
 
+-- Analytics zone : lazy GAS, jamais d'exception gameplay.
+local function notifyAreaAnalytics(player: Player, area: string)
+	pcall(function()
+		local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+		GameAnalyticsService.RecordZoneChange(player, area)
+		if area == "Lobby" then
+			GameAnalyticsService.OnReturnedToLobby(player)
+		end
+	end)
+end
+
+-- D2 : step 2 uniquement si présence réelle sur le board ClassicZone (pas le pont).
+local function notifyMainBubbleBoardAnalytics(player: Player, pos: Vector3)
+	local board = ZoneDefs.GetBoardBounds("ClassicZone")
+	if not board then
+		return
+	end
+	if pos.X < board.MinX or pos.X > board.MaxX or pos.Z < board.MinZ or pos.Z > board.MaxZ then
+		return
+	end
+	pcall(function()
+		local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+		GameAnalyticsService.OnReachedMainBubbleRoom(player, "GameRoom")
+	end)
+end
+
+local areaAnalyticsBound: { [Player]: boolean } = {}
+
+local function bindAreaAnalytics(player: Player)
+	if areaAnalyticsBound[player] then
+		return
+	end
+	areaAnalyticsBound[player] = true
+	player:GetAttributeChangedSignal("PlayerArea"):Connect(function()
+		local area = player:GetAttribute("PlayerArea")
+		if type(area) == "string" and area ~= "" then
+			notifyAreaAnalytics(player, area)
+		end
+	end)
+end
+
 -- Met à jour PlayerArea par position (sans téléporter).
 local function watchPlayerArea()
 	local accum = 0
@@ -2531,6 +2572,7 @@ local function watchPlayerArea()
 				if player:GetAttribute("PlayerArea") ~= area then
 					player:SetAttribute("PlayerArea", area)
 				end
+				notifyMainBubbleBoardAnalytics(player, hrp.Position)
 			end
 		end
 	end)
@@ -2641,6 +2683,7 @@ function ZoneService.Start()
 	ZoneAccess.Start()
 
 	local function bindPlayer(player: Player)
+		bindAreaAnalytics(player)
 		player.CharacterAdded:Connect(function()
 			onCharacterAdded(player)
 		end)
@@ -2661,6 +2704,7 @@ function ZoneService.Start()
 		fallResetGuard[player] = nil
 		sellSpent[player] = nil
 		sellLastAt[player] = nil
+		areaAnalyticsBound[player] = nil
 	end)
 
 	watchPlayerArea()

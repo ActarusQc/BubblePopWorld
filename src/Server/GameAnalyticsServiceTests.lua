@@ -2142,6 +2142,160 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(#warnCalls >= 1, "Task12 amount invalide → warn sink")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
+	--------------------------------------------------------------------
+	-- Task 13 — Travel / Zone / ZoneAccess (APIs GAS)
+	--------------------------------------------------------------------
+
+	-- Task13-1 : transit open → custom OpenedBubbleTransit
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	GameAnalyticsService.OnOpenedBubbleTransit(playerA)
+	check(countCustom(recording, "OpenedBubbleTransit") == 1, "Task13 transit open → custom OpenedBubbleTransit")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-2 : Summer locked → Saw (once-per-version)
+	beginIsolatedCase()
+	local sawT13 = buildAnalyticsProfile({
+		Analytics = {
+			SummerZoneFunnelSessionId = "t13-saw",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, sawT13, false)
+	GameAnalyticsService.OnSawSummerZoneRequirement(playerA)
+	GameAnalyticsService.OnSawSummerZoneRequirement(playerA)
+	check(countCustom(recording, "SawSummerZoneRequirement") == 1, "Task13 Summer locked → Saw une fois")
+	check(sawT13.Analytics.SummerZone.SawSummerZoneRequirement == true, "Task13 Saw → flag persisté")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-3 : Selected Summer → custom SelectedSummerZone
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({ Level = ZoneDefs.GetRequiredLevel("SummerZone") }), false)
+	GameAnalyticsService.OnSelectedSummerZone(playerA)
+	check(countCustom(recording, "SelectedSummerZone") == 1, "Task13 Selected Summer → custom")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-4 : PivotTo success → Arrived (funnel ArrivedAtSummerBridge)
+	beginIsolatedCase()
+	local arriveProfile = buildAnalyticsProfile({
+		Level = ZoneDefs.GetRequiredLevel("SummerZone"),
+		Analytics = {
+			SummerZoneFunnelSessionId = "t13-arrive",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, arriveProfile, false)
+	GameAnalyticsService.OnSelectedSummerZone(playerA)
+	GameAnalyticsService.OnArrivedAtSummerBridge(playerA)
+	check(countCustom(recording, "SelectedSummerZone") == 1, "Task13 PivotTo success → Selected déjà émis")
+	check(countFunnel(recording, "ArrivedAtSummerBridge") == 1, "Task13 PivotTo success → Arrived funnel")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-5 : PivotTo fail → Selected sans Arrived
+	beginIsolatedCase()
+	local failPivotProfile = buildAnalyticsProfile({
+		Level = ZoneDefs.GetRequiredLevel("SummerZone"),
+		Analytics = {
+			SummerZoneFunnelSessionId = "t13-fail-pivot",
+			SummerZoneVersion = AnalyticsConfig.SummerZoneAnalyticsVersion,
+			SummerZone = {},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, failPivotProfile, false)
+	GameAnalyticsService.OnSelectedSummerZone(playerA)
+	-- pas d'OnArrivedAtSummerBridge (PivotTo échoué)
+	check(countCustom(recording, "SelectedSummerZone") == 1, "Task13 PivotTo fail → Selected émis")
+	check(countFunnel(recording, "ArrivedAtSummerBridge") == 0, "Task13 PivotTo fail → pas d'Arrived")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-6 : GameRoom réel → onboarding step 2
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), true)
+	GameAnalyticsService.OnReachedMainBubbleRoom(playerA, "GameRoom")
+	check(countOnboarding(recording, "ReachedMainBubbleRoom") == 1, "Task13 GameRoom réel → step 2")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-7 : SummerZone → jamais onboarding step 2
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), true)
+	GameAnalyticsService.OnReachedMainBubbleRoom(playerA, "SummerZone")
+	check(countOnboarding(recording, "ReachedMainBubbleRoom") == 0, "Task13 SummerZone → jamais step 2")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-8 : Lobby avant full backpack → pas step 5
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = { JoinedGame = true, ReachedMainBubbleRoom = true, PoppedFirstBubble = true },
+		},
+	}), false)
+	GameAnalyticsService.OnReturnedToLobby(playerA)
+	check(
+		countOnboarding(recording, "ReturnedToLobbyAfterFullBackpack") == 0,
+		"Task13 Lobby avant full → pas step 5"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-9 : Lobby après full → step 5
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+			},
+		},
+	}), false)
+	GameAnalyticsService.OnBackpackBecameFull(playerA, { zoneId = "GameRoom" })
+	GameAnalyticsService.OnReturnedToLobby(playerA)
+	check(
+		countOnboarding(recording, "ReturnedToLobbyAfterFullBackpack") == 1,
+		"Task13 Lobby après full → step 5"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-10 : area identique → pas de double zoneChanges
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	GameAnalyticsService.RecordZoneChange(playerA, "Lobby")
+	local sessionT13 = GameAnalyticsService.GetSessionForTests(playerA)
+	local changesAfterFirst = if sessionT13 then sessionT13.sessionTotals.zoneChanges else -1
+	GameAnalyticsService.RecordZoneChange(playerA, "Lobby")
+	sessionT13 = GameAnalyticsService.GetSessionForTests(playerA)
+	local changesAfterSame = if sessionT13 then sessionT13.sessionTotals.zoneChanges else -1
+	check(changesAfterFirst == 1, "Task13 premier RecordZoneChange Lobby → zoneChanges=1")
+	check(changesAfterSame == 1, "Task13 area identique → pas de double zoneChanges")
+	GameAnalyticsService.RecordZoneChange(playerA, "GameRoom")
+	sessionT13 = GameAnalyticsService.GetSessionForTests(playerA)
+	check(
+		sessionT13 ~= nil and sessionT13.sessionTotals.zoneChanges == 2,
+		"Task13 changement réel → zoneChanges incrémenté"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task13-11 : sans session → warn OK, pas d'exception
+	beginIsolatedCase()
+	warnCalls = {}
+	local noSessionOk = pcall(function()
+		GameAnalyticsService.OnOpenedBubbleTransit(playerA)
+		GameAnalyticsService.OnSawSummerZoneRequirement(playerA)
+		GameAnalyticsService.OnSelectedSummerZone(playerA)
+		GameAnalyticsService.OnArrivedAtSummerBridge(playerA)
+		GameAnalyticsService.OnReachedMainBubbleRoom(playerA, "GameRoom")
+		GameAnalyticsService.OnReturnedToLobby(playerA)
+		GameAnalyticsService.RecordZoneChange(playerA, "Lobby")
+	end)
+	check(noSessionOk == true, "Task13 sans session → aucune exception")
+	check(#warnCalls >= 1, "Task13 sans session → warn OK")
+	check(#recording.custom == 0, "Task13 sans session → aucun custom émis")
+	check(#recording.onboarding == 0, "Task13 sans session → aucun onboarding émis")
+	check(#recording.funnel == 0, "Task13 sans session → aucun funnel émis")
+
 	GameAnalyticsService.SetWarnHandler(nil)
 	GameAnalyticsService.SetSink(nil)
 	GameAnalyticsService.StopFlushLoopForTests()

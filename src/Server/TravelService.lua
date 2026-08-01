@@ -17,6 +17,13 @@ local BubbleTransitBuilder = require(script.Parent.BubbleTransitBuilder)
 
 local TravelService = {}
 
+local function withAnalytics(fn: (any) -> ())
+	pcall(function()
+		local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+		fn(GameAnalyticsService)
+	end)
+end
+
 export type DestinationCard = {
 	Id: string,
 	DisplayName: string,
@@ -90,6 +97,17 @@ local function sendList(player: Player, transitId: string, currentArea: string)
 		PlayerLevel = DataService.GetPlayerLevel(player),
 		Destinations = destinations,
 	})
+
+	-- Analytics : liste confirmée envoyée au client.
+	withAnalytics(function(GAS)
+		GAS.OnOpenedBubbleTransit(player)
+		for _, card in ipairs(cards) do
+			if card.Id == "SummerZone" and card.IsLocked == true then
+				GAS.OnSawSummerZoneRequirement(player)
+				break
+			end
+		end
+	end)
 end
 
 local function fireResult(player: Player, ok: boolean, code: string, message: string, extra: { [string]: any }?)
@@ -229,6 +247,11 @@ function TravelService.RequestTravel(player: Player, destinationId: unknown, tra
 
 	local level = DataService.GetPlayerLevel(player)
 	if level < dest.RequiredLevel then
+		if dest.Id == "SummerZone" or dest.AreaName == "SummerZone" then
+			withAnalytics(function(GAS)
+				GAS.OnSawSummerZoneRequirement(player)
+			end)
+		end
 		fireResult(
 			player,
 			false,
@@ -252,6 +275,14 @@ function TravelService.RequestTravel(player: Player, destinationId: unknown, tra
 		return
 	end
 
+	local isSummerDest = dest.Id == "SummerZone" or dest.AreaName == "SummerZone"
+	-- Selected = validations OK, avant PivotTo (Arrived seulement après succès).
+	if isSummerDest then
+		withAnalytics(function(GAS)
+			GAS.OnSelectedSummerZone(player)
+		end)
+	end
+
 	traveling[player] = true
 	local landedArea = dest.AreaName
 	local okPivot, err = pcall(function()
@@ -269,6 +300,12 @@ function TravelService.RequestTravel(player: Player, destinationId: unknown, tra
 		warn("[TravelService] PivotTo failed:", err)
 		fireResult(player, false, "CHARACTER_NOT_READY", "Travel is temporarily unavailable")
 		return
+	end
+
+	if isSummerDest then
+		withAnalytics(function(GAS)
+			GAS.OnArrivedAtSummerBridge(player)
+		end)
 	end
 
 	lastTravelAt[player] = os.clock()
