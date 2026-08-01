@@ -511,6 +511,29 @@ type PopContext = {
 	combo: () -> number,
 }
 
+local function isSpecialRarity(rarityId: string): boolean
+	return rarityId ~= "Normal"
+end
+
+-- Analytics : ClassicZone → GameRoom ; SummerZone inchangé.
+local function analyticsZoneId(zoneId: string): string
+	if zoneId == "SummerZone" then
+		return "SummerZone"
+	end
+	return "GameRoom"
+end
+
+local function notifyBubblePoppedAnalytics(player: Player, zoneId: string, rarityId: string)
+	pcall(function()
+		local GAS = require(script.Parent.GameAnalyticsService)
+		GAS.OnBubblePopped(player, {
+			zoneId = analyticsZoneId(zoneId),
+			rarityId = rarityId,
+			isSpecial = isSpecialRarity(rarityId),
+		})
+	end)
+end
+
 -- Zone de la bulle (attribut / métadonnée cellule) — jamais la position du joueur.
 local function resolveBubbleZoneId(cell: any): string
 	local part = cell and cell.part
@@ -570,6 +593,7 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 		return "skip"
 	end
 
+	notifyBubblePoppedAnalytics(player, zoneId, def.Id)
 	return "ok", def
 end
 

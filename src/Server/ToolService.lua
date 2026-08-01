@@ -287,6 +287,11 @@ local function onActivate(player: Player, _toolName: any, targetPos: any)
 	local count = BubbleService.PopCells(player, zoned, def.Multiplier, zoneId)
 	if count <= 0 then return end
 
+	pcall(function()
+		local GAS = require(script.Parent.GameAnalyticsService)
+		GAS.RecordToolUse(player, id)
+	end)
+
 	cooldowns[player][id] = now + def.Cooldown
 
 	if def.Consumable ~= false and tool.Parent then
