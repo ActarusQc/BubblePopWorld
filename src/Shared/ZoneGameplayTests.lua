@@ -133,7 +133,8 @@ function ZoneGameplayTests.Run(): boolean
 		check(OnboardingConfig.NeedsGameRoomSnap(originDist) == true, "NeedsGameRoomSnap(origine→pad)")
 		check(OnboardingConfig.NeedsGameRoomSnap(0) == false, "NeedsGameRoomSnap(0) false")
 	end
-	check(OnboardingConfig.DeferCharacterLoadUntilWorldReady == true, "chargement personnage différé")
+	check(OnboardingConfig.DeferCharacterLoadUntilWorldReady == false, "CharacterAutoLoads non coupé")
+	check(OnboardingConfig.EarlySpawnLocationBootstrap == true, "SpawnLocation bootstrap précoce")
 
 	if ok then
 		print("[ZoneGameplayTests] OK")

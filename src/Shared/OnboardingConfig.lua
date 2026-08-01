@@ -33,8 +33,11 @@ OnboardingConfig.Guide = {
 	UpdateWhileIdle = false,
 }
 
--- Politique de spawn : le personnage ne doit jamais charger avant le SpawnLocation.
-OnboardingConfig.DeferCharacterLoadUntilWorldReady = true
+-- Ne jamais désactiver Players.CharacterAutoLoads : en Studio (Test / F5) cela
+-- empêche l'injection du joueur local (#Players == 0, caméra d'édition).
+OnboardingConfig.DeferCharacterLoadUntilWorldReady = false
+-- Créer le SpawnLocation avant les yields longs (tests Studio, Start services).
+OnboardingConfig.EarlySpawnLocationBootstrap = true
 -- Distance horizontale max (studs) au SpawnPad avant repositionnement de secours.
 OnboardingConfig.GameRoomSnapMaxDistance = 24
 -- Rayon autour de l'origine monde considéré comme spawn parasite.

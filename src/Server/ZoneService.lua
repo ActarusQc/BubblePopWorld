@@ -2341,6 +2341,81 @@ local function buildGameRoom(gameRoom: Folder)
 end
 
 --------------------------------------------------------------------
+-- SpawnLocation précoce (avant tests Studio / yields longs)
+--------------------------------------------------------------------
+-- Ne désactive PAS CharacterAutoLoads. Pose uniquement le SpawnLocation pour que
+-- le premier personnage de Test/F5 n'apparaisse pas à l'origine monde.
+function ZoneService.EnsureEarlySpawnLocation(): BasePart
+	local G = Config.Grid
+	local R = Config.GameRoom
+	local spawnPos = R.SpawnPadPosition
+	local padTopY = G.Origin.Y - R.PadSize.Y / 2
+	local base = Vector3.new(spawnPos.X, padTopY + 0.5, spawnPos.Z)
+	local look = CFrame.lookAt(base, base + Vector3.new(0, 0, 10))
+
+	local root = workspace:FindFirstChild("BubblePopWorld")
+	if not (root and root:IsA("Folder")) then
+		if root then
+			root:Destroy()
+		end
+		local folder = Instance.new("Folder")
+		folder.Name = "BubblePopWorld"
+		folder.Parent = workspace
+		root = folder
+	end
+
+	local gameRoom = root:FindFirstChild("GameRoom")
+	if not (gameRoom and gameRoom:IsA("Folder")) then
+		if gameRoom then
+			gameRoom:Destroy()
+		end
+		local folder = Instance.new("Folder")
+		folder.Name = "GameRoom"
+		folder.Parent = root
+		gameRoom = folder
+	end
+
+	local existing = gameRoom:FindFirstChild("GameRoomSpawnLocation")
+	if existing and existing:IsA("SpawnLocation") then
+		existing.Anchored = true
+		existing.CanCollide = false
+		existing.CanQuery = false
+		existing.CanTouch = false
+		existing.Transparency = 1
+		existing.Size = Vector3.new(12, 1, 12)
+		existing.Neutral = true
+		existing.Duration = 0
+		existing.AllowTeamChangeOnTouch = false
+		existing.Enabled = true
+		existing.CFrame = look
+		existing:SetAttribute("GeneratedByCode", true)
+		spawnDebug("EnsureEarlySpawnLocation reuse", existing.Position)
+		return existing
+	end
+	if existing then
+		existing:Destroy()
+	end
+
+	local p = Instance.new("SpawnLocation")
+	p.Name = "GameRoomSpawnLocation"
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.Transparency = 1
+	p.Size = Vector3.new(12, 1, 12)
+	p.Neutral = true
+	p.Duration = 0
+	p.AllowTeamChangeOnTouch = false
+	p.Enabled = true
+	p.CFrame = look
+	p:SetAttribute("GeneratedByCode", true)
+	p.Parent = gameRoom
+	spawnDebug("EnsureEarlySpawnLocation create", p.Position)
+	return p
+end
+
+--------------------------------------------------------------------
 -- Monde additif
 --------------------------------------------------------------------
 function ZoneService.EnsureWorld(): Folder
@@ -2807,24 +2882,8 @@ function ZoneService.Start()
 		bindPlayer(player)
 	end
 
-	-- SpawnLocation existe : autoriser le chargement des personnages et charger
-	-- ceux qui attendaient (CharacterAutoLoads était false dès init.server.lua).
-	if OnboardingConfig.DeferCharacterLoadUntilWorldReady then
-		Players.CharacterAutoLoads = true
-		for _, player in ipairs(Players:GetPlayers()) do
-			if not player.Character then
-				spawnDebug("LoadCharacter", player.Name)
-				task.spawn(function()
-					local ok, err = pcall(function()
-						player:LoadCharacter()
-					end)
-					if not ok then
-						warn("[ZoneService] LoadCharacter échoué:", player.Name, err)
-					end
-				end)
-			end
-		end
-	end
+	-- CharacterAutoLoads reste à true (comportement Studio Test/F5).
+	-- Le SpawnLocation précoce + le filet NeedsGameRoomSnap couvrent le placement.
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		teleportLast[player] = nil

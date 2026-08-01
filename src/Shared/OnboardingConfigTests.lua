@@ -239,10 +239,14 @@ function OnboardingConfigTests.Run(): boolean
 	-- Profil indisponible / deadline : traité comme snapshot nil côté service
 	check(OnboardingConfig.ShouldSpawnInGameRoom(nil) == false, "unavailable profile → lobby fallback")
 
-	-- Politique : personnage différé jusqu'au SpawnLocation
+	-- Politique : ne jamais couper CharacterAutoLoads (casse Test/F5 Studio)
 	check(
-		OnboardingConfig.DeferCharacterLoadUntilWorldReady == true,
-		"DeferCharacterLoadUntilWorldReady must stay true"
+		OnboardingConfig.DeferCharacterLoadUntilWorldReady == false,
+		"DeferCharacterLoadUntilWorldReady must stay false"
+	)
+	check(
+		OnboardingConfig.EarlySpawnLocationBootstrap == true,
+		"EarlySpawnLocationBootstrap must stay true"
 	)
 
 	-- Filet de sécurité SpawnPad
