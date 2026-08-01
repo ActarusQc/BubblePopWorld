@@ -854,10 +854,30 @@ function GameAnalyticsService.OnBubblesAddedToBag(
 	end
 
 	ensureAnalytics(profile)
-	GameAnalyticsService.EnsureBagValueCoverage(profile)
 	local bag = profile.Analytics.BagValueByZone
 	if type(bag) ~= "table" then
-		return
+		profile.Analytics.BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 }
+		bag = profile.Analytics.BagValueByZone
+	end
+
+	-- AddBubbles a déjà augmenté PendingSellValue : synchroniser sur l'état AVANT cet ajout
+	-- (pending - sellValueAdded), puis créditer la portion zone. Évite double-comptage Unknown.
+	local pending = math.max(0, math.floor(tonumber(profile.PendingSellValue) or 0))
+	local priorPending = math.max(0, pending - sellValueAdded)
+	bag.GameRoom = math.max(0, math.floor(tonumber(bag.GameRoom) or 0))
+	bag.SummerZone = math.max(0, math.floor(tonumber(bag.SummerZone) or 0))
+	bag.Unknown = math.max(0, math.floor(tonumber(bag.Unknown) or 0))
+	local sum = bag.GameRoom + bag.SummerZone + bag.Unknown
+	if priorPending <= 0 then
+		if sum > 0 then
+			bag.GameRoom = 0
+			bag.SummerZone = 0
+			bag.Unknown = 0
+		end
+	elseif priorPending > sum then
+		bag.Unknown += priorPending - sum
+	elseif sum > priorPending then
+		reduceBagExcess(bag, sum - priorPending)
 	end
 
 	local zoneId = ctx.zoneId

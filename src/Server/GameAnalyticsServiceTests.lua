@@ -1140,6 +1140,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleProfile = buildAnalyticsProfile({
 		Coins = 200,
+		PendingSellValue = 18,
+		CurrentBubbles = 3,
 		Analytics = {
 			BagValueByZone = { GameRoom = 10, SummerZone = 5, Unknown = 3 },
 			SummerZoneFunnelSessionId = "sale-economy-guid",
@@ -1296,6 +1298,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local bagUnknownProfile = buildAnalyticsProfile()
 	GameAnalyticsService.InitPlayer(playerA, bagUnknownProfile, false)
+	bagUnknownProfile.PendingSellValue = 7
 	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
 		storageAdded = 1,
 		sellValueAdded = 7,
@@ -1303,6 +1306,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 		becameFull = false,
 		wasBelowCapacity = true,
 	})
+	bagUnknownProfile.PendingSellValue = 10
 	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
 		storageAdded = 1,
 		sellValueAdded = 3,
@@ -1437,6 +1441,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleGrProfile = buildAnalyticsProfile({
 		Coins = 100,
+		PendingSellValue = 40,
+		CurrentBubbles = 5,
 		Analytics = {
 			BagValueByZone = { GameRoom = 40, SummerZone = 0, Unknown = 0 },
 			OnboardingStarted = true,
@@ -1450,6 +1456,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 		},
 	})
 	GameAnalyticsService.InitPlayer(playerA, saleGrProfile, true)
+	saleGrProfile.PendingSellValue = 0 -- doSell vide avant analytics
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 5, earned = 40, endingBalance = 140 })
 	check(countEconomy(recording, "BubbleSale_GameRoom") == 1, "Task11 vente GameRoom → BubbleSale_GameRoom")
 	check(economySkuAmount(recording, "BubbleSale_GameRoom") == 40, "Task11 vente GameRoom → amount 40")
@@ -1460,11 +1467,14 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleSzProfile = buildAnalyticsProfile({
 		Coins = 50,
+		PendingSellValue = 25,
+		CurrentBubbles = 3,
 		Analytics = {
 			BagValueByZone = { GameRoom = 0, SummerZone = 25, Unknown = 0 },
 		},
 	})
 	GameAnalyticsService.InitPlayer(playerA, saleSzProfile, false)
+	saleSzProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 3, earned = 25, endingBalance = 75 })
 	check(countEconomy(recording, "BubbleSale_SummerZone") == 1, "Task11 vente Summer → BubbleSale_SummerZone")
 	check(economySkuAmount(recording, "BubbleSale_SummerZone") == 25, "Task11 vente Summer → amount 25")
@@ -1474,11 +1484,14 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleMixProfile = buildAnalyticsProfile({
 		Coins = 10,
+		PendingSellValue = 30,
+		CurrentBubbles = 8,
 		Analytics = {
 			BagValueByZone = { GameRoom = 10, SummerZone = 15, Unknown = 5 },
 		},
 	})
 	GameAnalyticsService.InitPlayer(playerA, saleMixProfile, false)
+	saleMixProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 8, earned = 30, endingBalance = 40 })
 	check(countEconomy(recording, "BubbleSale_GameRoom") == 1, "Task11 vente mixte → GameRoom")
 	check(countEconomy(recording, "BubbleSale_SummerZone") == 1, "Task11 vente mixte → SummerZone")
@@ -1490,11 +1503,14 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleUnkProfile = buildAnalyticsProfile({
 		Coins = 0,
+		PendingSellValue = 18,
+		CurrentBubbles = 2,
 		Analytics = {
 			BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 18 },
 		},
 	})
 	GameAnalyticsService.InitPlayer(playerA, saleUnkProfile, false)
+	saleUnkProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 2, earned = 18, endingBalance = 18 })
 	check(countEconomy(recording, "BubbleSale_Mixed") == 1, "Task11 Unknown → BubbleSale_Mixed")
 	check(economySkuAmount(recording, "BubbleSale_Mixed") == 18, "Task11 Unknown → amount 18")
@@ -1504,11 +1520,14 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleShortProfile = buildAnalyticsProfile({
 		Coins = 0,
+		PendingSellValue = 10,
+		CurrentBubbles = 4,
 		Analytics = {
 			BagValueByZone = { GameRoom = 10, SummerZone = 0, Unknown = 0 },
 		},
 	})
 	GameAnalyticsService.InitPlayer(playerA, saleShortProfile, false)
+	saleShortProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 4, earned = 15, endingBalance = 15 })
 	check(economySkuAmount(recording, "BubbleSale_GameRoom") == 10, "Task11 shortfall → GameRoom 10")
 	check(economySkuAmount(recording, "BubbleSale_Mixed") == 5, "Task11 shortfall → Mixed +5")
@@ -1519,11 +1538,14 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleCountProfile = buildAnalyticsProfile({
 		Coins = 0,
+		PendingSellValue = 22,
+		CurrentBubbles = 2,
 		Analytics = {
 			BagValueByZone = { GameRoom = 22, SummerZone = 0, Unknown = 0 },
 		},
 	})
 	GameAnalyticsService.InitPlayer(playerA, saleCountProfile, false)
+	saleCountProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 2, earned = 22, endingBalance = 22 })
 	local sessionSale = GameAnalyticsService.GetSessionForTests(playerA)
 	check(
@@ -1540,6 +1562,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleTwiceProfile = buildAnalyticsProfile({
 		Coins = 0,
+		PendingSellValue = 10,
+		CurrentBubbles = 1,
 		Analytics = {
 			OnboardingStarted = true,
 			Onboarding = {
@@ -1553,9 +1577,11 @@ function GameAnalyticsServiceTests.Run(): boolean
 		},
 	})
 	GameAnalyticsService.InitPlayer(playerA, saleTwiceProfile, true)
+	saleTwiceProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 1, earned = 10, endingBalance = 10 })
 	check(countCustom(recording, "SessionSecondsToFirstSale") == 1, "Task11 première vente → SessionSecondsToFirstSale")
 	saleTwiceProfile.Analytics.BagValueByZone = { GameRoom = 8, SummerZone = 0, Unknown = 0 }
+	saleTwiceProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 1, earned = 8, endingBalance = 18 })
 	check(countCustom(recording, "SessionSecondsToFirstSale") == 1, "Task11 deuxième vente → SessionSecondsToFirstSale non répété")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
@@ -1564,6 +1590,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local saleFailProfile = buildAnalyticsProfile({
 		Coins = 0,
+		PendingSellValue = 10,
+		CurrentBubbles = 1,
 		Analytics = {
 			BagValueByZone = { GameRoom = 10, SummerZone = 0, Unknown = 0 },
 		},
@@ -1584,6 +1612,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 	-- Task11-16 : reset sans vente
 	beginIsolatedCase()
 	local resetBagProfile = buildAnalyticsProfile({
+		PendingSellValue = 17,
+		CurrentBubbles = 3,
 		Analytics = {
 			BagValueByZone = { GameRoom = 11, SummerZone = 4, Unknown = 2 },
 			SummerZoneFunnelSessionId = "task11-reset",
@@ -1640,6 +1670,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local pendingKeepProfile = buildAnalyticsProfile({
 		Coins = 0,
+		PendingSellValue = 12,
+		CurrentBubbles = 2,
 		Analytics = {
 			BagValueByZone = { GameRoom = 0, SummerZone = 12, Unknown = 0 },
 			SummerZoneFunnelSessionId = "task11-pending-keep",
@@ -1649,6 +1681,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	})
 	GameAnalyticsService.InitPlayer(playerA, pendingKeepProfile, false)
 	GameAnalyticsService.OnSummerBackpackFilled(playerA)
+	pendingKeepProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 2, earned = 12, endingBalance = 12 })
 	check(
 		countFunnel(recording, "SoldFirstSummerBackpack") == 0,
@@ -1669,6 +1702,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 		rarityId = "Normal",
 		isSpecial = false,
 	})
+	noDoubleProfile.PendingSellValue = 6
 	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
 		storageAdded = 1,
 		sellValueAdded = 6,
@@ -1692,14 +1726,23 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task11 excess sum > earned → correction déterministe + warn (défense uniquement)
+	-- Excès créé APRÈS InitPlayer (sinon la sync bidirectionnelle le corrige).
 	beginIsolatedCase()
 	local saleExcessProfile = buildAnalyticsProfile({
 		Coins = 0,
+		PendingSellValue = 25,
+		CurrentBubbles = 3,
 		Analytics = {
-			BagValueByZone = { GameRoom = 20, SummerZone = 10, Unknown = 5 },
+			BagValueByZone = { GameRoom = 25, SummerZone = 0, Unknown = 0 },
 		},
 	})
 	GameAnalyticsService.InitPlayer(playerA, saleExcessProfile, false)
+	saleExcessProfile.Analytics.BagValueByZone = { GameRoom = 20, SummerZone = 10, Unknown = 5 }
+	saleExcessProfile.PendingSellValue = 0
+	warnCalls = {}
+	GameAnalyticsService.SetWarnHandler(function(...)
+		table.insert(warnCalls, { ... })
+	end)
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 3, earned = 25, endingBalance = 25 })
 	check(sumEconomyAmounts(recording) == 25, "Task11 excess → somme envoyée = earned (pas plus)")
 	check(#warnCalls >= 1, "Task11 excess → warn Studio")
@@ -1722,6 +1765,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.InitPlayer(playerA, staleBagProfile, false)
 	check(GameAnalyticsService.SumBagValueByZone(staleBagProfile) == 0, "Task11 lifecycle stale → bag sum 0")
 	check(staleBagProfile.Analytics.BagValueByZone.Unknown == 0, "Task11 lifecycle stale → Unknown 0")
+	staleBagProfile.PendingSellValue = 264
+	staleBagProfile.CurrentBubbles = 10
 	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
 		storageAdded = 10,
 		sellValueAdded = 264,
@@ -1729,13 +1774,12 @@ function GameAnalyticsServiceTests.Run(): boolean
 		becameFull = true,
 		wasBelowCapacity = true,
 	})
-	staleBagProfile.PendingSellValue = 264
-	staleBagProfile.CurrentBubbles = 10
 	check(
 		GameAnalyticsService.SumBagValueByZone(staleBagProfile) == 264,
 		"Task11 lifecycle stale → sum avant vente = earned"
 	)
 	warnCalls = {}
+	staleBagProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 10, earned = 264, endingBalance = 264 })
 	check(sumEconomyAmounts(recording) == 264, "Task11 lifecycle stale → économie 264")
 	check(#warnCalls == 0, "Task11 lifecycle stale → aucun warning excess")
@@ -1755,6 +1799,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.InitPlayer(playerA, restoreBagProfile, false)
 	check(restoreBagProfile.Analytics.BagValueByZone.Unknown == 74, "Task11 lifecycle restore → Unknown=74")
 	check(GameAnalyticsService.SumBagValueByZone(restoreBagProfile) == 74, "Task11 lifecycle restore → sum=pending")
+	restoreBagProfile.PendingSellValue = 264 -- AddBubbles avant analytics
 	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
 		storageAdded = 8,
 		sellValueAdded = 190,
@@ -1762,10 +1807,10 @@ function GameAnalyticsServiceTests.Run(): boolean
 		becameFull = false,
 		wasBelowCapacity = true,
 	})
-	restoreBagProfile.PendingSellValue = 264
 	check(restoreBagProfile.Analytics.BagValueByZone.GameRoom == 190, "Task11 lifecycle restore → GameRoom=190")
 	check(GameAnalyticsService.SumBagValueByZone(restoreBagProfile) == 264, "Task11 lifecycle restore → sum avant vente")
 	warnCalls = {}
+	restoreBagProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 13, earned = 264, endingBalance = 264 })
 	check(economySkuAmount(recording, "BubbleSale_GameRoom") == 190, "Task11 lifecycle restore → GameRoom sku")
 	check(economySkuAmount(recording, "BubbleSale_Mixed") == 74, "Task11 lifecycle restore → Mixed sku")
@@ -1777,6 +1822,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	beginIsolatedCase()
 	local consecutiveProfile = buildAnalyticsProfile({ Coins = 0, PendingSellValue = 0 })
 	GameAnalyticsService.InitPlayer(playerA, consecutiveProfile, false)
+	consecutiveProfile.PendingSellValue = 40
 	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
 		storageAdded = 2,
 		sellValueAdded = 40,
@@ -1784,7 +1830,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 		becameFull = false,
 		wasBelowCapacity = true,
 	})
-	consecutiveProfile.PendingSellValue = 40
+	consecutiveProfile.PendingSellValue = 0 -- doSell avant OnBackpackSold
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 2, earned = 40, endingBalance = 40 })
 	check(GameAnalyticsService.SumBagValueByZone(consecutiveProfile) == 0, "Task11 consecutive → bag 0 après vente 1")
 	recording = newRecordingSink()
@@ -1793,6 +1839,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.SetWarnHandler(function(...)
 		table.insert(warnCalls, { ... })
 	end)
+	consecutiveProfile.PendingSellValue = 55
 	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
 		storageAdded = 3,
 		sellValueAdded = 55,
@@ -1800,8 +1847,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 		becameFull = false,
 		wasBelowCapacity = true,
 	})
-	consecutiveProfile.PendingSellValue = 55
 	check(GameAnalyticsService.SumBagValueByZone(consecutiveProfile) == 55, "Task11 consecutive → sum=55 avant vente 2")
+	consecutiveProfile.PendingSellValue = 0
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 3, earned = 55, endingBalance = 95 })
 	check(sumEconomyAmounts(recording) == 55, "Task11 consecutive → vente 2 = 55 seulement")
 	check(economySkuAmount(recording, "BubbleSale_SummerZone") == 55, "Task11 consecutive → Summer seulement")
