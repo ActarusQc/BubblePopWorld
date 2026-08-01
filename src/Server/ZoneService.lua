@@ -11,10 +11,22 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
+local OnboardingConfig = require(Shared.OnboardingConfig)
 local ZoneDefs = require(Shared.ZoneDefs)
 local TravelConfig = require(Shared.TravelConfig)
 local L10n = require(Shared.LocalizationStrings)
 local L10nUtil = require(Shared.LocalizationUtil)
+
+-- Logs spawn : activer uniquement pour diagnostic Studio (remettre false avant commit).
+local SPAWN_DEBUG = false
+local spawnDebugT0 = os.clock()
+
+local function spawnDebug(...: any)
+	if not SPAWN_DEBUG then
+		return
+	end
+	print(string.format("[OnboardingSpawnDebug] t=%.3f", os.clock() - spawnDebugT0), ...)
+end
 
 local DataService = require(script.Parent.DataService)
 local BackpackService = require(script.Parent.BackpackService)
@@ -2285,7 +2297,7 @@ local function buildGameRoom(gameRoom: Folder)
 
 	-- SpawnLocation réel : place le personnage sur le SpawnPad face à la grille (+Z),
 	-- sans apparition parasite au centre du plateau. GeneratedByCode via ensurePart.
-	ensurePart(gameRoom, "GameRoomSpawnLocation", function()
+	local spawnLocation = ensurePart(gameRoom, "GameRoomSpawnLocation", function()
 		local p = Instance.new("SpawnLocation")
 		p.Anchored = true
 		p.CanCollide = false
@@ -2302,6 +2314,7 @@ local function buildGameRoom(gameRoom: Folder)
 		p.CFrame = CFrame.lookAt(base, base + Vector3.new(0, 0, 10))
 		return p
 	end)
+	spawnDebug("created/ensured GameRoomSpawnLocation", spawnLocation.Position)
 
 	-- Ancien trigger de téléport : désactivé (marqueur décoratif invisible seulement).
 	local exitZone = ensurePart(gameRoom, "ExitZone", function()
@@ -2413,7 +2426,13 @@ local function waitForHRP(player: Player, timeout: number?): (Model?, BasePart?)
 	return char, hrp :: BasePart
 end
 
-local function doTeleport(player: Player, targetPos: Vector3, area: string, bypassCooldown: boolean?): boolean
+local function doTeleport(
+	player: Player,
+	targetPos: Vector3,
+	area: string,
+	bypassCooldown: boolean?,
+	faceLookAt: Vector3?
+): boolean
 	if not bypassCooldown then
 		local last = teleportLast[player]
 		if last and os.clock() - last < Config.World.TeleportCooldown then
@@ -2426,7 +2445,10 @@ local function doTeleport(player: Player, targetPos: Vector3, area: string, bypa
 		return false
 	end
 
-	char:PivotTo(CFrame.new(targetPos))
+	local cf = if faceLookAt
+		then CFrame.lookAt(targetPos, faceLookAt)
+		else CFrame.new(targetPos)
+	char:PivotTo(cf)
 	hrp.AssemblyLinearVelocity = Vector3.zero
 	hrp.AssemblyAngularVelocity = Vector3.zero
 
@@ -2443,12 +2465,13 @@ function ZoneService.TeleportToLobby(player: Player, bypassCooldown: boolean?): 
 	return doTeleport(player, lobbySpawnPart.Position + Vector3.new(0, 3, 0), "Lobby", bypassCooldown)
 end
 
--- FallReset salle uniquement (plus aucun passage lobby ↔ salle).
+-- FallReset salle / filet de sécurité onboarding (orientation vers la grille +Z).
 function ZoneService.TeleportToGameRoom(player: Player, bypassCooldown: boolean?): boolean
 	if not gameRoomSpawnPart then
 		return false
 	end
-	return doTeleport(player, gameRoomSpawnPart.Position + Vector3.new(0, 3, 0), "GameRoom", bypassCooldown)
+	local target = gameRoomSpawnPart.Position + Vector3.new(0, 3, 0)
+	return doTeleport(player, target, "GameRoom", bypassCooldown, target + Vector3.new(0, 0, 10))
 end
 
 local function resolveAreaFromPosition(pos: Vector3): string
@@ -2509,25 +2532,71 @@ end
 --------------------------------------------------------------------
 local spawningInProgress: { [Player]: boolean } = {}
 
+local function horizontalDistanceToPart(hrp: BasePart, part: BasePart): number
+	return OnboardingConfig.HorizontalDistance(hrp.Position.X, hrp.Position.Z, part.Position.X, part.Position.Z)
+end
+
 local function onCharacterAdded(player: Player)
 	if spawningInProgress[player] then
 		return
 	end
 	spawningInProgress[player] = true
 	task.spawn(function()
+		spawnDebug("CharacterAdded", player.Name)
+		local _, hrpBefore = waitForHRP(player, 5)
+		if hrpBefore then
+			spawnDebug("HRP before", hrpBefore.Position)
+		end
+		if gameRoomSpawnPart then
+			spawnDebug("SpawnPad", gameRoomSpawnPart.Position)
+		end
+
 		local deadline = os.clock() + 10
 		while not DataService.Get(player) and os.clock() < deadline do
 			task.wait()
 		end
+		local profileReady = DataService.Get(player) ~= nil
+		spawnDebug("profile ready=", profileReady)
+
 		-- Profil non chargé → traité comme vétéran : repli lobby (comportement actuel).
-		-- Nouveau joueur avant premier pop → reste sur le SpawnLocation (aucun téléport).
+		-- Nouveau joueur avant premier pop → rester / snaper sur le SpawnPad.
 		local stayInRoom = false
 		pcall(function()
 			local OnboardingService = require(script.Parent.OnboardingService)
 			stayInRoom = OnboardingService.ShouldSpawnInGameRoom(player)
 		end)
+		spawnDebug("stayInRoom=", stayInRoom)
+
 		if not stayInRoom then
 			ZoneService.TeleportToLobby(player, true)
+		else
+			-- Filet de sécurité idempotent : si le SpawnLocation n'a pas placé
+			-- le personnage (race / origine), le repositionner une seule fois.
+			local _, hrp = waitForHRP(player, 5)
+			local pad = gameRoomSpawnPart
+			if hrp and pad then
+				local dist = horizontalDistanceToPart(hrp, pad)
+				spawnDebug("distance to SpawnPad=", dist)
+				if OnboardingConfig.NeedsGameRoomSnap(dist) then
+					spawnDebug("safety snap → GameRoom")
+					ZoneService.TeleportToGameRoom(player, true)
+				else
+					player:SetAttribute("PlayerArea", "GameRoom")
+				end
+			elseif pad then
+				spawnDebug("HRP missing → GameRoom teleport")
+				ZoneService.TeleportToGameRoom(player, true)
+			end
+		end
+
+		local _, hrpAfter = waitForHRP(player, 2)
+		if hrpAfter and gameRoomSpawnPart then
+			spawnDebug(
+				"HRP final",
+				hrpAfter.Position,
+				"dist=",
+				horizontalDistanceToPart(hrpAfter, gameRoomSpawnPart)
+			)
 		end
 		spawningInProgress[player] = nil
 	end)
@@ -2708,9 +2777,21 @@ end
 function ZoneService.Start()
 	ZoneAccess.EnsureCollisionGroups()
 	ZoneService.EnsureWorld()
+	spawnDebug("EnsureWorld done; SpawnPad ready=", gameRoomSpawnPart ~= nil)
+	if gameRoomSpawnPart then
+		spawnDebug("gameRoomSpawnPart", gameRoomSpawnPart.Position)
+		local room = gameRoomSpawnPart.Parent
+		local loc = room and room:FindFirstChild("GameRoomSpawnLocation")
+		if loc and loc:IsA("BasePart") then
+			spawnDebug("GameRoomSpawnLocation", loc.Position)
+		else
+			spawnDebug("GameRoomSpawnLocation MISSING under GameRoom")
+		end
+	end
 	ZoneAccess.Start()
 
 	local function bindPlayer(player: Player)
+		spawnDebug("PlayerAdded/bind", player.Name)
 		bindAreaAnalytics(player)
 		player.CharacterAdded:Connect(function()
 			onCharacterAdded(player)
@@ -2724,6 +2805,25 @@ function ZoneService.Start()
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		bindPlayer(player)
+	end
+
+	-- SpawnLocation existe : autoriser le chargement des personnages et charger
+	-- ceux qui attendaient (CharacterAutoLoads était false dès init.server.lua).
+	if OnboardingConfig.DeferCharacterLoadUntilWorldReady then
+		Players.CharacterAutoLoads = true
+		for _, player in ipairs(Players:GetPlayers()) do
+			if not player.Character then
+				spawnDebug("LoadCharacter", player.Name)
+				task.spawn(function()
+					local ok, err = pcall(function()
+						player:LoadCharacter()
+					end)
+					if not ok then
+						warn("[ZoneService] LoadCharacter échoué:", player.Name, err)
+					end
+				end)
+			end
+		end
 	end
 
 	Players.PlayerRemoving:Connect(function(player: Player)

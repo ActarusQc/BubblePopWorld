@@ -1,6 +1,11 @@
 --!strict
 -- Point d'entrée serveur : ordre de démarrage explicite.
 
+-- AVANT tout yield : empêcher Roblox de créer le personnage à l'origine
+-- avant que ZoneService.EnsureWorld ait posé GameRoomSpawnLocation.
+local Players = game:GetService("Players")
+Players.CharacterAutoLoads = false
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 require(ReplicatedStorage:WaitForChild("Shared").Remotes) -- crée les remotes en premier

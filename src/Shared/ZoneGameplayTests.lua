@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared.GameConfig)
+local OnboardingConfig = require(Shared.OnboardingConfig)
 local BubbleTypes = require(Shared.BubbleTypes)
 local ToolDefs = require(Shared.ToolDefs)
 
@@ -118,6 +119,21 @@ function ZoneGameplayTests.Run(): boolean
 		check(ToolDefs.IsInZonePool("SummerZone", id), "RollForZone Summer dans pool")
 	end
 	check(seenPowerful == true, "Summer peut tirer un objet puissant")
+
+	-- Spawn onboarding Phase 1 : SpawnPad loin de l'origine, snap de secours cohérent.
+	local pad = GameConfig.GameRoom.SpawnPadPosition
+	check(pad ~= nil, "SpawnPadPosition défini")
+	if pad then
+		check(
+			OnboardingConfig.IsNearWorldOrigin(pad.X, pad.Z) == false,
+			"SpawnPad hors rayon origine monde"
+		)
+		local originDist = OnboardingConfig.HorizontalDistance(0, 0, pad.X, pad.Z)
+		check(originDist > OnboardingConfig.GameRoomSnapMaxDistance, "origine → SpawnPad exige un snap")
+		check(OnboardingConfig.NeedsGameRoomSnap(originDist) == true, "NeedsGameRoomSnap(origine→pad)")
+		check(OnboardingConfig.NeedsGameRoomSnap(0) == false, "NeedsGameRoomSnap(0) false")
+	end
+	check(OnboardingConfig.DeferCharacterLoadUntilWorldReady == true, "chargement personnage différé")
 
 	if ok then
 		print("[ZoneGameplayTests] OK")

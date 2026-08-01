@@ -33,6 +33,13 @@ OnboardingConfig.Guide = {
 	UpdateWhileIdle = false,
 }
 
+-- Politique de spawn : le personnage ne doit jamais charger avant le SpawnLocation.
+OnboardingConfig.DeferCharacterLoadUntilWorldReady = true
+-- Distance horizontale max (studs) au SpawnPad avant repositionnement de secours.
+OnboardingConfig.GameRoomSnapMaxDistance = 24
+-- Rayon autour de l'origine monde considéré comme spawn parasite.
+OnboardingConfig.WorldOriginRejectRadius = 40
+
 local function boolOf(value: any): boolean
 	return value == true
 end
@@ -89,6 +96,30 @@ end
 
 function OnboardingConfig.ShouldSpawnInGameRoom(snapshot: Snapshot?): boolean
 	return OnboardingConfig.ResolveObjective(snapshot) == OnboardingConfig.Objective.Pop
+end
+
+function OnboardingConfig.HorizontalDistance(ax: number, az: number, bx: number, bz: number): number
+	local dx = ax - bx
+	local dz = az - bz
+	return math.sqrt(dx * dx + dz * dz)
+end
+
+-- true si le joueur destiné à la salle n'est pas déjà sur le SpawnPad.
+function OnboardingConfig.NeedsGameRoomSnap(horizontalDistance: number, maxDistance: number?): boolean
+	local maxD = if type(maxDistance) == "number" then maxDistance else OnboardingConfig.GameRoomSnapMaxDistance
+	if type(horizontalDistance) ~= "number" or horizontalDistance ~= horizontalDistance then
+		return true
+	end
+	if horizontalDistance == math.huge then
+		return true
+	end
+	return horizontalDistance > maxD
+end
+
+-- true si la position horizontale est encore près de l'origine monde (spawn parasite).
+function OnboardingConfig.IsNearWorldOrigin(x: number, z: number, radius: number?): boolean
+	local r = if type(radius) == "number" then radius else OnboardingConfig.WorldOriginRejectRadius
+	return OnboardingConfig.HorizontalDistance(x, z, 0, 0) < r
 end
 
 return OnboardingConfig

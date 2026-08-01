@@ -239,6 +239,48 @@ function OnboardingConfigTests.Run(): boolean
 	-- Profil indisponible / deadline : traité comme snapshot nil côté service
 	check(OnboardingConfig.ShouldSpawnInGameRoom(nil) == false, "unavailable profile → lobby fallback")
 
+	-- Politique : personnage différé jusqu'au SpawnLocation
+	check(
+		OnboardingConfig.DeferCharacterLoadUntilWorldReady == true,
+		"DeferCharacterLoadUntilWorldReady must stay true"
+	)
+
+	-- Filet de sécurité SpawnPad
+	check(OnboardingConfig.NeedsGameRoomSnap(0) == false, "distance 0 → no snap")
+	check(OnboardingConfig.NeedsGameRoomSnap(24) == false, "distance = max → no snap")
+	check(OnboardingConfig.NeedsGameRoomSnap(24.1) == true, "distance > max → snap")
+	check(OnboardingConfig.NeedsGameRoomSnap(160) == true, "origin-to-pad distance → snap")
+	check(OnboardingConfig.NeedsGameRoomSnap((0 / 0)) == true, "NaN distance → snap")
+
+	-- Origine monde = spawn parasite
+	check(OnboardingConfig.IsNearWorldOrigin(0, 0) == true, "origin is near world origin")
+	check(OnboardingConfig.IsNearWorldOrigin(5, 5) == true, "near origin rejected")
+	-- SpawnPad nominal (0, -164) hors rayon 40
+	check(OnboardingConfig.IsNearWorldOrigin(0, -164) == false, "SpawnPad Z=-164 not near origin")
+
+	-- Distance horizontale utilitaire
+	check(math.abs(OnboardingConfig.HorizontalDistance(0, 0, 3, 4) - 5) < 1e-6, "3-4-5 distance")
+
+	-- Deux profils simultanés : décisions indépendantes
+	local newbie = baseSnap(nil)
+	local veteran = baseSnap({ OnboardingStarted = false })
+	check(OnboardingConfig.ShouldSpawnInGameRoom(newbie) == true, "simultaneous newbie → GameRoom")
+	check(OnboardingConfig.ShouldSpawnInGameRoom(veteran) == false, "simultaneous veteran → Lobby")
+
+	-- Reconnexion / respawn pendant onboarding (déjà pop, sac plein)
+	local reconnect = baseSnap({
+		PoppedFirstBubble = true,
+		CurrentBubbles = 25,
+		BackpackCapacity = 25,
+	})
+	check(OnboardingConfig.ShouldSpawnInGameRoom(reconnect) == false, "reconnect after pop → not GameRoom spawn")
+	check(OnboardingConfig.ResolveObjective(reconnect) == O.Sell, "reconnect full bag → Sell objective")
+
+	-- Traitement répété : même snapshot → même décision (idempotence)
+	local first = OnboardingConfig.ShouldSpawnInGameRoom(newbie)
+	local second = OnboardingConfig.ShouldSpawnInGameRoom(newbie)
+	check(first == second and first == true, "repeated resolve stays GameRoom (no double-decision flip)")
+
 	print(("[OnboardingConfigTests] %d passed, %d failed"):format(passed, failed))
 	if failed == 0 then
 		print("[OnboardingConfigTests] OK")
