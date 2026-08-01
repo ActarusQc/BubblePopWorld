@@ -604,6 +604,24 @@ function GameAnalyticsService.Start()
 	startFlushLoop()
 end
 
+local function reduceBagExcess(bag: any, excess: number)
+	local unk = math.max(0, math.floor(tonumber(bag.Unknown) or 0))
+	local sz = math.max(0, math.floor(tonumber(bag.SummerZone) or 0))
+	local gr = math.max(0, math.floor(tonumber(bag.GameRoom) or 0))
+	local take = math.min(unk, excess)
+	unk -= take
+	excess -= take
+	take = math.min(sz, excess)
+	sz -= take
+	excess -= take
+	take = math.min(gr, excess)
+	gr -= take
+	bag.Unknown = unk
+	bag.SummerZone = sz
+	bag.GameRoom = gr
+end
+
+-- Après stabilisation : sum(BagValueByZone) == PendingSellValue (Case A : sac conservé).
 function GameAnalyticsService.EnsureBagValueCoverage(profile: any)
 	if type(profile) ~= "table" then
 		return
@@ -616,15 +634,48 @@ function GameAnalyticsService.EnsureBagValueCoverage(profile: any)
 		profile.Analytics.BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 }
 		bag = profile.Analytics.BagValueByZone
 	end
-	bag.GameRoom = bag.GameRoom or 0
-	bag.SummerZone = bag.SummerZone or 0
-	bag.Unknown = bag.Unknown or 0
+	bag.GameRoom = math.max(0, math.floor(tonumber(bag.GameRoom) or 0))
+	bag.SummerZone = math.max(0, math.floor(tonumber(bag.SummerZone) or 0))
+	bag.Unknown = math.max(0, math.floor(tonumber(bag.Unknown) or 0))
 	local pending = math.max(0, math.floor(tonumber(profile.PendingSellValue) or 0))
-	local sum = (bag.GameRoom or 0) + (bag.SummerZone or 0) + (bag.Unknown or 0)
+	local sum = bag.GameRoom + bag.SummerZone + bag.Unknown
+	if pending <= 0 then
+		if sum > 0 then
+			bag.GameRoom = 0
+			bag.SummerZone = 0
+			bag.Unknown = 0
+			profile.__dirty = true
+		end
+		return
+	end
 	if pending > sum then
-		bag.Unknown = (bag.Unknown or 0) + (pending - sum)
+		bag.Unknown += pending - sum
+		profile.__dirty = true
+	elseif sum > pending then
+		reduceBagExcess(bag, sum - pending)
 		profile.__dirty = true
 	end
+end
+
+function GameAnalyticsService.SumBagValueByZone(profile: any): number
+	if type(profile) ~= "table" or type(profile.Analytics) ~= "table" then
+		return 0
+	end
+	local bag = profile.Analytics.BagValueByZone
+	if type(bag) ~= "table" then
+		return 0
+	end
+	return math.max(0, math.floor(tonumber(bag.GameRoom) or 0))
+		+ math.max(0, math.floor(tonumber(bag.SummerZone) or 0))
+		+ math.max(0, math.floor(tonumber(bag.Unknown) or 0))
+end
+
+function GameAnalyticsService.RebindProfile(player: Player, profile: any)
+	local session = sessions[player]
+	if not session or type(profile) ~= "table" then
+		return
+	end
+	session.profile = profile
 end
 
 function GameAnalyticsService.RecordPop(
@@ -907,10 +958,15 @@ function GameAnalyticsService.LogBackpackSaleEconomy(player: Player, profile: an
 		return
 	end
 	ensureAnalytics(profile)
-	GameAnalyticsService.EnsureBagValueCoverage(profile)
 	local bag = profile.Analytics.BagValueByZone
 	if type(bag) ~= "table" then
 		return
+	end
+
+	-- Ne pas appeler EnsureBagValueCoverage ici : doSell met PendingSellValue à 0 avant
+	-- OnBackpackSold ; la couverture viderait les portions avant l'économie.
+	if type(ctx) ~= "table" or not isFiniteNumber(ctx.earned) then
+		GameAnalyticsService.EnsureBagValueCoverage(profile)
 	end
 
 	local endingBalance: number
@@ -930,8 +986,11 @@ function GameAnalyticsService.LogBackpackSaleEconomy(player: Player, profile: an
 		local sz = math.max(0, math.floor(tonumber(bag.SummerZone) or 0))
 		local unk = math.max(0, math.floor(tonumber(bag.Unknown) or 0))
 		local sum = gr + sz + unk
+		bag.GameRoom = gr
+		bag.SummerZone = sz
+		bag.Unknown = unk
 		if sum < earned then
-			unk += earned - sum
+			bag.Unknown += earned - sum
 		elseif sum > earned then
 			local excess = sum - earned
 			warnHandler(
@@ -940,18 +999,8 @@ function GameAnalyticsService.LogBackpackSaleEconomy(player: Player, profile: an
 				"excess=" .. tostring(excess),
 				"earned=" .. tostring(earned)
 			)
-			local take = math.min(unk, excess)
-			unk -= take
-			excess -= take
-			take = math.min(sz, excess)
-			sz -= take
-			excess -= take
-			take = math.min(gr, excess)
-			gr -= take
+			reduceBagExcess(bag, excess)
 		end
-		bag.GameRoom = gr
-		bag.SummerZone = sz
-		bag.Unknown = unk
 	end
 
 	local transactionType = getGameplayTransactionType()
@@ -1151,13 +1200,14 @@ function GameAnalyticsService.OnBackpackReset(player: Player)
 		return
 	end
 	ensureAnalytics(profile)
-	GameAnalyticsService.EnsureBagValueCoverage(profile)
 	local bag = profile.Analytics.BagValueByZone
-	if type(bag) == "table" then
-		bag.GameRoom = 0
-		bag.SummerZone = 0
-		bag.Unknown = 0
+	if type(bag) ~= "table" then
+		profile.Analytics.BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 }
+		bag = profile.Analytics.BagValueByZone
 	end
+	bag.GameRoom = 0
+	bag.SummerZone = 0
+	bag.Unknown = 0
 	local summerZone = profile.Analytics.SummerZone
 	if type(summerZone) == "table" and summerZone.pendingSummerFullBackpackSale == true then
 		summerZone.pendingSummerFullBackpackSale = nil

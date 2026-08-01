@@ -64,9 +64,9 @@ local function rowById(rows: { any }, id: string): any
 end
 
 function ShopServiceTests.Run(context: Context?): boolean
-	-- Harnais hors Roblox (tools/test_shop_service.lua). Sans contexte → SKIP en Studio Play.
+	-- Suite conçue pour le harnais externe tools/run_shop_service_tests.py (pas Studio Play).
 	if type(context) ~= "table" or type(context.Callbacks) ~= "table" then
-		print("[ShopServiceTests] SKIP: nécessite tools/run_shop_service_tests.py (pas de Callbacks)")
+		print("[ShopServiceTests] SKIP Studio: exécuter séparément via python tools/run_shop_service_tests.py")
 		return true
 	end
 

@@ -1,5 +1,6 @@
 --!strict
 -- Tests ciblés Task11 : hooks analytics BackpackService (add/sell/reset).
+-- Isolation stricte : aucun AnalyticsService / FireClient / Save réel.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -77,18 +78,41 @@ function BackpackServiceTests.Run(): boolean
 	local addedCalls: { any } = {}
 	local soldCalls: { any } = {}
 	local resetCalls: { any } = {}
+	local announceCalls: { any } = {}
 
 	local origAdded = GameAnalyticsService.OnBubblesAddedToBag
 	local origSold = GameAnalyticsService.OnBackpackSold
 	local origReset = GameAnalyticsService.OnBackpackReset
 	local origAddCoins = DataService.AddCoins
-
-	local function restoreHooks()
+	local origSave = DataService.Save
+	local origPush = DataService.Push
+	local function restoreAll()
 		GameAnalyticsService.OnBubblesAddedToBag = origAdded
 		GameAnalyticsService.OnBackpackSold = origSold
 		GameAnalyticsService.OnBackpackReset = origReset
 		DataService.AddCoins = origAddCoins
+		DataService.Save = origSave
+		DataService.Push = origPush
+		BackpackService.SetAnnounceHandlerForTests(nil)
+		GameAnalyticsService.SetSink(nil)
+		GameAnalyticsService.SetWarnHandler(nil)
+		GameAnalyticsService.FlushAllPlayers()
 	end
+
+	-- Sink silencieux : jamais AnalyticsService réel.
+	GameAnalyticsService.SetSink({
+		logOnboarding = function() end,
+		logFunnel = function() end,
+		logCustom = function() end,
+		logEconomy = function() end,
+		logProgressionComplete = function() end,
+	})
+	GameAnalyticsService.SetWarnHandler(function() end)
+	BackpackService.SetAnnounceHandlerForTests(function(player, message, kind)
+		table.insert(announceCalls, { player = player, message = message, kind = kind })
+	end)
+	DataService.Save = function() end
+	DataService.Push = function() end
 
 	GameAnalyticsService.OnBubblesAddedToBag = function(player, ctx)
 		table.insert(addedCalls, { player = player, ctx = ctx })
@@ -104,7 +128,6 @@ function BackpackServiceTests.Run(): boolean
 	end
 
 	local restoreOk, restoreErr = xpcall(function()
-		-- AddBubbles refusé → aucun OnBubblesAddedToBag (hook BubbleService uniquement)
 		local playerRefuse = fakePlayer("BpRefuse", 71001)
 		local profileRefuse = buildProfile({
 			CurrentBubbles = Config.Backpack.DefaultCapacity,
@@ -114,15 +137,16 @@ function BackpackServiceTests.Run(): boolean
 		GameAnalyticsService.FlushAndRemovePlayer(playerRefuse)
 		GameAnalyticsService.InitPlayer(playerRefuse, profileRefuse, false)
 		addedCalls = {}
+		announceCalls = {}
 		local addedOk, err = BackpackService.AddBubbles(playerRefuse, 1, 5)
 		check(addedOk == false, "Task11 AddBubbles refusé → false")
 		check(err == BackpackService.ErrorCodes.BackpackFull, "Task11 AddBubbles refusé → BackpackFull")
 		check(#addedCalls == 0, "Task11 AddBubbles refusé → aucun OnBubblesAddedToBag")
 		check(BackpackService.IsLocked(playerRefuse) ~= true, "Task11 AddBubbles refusé → verrou libéré")
+		check(#announceCalls >= 1, "Task11 AddBubbles refusé → announce via seam (pas FireClient)")
 		GameAnalyticsService.FlushAndRemovePlayer(playerRefuse)
 		DataService.ClearProfileForTests(playerRefuse)
 
-		-- Ajout réussi : BackpackService n'appelle pas le hook ; simulation chemin BubbleService (1×)
 		local playerAdd = fakePlayer("BpAdd", 71002)
 		local profileAdd = buildProfile()
 		DataService.SetProfileForTests(playerAdd, profileAdd)
@@ -143,21 +167,17 @@ function BackpackServiceTests.Run(): boolean
 		GameAnalyticsService.FlushAndRemovePlayer(playerAdd)
 		DataService.ClearProfileForTests(playerAdd)
 
-		-- Vente vide → aucun OnBackpackSold
 		local playerEmpty = fakePlayer("BpEmpty", 71003)
 		local profileEmpty = buildProfile()
 		DataService.SetProfileForTests(playerEmpty, profileEmpty)
 		GameAnalyticsService.FlushAndRemovePlayer(playerEmpty)
 		GameAnalyticsService.InitPlayer(playerEmpty, profileEmpty, false)
 		soldCalls = {}
-		pcall(function()
-			BackpackService.Sell(playerEmpty)
-		end)
+		BackpackService.Sell(playerEmpty)
 		check(#soldCalls == 0, "Task11 vente vide → aucun OnBackpackSold")
 		GameAnalyticsService.FlushAndRemovePlayer(playerEmpty)
 		DataService.ClearProfileForTests(playerEmpty)
 
-		-- AddCoins false → aucun OnBackpackSold
 		local playerCredit = fakePlayer("BpCredit", 71004)
 		local profileCredit = buildProfile({
 			CurrentBubbles = 3,
@@ -170,18 +190,14 @@ function BackpackServiceTests.Run(): boolean
 		DataService.AddCoins = function()
 			return false, nil
 		end
-		local creditSellOk, creditSold, _creditEarned, creditErr = pcall(function()
-			return BackpackService.Sell(playerCredit)
-		end)
+		local creditSold, _creditEarned, creditErr = BackpackService.Sell(playerCredit)
 		DataService.AddCoins = origAddCoins
-		check(creditSellOk, "Task11 AddCoins false → Sell ne throw pas")
 		check(creditSold == nil and creditErr == "credit_failed", "Task11 AddCoins false → credit_failed")
 		check(#soldCalls == 0, "Task11 AddCoins false → aucun OnBackpackSold")
 		check(profileCredit.CurrentBubbles == 3, "Task11 AddCoins false → sac intact")
 		GameAnalyticsService.FlushAndRemovePlayer(playerCredit)
 		DataService.ClearProfileForTests(playerCredit)
 
-		-- Vente réussie → OnBackpackSold une fois avec endingBalance
 		local playerSale = fakePlayer("BpSale", 71005)
 		local profileSale = buildProfile({
 			Coins = 100,
@@ -192,9 +208,7 @@ function BackpackServiceTests.Run(): boolean
 		GameAnalyticsService.FlushAndRemovePlayer(playerSale)
 		GameAnalyticsService.InitPlayer(playerSale, profileSale, false)
 		soldCalls = {}
-		pcall(function()
-			BackpackService.Sell(playerSale)
-		end)
+		BackpackService.Sell(playerSale)
 		check(#soldCalls == 1, "Task11 vente réussie → OnBackpackSold une fois")
 		check(
 			soldCalls[1] ~= nil
@@ -207,7 +221,6 @@ function BackpackServiceTests.Run(): boolean
 		GameAnalyticsService.FlushAndRemovePlayer(playerSale)
 		DataService.ClearProfileForTests(playerSale)
 
-		-- Reset → OnBackpackReset une fois
 		local playerReset = fakePlayer("BpReset", 71006)
 		local profileReset = buildProfile({
 			CurrentBubbles = 2,
@@ -225,7 +238,7 @@ function BackpackServiceTests.Run(): boolean
 		DataService.ClearProfileForTests(playerReset)
 	end, debug.traceback)
 
-	restoreHooks()
+	restoreAll()
 
 	if not restoreOk then
 		warn("[BackpackServiceTests] FAIL: suite error:", tostring(restoreErr))

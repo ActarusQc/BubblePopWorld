@@ -616,7 +616,10 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 
 	local becameFull = wasBelowCapacity and BackpackService.IsFull(player)
 	notifyBubblePoppedAnalytics(player, zoneId, def.Id)
-	notifyBubblesAddedToBagAnalytics(player, storage, sellValue, zoneId, becameFull, wasBelowCapacity)
+	-- Valeurs réellement acceptées par la transaction (pas la théorie pré-Add).
+	local storageAdded = if tx then tx.StorageAdded else storage
+	local sellValueAdded = if tx then tx.SellValueAdded else sellValue
+	notifyBubblesAddedToBagAnalytics(player, storageAdded, sellValueAdded, zoneId, becameFull, wasBelowCapacity)
 	return "ok", def
 end
 

@@ -1691,7 +1691,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	)
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
-	-- Task11 excess sum > earned → correction déterministe + warn
+	-- Task11 excess sum > earned → correction déterministe + warn (défense uniquement)
 	beginIsolatedCase()
 	local saleExcessProfile = buildAnalyticsProfile({
 		Coins = 0,
@@ -1703,6 +1703,152 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.OnBackpackSold(playerA, { sold = 3, earned = 25, endingBalance = 25 })
 	check(sumEconomyAmounts(recording) == 25, "Task11 excess → somme envoyée = earned (pas plus)")
 	check(#warnCalls >= 1, "Task11 excess → warn Studio")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	--------------------------------------------------------------------
+	-- Task11 lifecycle — Case A : sac conservé à la reconnexion
+	-- (DataService.reconcileBackpack conserve CurrentBubbles/PendingSellValue)
+	--------------------------------------------------------------------
+
+	-- Stale BagValue + pending 0 → couverture remet la somme à 0 (évite excess=74)
+	beginIsolatedCase()
+	local staleBagProfile = buildAnalyticsProfile({
+		PendingSellValue = 0,
+		CurrentBubbles = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 74 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, staleBagProfile, false)
+	check(GameAnalyticsService.SumBagValueByZone(staleBagProfile) == 0, "Task11 lifecycle stale → bag sum 0")
+	check(staleBagProfile.Analytics.BagValueByZone.Unknown == 0, "Task11 lifecycle stale → Unknown 0")
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 10,
+		sellValueAdded = 264,
+		zoneId = "GameRoom",
+		becameFull = true,
+		wasBelowCapacity = true,
+	})
+	staleBagProfile.PendingSellValue = 264
+	staleBagProfile.CurrentBubbles = 10
+	check(
+		GameAnalyticsService.SumBagValueByZone(staleBagProfile) == 264,
+		"Task11 lifecycle stale → sum avant vente = earned"
+	)
+	warnCalls = {}
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 10, earned = 264, endingBalance = 264 })
+	check(sumEconomyAmounts(recording) == 264, "Task11 lifecycle stale → économie 264")
+	check(#warnCalls == 0, "Task11 lifecycle stale → aucun warning excess")
+	check(GameAnalyticsService.SumBagValueByZone(staleBagProfile) == 0, "Task11 lifecycle stale → bag reset après vente")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Case A restauré : Pending=74 → Unknown=74 ; + GameRoom 190 → vente 264 sans excess
+	beginIsolatedCase()
+	local restoreBagProfile = buildAnalyticsProfile({
+		PendingSellValue = 74,
+		CurrentBubbles = 5,
+		Coins = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 0, SummerZone = 0, Unknown = 0 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, restoreBagProfile, false)
+	check(restoreBagProfile.Analytics.BagValueByZone.Unknown == 74, "Task11 lifecycle restore → Unknown=74")
+	check(GameAnalyticsService.SumBagValueByZone(restoreBagProfile) == 74, "Task11 lifecycle restore → sum=pending")
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 8,
+		sellValueAdded = 190,
+		zoneId = "GameRoom",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	restoreBagProfile.PendingSellValue = 264
+	check(restoreBagProfile.Analytics.BagValueByZone.GameRoom == 190, "Task11 lifecycle restore → GameRoom=190")
+	check(GameAnalyticsService.SumBagValueByZone(restoreBagProfile) == 264, "Task11 lifecycle restore → sum avant vente")
+	warnCalls = {}
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 13, earned = 264, endingBalance = 264 })
+	check(economySkuAmount(recording, "BubbleSale_GameRoom") == 190, "Task11 lifecycle restore → GameRoom sku")
+	check(economySkuAmount(recording, "BubbleSale_Mixed") == 74, "Task11 lifecycle restore → Mixed sku")
+	check(sumEconomyAmounts(recording) == 264, "Task11 lifecycle restore → somme 264")
+	check(#warnCalls == 0, "Task11 lifecycle restore → aucun excess")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Ventes consécutives : pas de réutilisation du premier sac
+	beginIsolatedCase()
+	local consecutiveProfile = buildAnalyticsProfile({ Coins = 0, PendingSellValue = 0 })
+	GameAnalyticsService.InitPlayer(playerA, consecutiveProfile, false)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 2,
+		sellValueAdded = 40,
+		zoneId = "GameRoom",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	consecutiveProfile.PendingSellValue = 40
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 2, earned = 40, endingBalance = 40 })
+	check(GameAnalyticsService.SumBagValueByZone(consecutiveProfile) == 0, "Task11 consecutive → bag 0 après vente 1")
+	recording = newRecordingSink()
+	attachRecordingSink(recording)
+	warnCalls = {}
+	GameAnalyticsService.SetWarnHandler(function(...)
+		table.insert(warnCalls, { ... })
+	end)
+	GameAnalyticsService.OnBubblesAddedToBag(playerA, {
+		storageAdded = 3,
+		sellValueAdded = 55,
+		zoneId = "SummerZone",
+		becameFull = false,
+		wasBelowCapacity = true,
+	})
+	consecutiveProfile.PendingSellValue = 55
+	check(GameAnalyticsService.SumBagValueByZone(consecutiveProfile) == 55, "Task11 consecutive → sum=55 avant vente 2")
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 3, earned = 55, endingBalance = 95 })
+	check(sumEconomyAmounts(recording) == 55, "Task11 consecutive → vente 2 = 55 seulement")
+	check(economySkuAmount(recording, "BubbleSale_SummerZone") == 55, "Task11 consecutive → Summer seulement")
+	check(#warnCalls == 0, "Task11 consecutive → aucun excess")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Reset manuel : bag + pending analytics alignés ; vente impossible côté métier (vide)
+	beginIsolatedCase()
+	local resetLifeProfile = buildAnalyticsProfile({
+		PendingSellValue = 20,
+		CurrentBubbles = 2,
+		Analytics = {
+			BagValueByZone = { GameRoom = 20, SummerZone = 0, Unknown = 0 },
+			SummerZone = { pendingSummerFullBackpackSale = true },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, resetLifeProfile, false)
+	GameAnalyticsService.OnBackpackReset(playerA)
+	check(GameAnalyticsService.SumBagValueByZone(resetLifeProfile) == 0, "Task11 reset life → bag 0")
+	check(
+		resetLifeProfile.Analytics.SummerZone.pendingSummerFullBackpackSale ~= true,
+		"Task11 reset life → pending cleared"
+	)
+	local economyBeforeEmpty = #recording.economy
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 0, earned = 0, endingBalance = 0 })
+	check(#recording.economy == economyBeforeEmpty, "Task11 reset life → earned 0 → pas d'économie")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Vente après pending déjà 0 (ordre doSell) : portions conservées, pas de wipe prématuré
+	beginIsolatedCase()
+	local soldOrderProfile = buildAnalyticsProfile({
+		Coins = 10,
+		PendingSellValue = 0, -- déjà vidé par doSell
+		CurrentBubbles = 0,
+		Analytics = {
+			BagValueByZone = { GameRoom = 100, SummerZone = 0, Unknown = 0 },
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, soldOrderProfile, false)
+	-- Init ne doit pas laisser Unknown fantôme : pending 0 → bag forcé 0...
+	-- donc on réinjecte les portions post-Init comme juste avant LogBackpackSaleEconomy.
+	soldOrderProfile.Analytics.BagValueByZone.GameRoom = 100
+	warnCalls = {}
+	GameAnalyticsService.OnBackpackSold(playerA, { sold = 5, earned = 100, endingBalance = 110 })
+	check(sumEconomyAmounts(recording) == 100, "Task11 sell-order → économie 100 malgré pending 0")
+	check(#warnCalls == 0, "Task11 sell-order → aucun excess")
+	check(GameAnalyticsService.SumBagValueByZone(soldOrderProfile) == 0, "Task11 sell-order → bag 0 après")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	GameAnalyticsService.SetWarnHandler(nil)

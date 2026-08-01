@@ -85,9 +85,19 @@ local function runLocked(player: Player, body: () -> ...any): (boolean, ...any)
 	return true, table.unpack(packed, 2, packed.n)
 end
 
--- FireClient exige une Instance Player ; les tests utilisent des tables.
+-- Seam tests : remplace FireClient (faux joueurs) sans avertissement Studio.
+local announceHandlerForTests: ((player: Player, message: string, kind: string) -> ())? = nil
+
+function BackpackService.SetAnnounceHandlerForTests(handler: ((Player, string, string) -> ())?)
+	announceHandlerForTests = handler
+end
+
 local function safeFireClient(eventName: string, player: Player, ...: any)
 	local args = table.pack(...)
+	if eventName == "Announce" and announceHandlerForTests ~= nil then
+		announceHandlerForTests(player, tostring(args[1]), tostring(args[2] or ""))
+		return
+	end
 	local ok, err = pcall(function()
 		Remotes.Event(eventName):FireClient(player, table.unpack(args, 1, args.n))
 	end)
@@ -359,6 +369,11 @@ function BackpackService.ResetSession(player: Player): boolean
 	if ok == true then
 		pcall(function()
 			local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+			-- ResetProfile remplace le profil en mémoire : rebind la session analytics.
+			local fresh = DataService.Get(player)
+			if fresh then
+				GameAnalyticsService.RebindProfile(player, fresh)
+			end
 			GameAnalyticsService.OnBackpackReset(player)
 		end)
 	end
