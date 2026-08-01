@@ -1,0 +1,89 @@
+# Inventaire des ancres du hub central — Phase 0 (P0.6 / P0.7)
+# Genere le 2026-08-01 depuis le code, pas estime.
+# Source : python tools\run_central_hub_tests.py (section 10) + sonde CentralHubBuilder.Build
+# Depot : master @ 4717ef361c1a0f34e0319ea7f1d031355679cfea
+# Racine runtime : Workspace.BubblePopWorld.CentralHub
+# Dossier d'accueil des assets : Workspace.StudioDecoration.CentralHubVisual
+# Etat : 126 pieces generees (prototype = PrototypeVisualFallback), 0 MeshPart, 0 lumiere.
+
+Dossiers : HubStructure (visuel prototype) / HubFunction (repere fonctionnel) / HubAnchors (cibles d'import)
+
+## Ancres presentes dans CentralHub.HubAnchors (12 / 12 attendues)
+
+INSTANCE                 POSITION MONDE             YAW    TARGETSIZE             KIND        ASSETKEY         MODEL ATTENDU
+Anchor_Deck              (0.00, 11.00, 0.00)        0      84.0 x 2.0 x 60.0      Structure   Deck             HubDeck
+Anchor_SpawnMedallion    (0.00, 12.00, 8.00)        0      18.0 x 0.4 x 18.0      Function    SpawnMedallion   HubSpawnMedallion
+Anchor_LoopPanel         (0.00, 16.70, -4.00)       180    30.0 x 6.4 x 0.8       Sign        LoopPanel        HubLoopPanel
+Anchor_SellStand         (-30.00, 15.30, 0.00)      90     24.0 x 8.2 x 22.0      Structure   SellStand        HubSellStand
+Anchor_ShopStand         (30.00, 17.70, 0.00)       270    16.0 x 9.0 x 22.0      Structure   ShopStand        HubShopStand
+Anchor_TopBoard          (-19.00, 27.00, -23.00)    180    17.0 x 13.0 x 0.8      Sign        TopBoard         HubTopBoard
+Anchor_RulesBoard        (19.00, 27.00, -23.00)     180    17.0 x 13.0 x 0.8      Sign        RulesBoard       HubRulesBoard
+Anchor_TransitAlcove     (34.00, 12.30, -19.00)     180    9.0 x 0.6 x 9.0        Function    TransitAlcove    HubTransitAlcove
+Anchor_Stairs            (0.00, 9.68, 37.75)        0      26.0 x 4.7 x 15.5      Structure   Stairs           HubStairs
+Anchor_StairsLanding     (0.00, 6.75, 45.90)        0      26.0 x 1.2 x 10.8      Structure   —                —
+Anchor_SellZone          (-23.60, 16.80, 0.00)      90     11.0 x 8.0 x 12.0      Function    —                —
+Anchor_SellPad           (-23.60, 13.50, 0.00)      90     9.0 x 0.3 x 11.0       Function    —                —
+
+Attributs portes par chaque ancre : TargetSize, YawDegrees, Kind, Circular,
+et pour les 9 modules a asset : AssetKey, AssetModelName, UsingImported.
+
+## Reperes fonctionnels (jamais remplaces par un asset)
+
+- HubSpawnMarker     Part           (0.00, 12.90, 8.00)    size 4.0 x 1.0 x 4.0
+- HubSpawnLocation   SpawnLocation  (0.00, 12.90, 8.00)    size 12.0 x 1.0 x 12.0
+- SellZone           Part           (-23.60, 16.80, 0.00)  size 12.0 x 8.0 x 11.0
+  (SellZone applique le yaw 90 : X et Z de TargetSize sont permutes dans la Part)
+
+## Altitudes et cotes cles (GameConfig.Hub / HubLayout, valeurs reelles)
+
+DeckTopY                        = 12.00
+Fondation centre / taille       = (0.00, 6.35, 0.00) / 70.0 x 3.7 x 46.0
+Fondation bas / haut            = 4.50 / 8.20
+Deck demi-emprise X / Z         = 42.0 / 30.0   (chanfrein 12.0)
+Garde-corps haut                = 15.50
+Plateformes Sell / Shop dessus  = 13.20
+Panneau boucle centre / haut    = (0.00, 16.70, -4.00) / 19.90
+Panneaux arriere bas / haut     = 20.50 / 33.50
+Escalier bas Y / fin Z          = 7.35 / 40.50
+Palier centre / taille          = (0.00, 6.75, 45.90) / 26.0 x 1.2 x 10.8
+Palier bord avant Z             = 51.30
+Premiere bulle vivante bord Z   = 51.30   (raccord exact, aucun trou)
+Surface de marche sur bulles Y  = 7.35
+Ouverture frontale demi-largeur = 14.00   (28 studs de passage)
+Transit pad / alcove centre     = (34.00, 12.60, -19.00) / (34.00, 12.30, -19.00)
+Cellules de bulles reservees    = 176
+Spawn centre / Look / Right     = (0.00, 12.00, 8.00) / (0, 0, -1) / (1, 0, 0)
+
+## P0.7 — Ecarts entre ancres actuelles et cibles approuvees
+
+Les ancres ci-dessus decrivent le PROTOTYPE. Les cotes approuvees pour les assets sont
+plus grandes : l'alignement se fait en Phase 8 (P8.1 / P8.2), jamais pendant la
+modelisation. Les modeleurs travaillent sur les cotes APPROUVEES.
+
+MODULE            ANCRE ACTUELLE (taille / centre)          CIBLE APPROUVEE (taille / centre)         ACTION
+Deck              84.0 x  2.0 x 60.0 / (0, 11.00, 0)        84 x  7.5 x 60 / (0, 8.25, 0)             pivot a redescendre en P8.1
+SellStand         24.0 x  8.2 x 22.0 / (-30, 15.30, 0)      18 x 14.0 x 22 / (-33.0, 20.20, 0)        recentrer, base y 13.20
+ShopStand         16.0 x  9.0 x 22.0 / (30, 17.70, 0)       18 x 14.0 x 22 / (33.0, 20.20, 0)         symetriser avec Sell
+LoopPanel         30.0 x  6.4 x  0.8 / (0, 16.70, -4)       34 x  9.5 x  2 / (0, 18.25, -4)           cadre epais + socle
+TopBoard          17.0 x 13.0 x  0.8 / (-19, 27.00, -23)    20 x 15.5 x  2 / (-19, 28.25, -23)        cadre epais + socle 20 x 3 x 4
+RulesBoard        17.0 x 13.0 x  0.8 / (19, 27.00, -23)     20 x 15.5 x  2 / (19, 28.25, -23)         idem, miroir
+Stairs            26.0 x  4.7 x 15.5 / (0, 9.68, 37.75)     26 x 4.65 x 20.8 / (0, 9.675, 40.9)       marches + palier fusionnes
+TransitAlcove      9.0 x  0.6 x  9.0 / (34, 12.30, -19)     10 x 11.0 x 10 / (34, 17.50, -19)         arche au-dessus du pad
+SpawnMedallion    18.0 x  0.4 x 18.0 / (0, 12.00, 8)        18 x  0.9 x 18 / (0, 12.45, 8)            relief 0.9 max
+Railings          (pas d'ancre dediee)                      84 x  4.2 x 60 / (0, 14.10, 0)            ancre a creer en P8.2
+
+Invariants a ne jamais bouger, quel que soit l'asset :
+- DeckTopY = 12.00 ;
+- surface de marche des bulles = 7.35 ;
+- bord avant du palier = 51.30 (= premiere bulle vivante) ;
+- ouverture frontale = 28 studs centres sur X = 0 ;
+- volume de vente = 11 x 8 x 12 centre (-23.60, 16.80, 0) ;
+- pad Transit = cylindre libre autour de (34.00, 12.60, -19.00) ;
+- spawn = (0.00, 12.00, 8.00), regard vers -Z.
+
+## Caveat orientation (a valider en Studio avant les faces arriere, cf. plan)
+
+Convention de la spec : -Z = face avant du module. Les ancres Sign portent yaw 180, donc
+leur LookVector pointe vers +Z (vers le joueur). La validation Studio de la Phase 2 doit
+confirmer que le modele importe presente bien sa face detaillee au joueur avant que les
+faces arriere ne soient detaillees.

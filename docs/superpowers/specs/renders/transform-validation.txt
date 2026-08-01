@@ -1,0 +1,247 @@
+# Validation des transformations monde — Phase 0 (P0.7)
+# Date       : 2026-08-01
+# Depot      : master @ 4717ef361c1a0f34e0319ea7f1d031355679cfea
+# Mesures    : python tools\run_central_hub_tests.py (129 reussis, 0 echoue) + sonde
+#              CentralHubBuilder.Build sur CentralHub.HubAnchors (12 ancres relevees)
+# Attendu    : cotes approuvees de
+#              docs/superpowers/specs/2026-08-01-central-hub-concept2-asset-pack-design.md
+# Mesure     : ancres reelles du prototype (PrototypeVisualFallback), voir anchors.txt
+#
+# LECTURE DU STATUT
+#   MATCH    = l'ancre actuelle est deja conforme a la cote approuvee.
+#   MISMATCH = ecart connu et attendu : l'ancre decrit le prototype, pas l'asset final.
+#              Les modeleurs travaillent TOUJOURS sur la valeur ATTENDUE.
+#              L'alignement des ancres est planifie en P8.1 / P8.2, jamais avant.
+#
+# AUCUNE ANCRE N'A ETE MODIFIEE PENDANT LA PHASE 0.
+#   GameConfig.Hub, HubLayout.lua et CentralHubBuilder.lua n'ont recu aucune modification :
+#   git diff --stat est identique au releve d'ouverture de la Phase 0 (11 fichiers,
+#   477 insertions, 67 deletions, tous anterieurs a la Phase 0). Ce fichier est un constat
+#   de mesure, pas un changement de geometrie.
+
+====================================================================
+1. HubDeckShell
+====================================================================
+STATUT        MISMATCH (vertical) / MATCH (emprise horizontale)
+ATTENDU       84.0 x 7.50 x 60.0   centre (0.00, 8.25, 0.00)    yaw 0
+MESURE        84.0 x 2.00 x 60.0   centre (0.00, 11.00, 0.00)   yaw 0   (Anchor_Deck)
+ECART         hauteur -5.50 ; centre Y +2.75 ; X et Z identiques ; yaw identique
+IMPACT        Modeliser la masse complete Y 4.50 -> 12.00 (jupe evasee, socle rentre de
+              2.5, dalle, nez en surplomb 0.6). L'ancre actuelle ne decrit que la dalle
+              de 2.0 : ne jamais s'en servir comme hauteur de reference. La fondation
+              mesuree existe deja (70 x 3.7 x 46, Y 4.50 -> 8.20) mais elle est plus
+              etroite que le deck : c'est exactement l'effet de plateforme flottante
+              rejete, visible sur 2026-08-01-prototype-side.png. Le nouveau shell doit
+              combler ce retrait.
+PIVOT         (0.00, 8.25, 0.00) = centre de la bounding box.
+
+====================================================================
+2. HubFrontStairs
+====================================================================
+STATUT        MISMATCH (decoupage) / MATCH (largeur et hauteur utile)
+ATTENDU       26.0 x 4.65 x 20.8   centre (0.00, 9.675, 40.90)  yaw 0
+MESURE        Anchor_Stairs        26.0 x 4.70 x 15.5  centre (0.00, 9.68, 37.75)
+              Anchor_StairsLanding 26.0 x 1.20 x 10.8  centre (0.00, 6.75, 45.90)
+              enveloppe combinee   26.0 x 5.85 x 21.3  Z 30.00 -> 51.30, Y 6.15 -> 12.00
+ECART         largeur identique ; hauteur utile 4.65 identique (7.35 -> 12.00) ;
+              enveloppe combinee 1.20 plus haute (dessous du palier a 6.15) ;
+              profondeur +0.50 (l'attendu demarre a Z 30.50, le prototype a Z 30.00)
+IMPACT        Un seul mesh de marches + palier, dessus du palier a 7.35, arete avant a
+              51.30. Le 1.20 de dessous du palier appartient a la jupe de HubDeckShell,
+              pas a l'escalier. Le retrait de 0.50 dans le deck evite le z-fighting a la
+              jonction. Marches de 1.55 de contremarche : compatible avatars R6 et R15.
+PIVOT         (0.00, 12.00, 30.50) = milieu de l'arete haute de la premiere marche.
+
+====================================================================
+3. HubRailingsAndPosts
+====================================================================
+STATUT        MISMATCH (ancre absente)
+ATTENDU       84.0 x 4.20 x 60.0   centre (0.00, 14.10, 0.00)   yaw 0
+MESURE        aucune ancre dediee. Garde-corps generes dans HubStructure :
+              segments h 3.50 ep 1.00, dessus a 15.50 ; poteaux 1.6 x 4.2 x 1.6
+ECART         ancre a creer ; segments conformes (dessus 15.50 = 12.00 + 3.50) ;
+              poteaux attendus jusqu'a 16.20 (capuchons), absents du prototype
+IMPACT        Modeliser le kit exact du perimetre octogonal : 2 x 16, 1 x 60, 2 x 36,
+              4 x 17 a 45 degres, 12 poteaux, capuchons Neon SANS source lumineuse.
+              Ne jamais fermer l'ouverture frontale de 28 studs. Creation de
+              Anchor_Railings prevue en P8.2.
+PIVOT         (0.00, 12.00, 0.00) = centre du deck au niveau du sol.
+
+====================================================================
+4. HubSellStandShell
+====================================================================
+STATUT        MISMATCH
+ATTENDU       18.0 x 14.00 x 22.0  centre (-33.00, 20.20, 0.00) yaw 90
+MESURE        24.0 x  8.20 x 22.0  centre (-30.00, 15.30, 0.00) yaw 90 (Anchor_SellStand)
+ECART         profondeur -6.00 ; hauteur +5.80 ; centre X -3.00 ; centre Y +4.90 ;
+              largeur 22.0 et yaw 90 identiques
+IMPACT        Kiosque plus haut et moins profond : base a 13.20 (dessus de l'aile),
+              sommet a 27.20. Cadre en U epais de 1.2 minimum, auvent mouluré, fronton
+              avec logement d'enseigne encastre, alcove verte, comptoir a 4.20.
+              Le volume de vente 11 x 8 x 12 centre (-23.60, 16.80, 0.00) reste
+              totalement vide : aucun mesh dedans.
+PIVOT         (-30.00, 13.20, 0.00) = centre de l'empreinte au niveau du plateau.
+
+====================================================================
+5. HubShopStandShell
+====================================================================
+STATUT        MISMATCH (dont asymetrie a corriger)
+ATTENDU       18.0 x 14.00 x 22.0  centre (33.00, 20.20, 0.00)  yaw 270
+MESURE        16.0 x  9.00 x 22.0  centre (30.00, 17.70, 0.00)  yaw 270 (Anchor_ShopStand)
+ECART         profondeur +2.00 ; hauteur +5.00 ; centre X +3.00 ; centre Y +2.50
+IMPACT        Le prototype est asymetrique (Sell 24 x 8.2 contre Shop 16 x 9) : la
+              symetrie stricte Sell/Shop est un critere bloquant de la Phase 4.
+              Passage central de 6 studs libre sur toute la profondeur, jamais de
+              boutique fermee. Laisser libres les cylindres de 3 de diametre autour des
+              PromptAnchor et l'empreinte 9 x 9 du pad panier a (30.00, 13.25, 3.50).
+PIVOT         (30.00, 13.20, 0.00) = centre de l'empreinte au niveau du plateau.
+
+====================================================================
+6. HubLoopPanelFrame
+====================================================================
+STATUT        MISMATCH (cadre) / MATCH (arete basse et centre X/Z)
+ATTENDU       34.0 x 9.50 x 2.00   centre (0.00, 18.25, -4.00)  yaw 180
+MESURE        30.0 x 6.40 x 0.80   centre (0.00, 16.70, -4.00)  yaw 180 (Anchor_LoopPanel)
+ECART         largeur +4.00 ; hauteur +3.10 ; epaisseur +1.20 ; centre Y +1.55 ;
+              arete basse identique a 13.50 ; X, Z et yaw identiques
+IMPACT        Caisson epais a coins arrondis (rayon >= 1.2), fond bleu nuit en retrait,
+              liseré cyan recule de 0.4, socle mouluré 36 x 1.5 x 4 (12.00 -> 13.50) et
+              deux jambes obliques au dos. Surface LoopPanelFace strictement plate
+              30 x 7 centree (0.00, 18.25, -3.00) : aucun texte grave ni texture.
+              Le panneau mesure du prototype fait 0.80 d'epaisseur, d'ou l'aspect plat
+              visible sur 2026-08-01-prototype-reference.png.
+PIVOT         (0.00, 13.50, -4.00) = milieu de l'arete basse du cadre.
+
+====================================================================
+7. HubTop3BoardFrame
+====================================================================
+STATUT        MISMATCH (cadre) / MATCH (arete basse a 20.50 et position)
+ATTENDU       20.0 x 15.50 x 2.00  centre (-19.00, 28.25, -23.00) yaw 180
+              plus socle 20.0 x 3.00 x 4.00 centre (-19.00, 19.00, -23.00)
+MESURE        17.0 x 13.00 x 0.80  centre (-19.00, 27.00, -23.00) yaw 180 (Anchor_TopBoard)
+ECART         largeur +3.00 ; hauteur +2.50 ; epaisseur +1.20 ; centre Y +1.25 ;
+              arete basse identique a 20.50 ; sommet 33.50 -> 36.00 ; X, Z, yaw identiques
+IMPACT        Cadre epais (>= 1.5 apparent), sommet arrondi (arc de rayon 10 sur les 4
+              studs hauts), logement d'icone trophee 4 x 4, socle 20 x 3 x 4 et jambes
+              jusqu'a 12.00. Surface Top3Face plate 17 x 11.5 centree
+              (-19.00, 27.50, -22.00). L'instance ciblee par LeaderboardService garde le
+              nom GlobalLeaderboardBoard. Aucun texte dans le mesh ni dans la texture :
+              les 3 lignes de classement restent dynamiques en SurfaceGui.
+PIVOT         (-19.00, 20.50, -23.00) = milieu de l'arete basse du cadre.
+
+====================================================================
+8. HubRulesBoardFrame
+====================================================================
+STATUT        MISMATCH (cadre) / MATCH (arete basse a 20.50 et position)
+ATTENDU       20.0 x 15.50 x 2.00  centre (19.00, 28.25, -23.00) yaw 180
+              plus socle 20.0 x 3.00 x 4.00 centre (19.00, 19.00, -23.00)
+MESURE        17.0 x 13.00 x 0.80  centre (19.00, 27.00, -23.00) yaw 180 (Anchor_RulesBoard)
+ECART         identique au Top 3, en miroir sur X
+IMPACT        Miroir strict du Top 3, accent ambre, logement d'icone presse-papiers.
+              Surface RulesFace plate 17 x 11.5 centree (19.00, 27.50, -22.00).
+              Plinthe basse commune de 1.5 de haut de X -29 a X +29 a Z -23 : les deux
+              panneaux restent deux modeles separes, jamais fusionnes.
+PIVOT         (19.00, 20.50, -23.00) = milieu de l'arete basse du cadre.
+
+====================================================================
+9. HubTransitShell
+====================================================================
+STATUT        MISMATCH (volume entierement nouveau)
+ATTENDU       10.0 x 11.00 x 10.0  centre (34.00, 17.50, -19.00) yaw 180
+MESURE         9.0 x  0.60 x  9.0  centre (34.00, 12.30, -19.00) yaw 180
+              (Anchor_TransitAlcove) ; pad fonctionnel a (34.00, 12.60, -19.00)
+ECART         hauteur +10.40 ; emprise +1.00 sur X et Z ; centre Y +5.20
+IMPACT        Le prototype n'a qu'une pastille au sol : l'arche complete est a produire
+              (base moulurée 9 de diametre, cadre graphite, disque de portail cyan
+              translucide, logement d'enseigne, TransitSignFace 6 x 1.6). Laisser libre
+              un cylindre de 6 de diametre et 8 de haut au centre de la base pour la
+              pastille fonctionnelle, qui devient invisible. L'ancien cylindre et
+              l'ancien anneau generes ne doivent plus etre visibles quand le shell est
+              actif. Hauteur 11.00 volontairement inferieure aux panneaux (15.50) et aux
+              kiosques (14.00) : le Transit reste visuellement secondaire.
+PIVOT         (34.00, 12.00, -19.00) = centre de la base au niveau du sol.
+
+====================================================================
+10. HubSpawnMedallion
+====================================================================
+STATUT        MISMATCH (mineur)
+ATTENDU       diametre 18.0 x 0.90  centre (0.00, 12.45, 8.00)  yaw 0
+MESURE                 18.0 x 0.40  centre (0.00, 12.00, 8.00)  yaw 0
+              (Anchor_SpawnMedallion, Circular = true)
+ECART         epaisseur +0.50 ; centre Y +0.45 ; diametre et position identiques
+IMPACT        Relief total plafonne a 0.90 pour ne jamais faire trebucher un avatar :
+              anneau mouluré, champ sombre, etoile en relief, coeur Neon de 3 de
+              diametre. Rien au-dessus : le volume 12 x 5 x 12 reste libre. Reperes
+              fonctionnels a ne pas recouvrir : HubSpawnMarker et HubSpawnLocation, tous
+              deux a (0.00, 12.90, 8.00).
+PIVOT         (0.00, 12.00, 8.00) = centre du disque au niveau du sol.
+
+====================================================================
+11. HubLightFixtures
+====================================================================
+STATUT        MISMATCH (rien n'existe)
+ATTENDU       module eclate, pivot (0.00, 12.00, 0.00), plafond de 10 vraies sources
+              (2 spots Sell, 2 spots Shop, 2 spots panneaux, 1 point medaillon,
+              1 point portail, 2 points bas de descente), Brightness <= 1.4,
+              Range <= 18, Shadows = false en profil mobile
+MESURE        0 PointLight, 0 SpotLight, 56 pieces Neon dans les 126 pieces du prototype
+ECART         budget lumieres integralement disponible ; aucune ancre de luminaire
+IMPACT        Les 56 pieces Neon du prototype disparaissent avec les modules importes :
+              elles ne comptent pas dans le budget final. Tout ce qui n'est pas dans les
+              10 sources autorisees doit rester Neon, texture emissive ou piece lumineuse
+              sans source. Les luminaires restent des meshes separes et deplacables.
+PIVOT         base de chaque luminaire.
+
+====================================================================
+12. HubDecorProps
+====================================================================
+STATUT        MISMATCH (rien d'exploitable)
+ATTENDU       props independants <= 4 studs, un OBJ par prop, pivot en base,
+              <= 900 triangles chacun, 4 000 au total
+MESURE        aucun prop dedie ni ancre de prop. Le prototype simule le decor avec des
+              disques Neon flottants cote Sell et des cubes Neon de 1.5 cote Shop,
+              integres aux modules eux-memes
+ECART         aucun placement reutilisable
+IMPACT        Produire les props separement (caisses, billets, pieces, fioles, coffre,
+              panier, arbustes, petits modules metalliques) et les placer a la main en
+              Studio en Phase 7. Zones interdites aux props : volume de vente
+              11 x 8 x 12 centre (-23.60, 16.80, 0.00), passage central de 6 studs du
+              Shop, 1.5 autour de chaque PromptAnchor, volume de spawn.
+              Ne JAMAIS importer la decoration en un seul bloc.
+PIVOT         base de chaque prop.
+
+====================================================================
+INVARIANTS — verifies, a ne jamais deplacer
+====================================================================
+STATUT   INVARIANT                        ATTENDU     MESURE      ECART
+MATCH    Dessus du deck                   Y = 12.00   12.00       0.00
+MATCH    Surface de marche sur les bulles Y =  7.35    7.35       0.00
+MATCH    Bord avant du palier             Z = 51.30   51.30       0.00
+MATCH    Premiere bulle vivante           Z = 51.30   51.30       0.00  (raccord exact)
+MATCH    Ouverture frontale               28.00       28.00       0.00  (demi-largeur 14)
+MATCH    Spawn                            (0, 12, 8)  (0, 12, 8)  0.00
+MATCH    Regard au spawn                  -Z          (0, 0, -1)  0.00  (SELL a gauche,
+                                                                         SHOP a droite)
+MATCH    Volume de vente                  11 x 8 x 12 idem        0.00  centre (-23.6, 16.8, 0)
+MATCH    Pad Transit                      libre       libre       0.00  (34.0, 12.6, -19.0)
+MATCH    Cellules de bulles reservees     176         176         0.00
+
+A VERIFIER AU PREMIER IMPORT — orientation
+  Convention de la specification : -Z = face avant du module.
+  Mesure : les ancres de type Sign portent yaw 180, donc leur LookVector pointe vers +Z,
+  c'est-a-dire vers le joueur place au spawn. Les deux conventions sont coherentes, mais
+  la verification doit etre faite en Studio sur HubDeckShell puis sur le premier panneau
+  importe, AVANT de detailler les faces arriere (P2.12 puis P5.10). Aucune face arriere
+  detaillee ne doit etre produite avant cette confirmation.
+
+====================================================================
+SYNTHESE
+====================================================================
+MATCH                : 10 invariants + emprise horizontale du deck + largeur/hauteur utile
+                       de l'escalier + aretes basses des 3 panneaux (13.50 et 20.50)
+MISMATCH documentes  : 12 modules sur 12 (les ancres decrivent le prototype)
+ANCRE MODIFIEE       : aucune
+SCRIPT DE PRODUCTION : aucun modifie
+ACTION               : les modeleurs utilisent les valeurs ATTENDUES ; l'alignement des
+                       ancres et des configurations est execute en Phase 8 (P8.1 / P8.2),
+                       apres approbation visuelle de tous les assets.
