@@ -3,7 +3,6 @@
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local AnalyticsConfig = require(Shared.AnalyticsConfig)
@@ -397,33 +396,11 @@ local function _logProgressionComplete(
 	end)
 end
 
-local function getEconomyFlowType(flowName: "Source" | "Sink"): any
-	-- Studio Play lacks PluginOrOpenCloud for AnalyticsEconomyFlowType.*; strings are valid fallbacks.
-	local studioOk, inStudio = pcall(function()
-		return RunService:IsStudio()
-	end)
-	if studioOk and inStudio == true then
-		return flowName
-	end
-	local ok, enumItem = pcall(function()
-		if flowName == "Source" then
-			return Enum.AnalyticsEconomyFlowType.Source
-		end
-		return Enum.AnalyticsEconomyFlowType.Sink
-	end)
-	if ok and enumItem ~= nil then
-		return enumItem
-	end
+local function getEconomyFlowType(flowName: "Source" | "Sink"): string
 	return flowName
 end
 
 local function getGameplayTransactionType(): string
-	local ok, enumItem = pcall(function()
-		return Enum.AnalyticsEconomyTransactionType.Gameplay
-	end)
-	if ok and enumItem ~= nil then
-		return enumItem.Name
-	end
 	return "Gameplay"
 end
 
