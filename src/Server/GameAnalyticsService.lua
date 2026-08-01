@@ -1187,6 +1187,8 @@ end
 
 function GameAnalyticsService.StopFlushLoopForTests()
 	flushLoopStarted = false
+	-- Permet le vrai Start() après les suites destructives (avant DataService).
+	started = false
 end
 
 function GameAnalyticsService.SetFlushIntervalForTests(seconds: number?)

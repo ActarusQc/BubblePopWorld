@@ -2,10 +2,43 @@
 -- Point d'entrée serveur : ordre de démarrage explicite.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 require(ReplicatedStorage:WaitForChild("Shared").Remotes) -- crée les remotes en premier
 
 local GameAnalyticsService = require(script.GameAnalyticsService)
 local DataService = require(script.DataService)
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local function runSuite(label: string, loader: () -> any)
+	local requireOk, testsOrErr = pcall(loader)
+	if not requireOk then
+		warn(string.format("[%s] FAIL: require error: %s", label, tostring(testsOrErr)))
+		return
+	end
+	local tests = testsOrErr
+	if type(tests) ~= "table" or type(tests.Run) ~= "function" then
+		warn(string.format("[%s] FAIL: missing Run()", label))
+		return
+	end
+	local runOk, runErr = pcall(tests.Run)
+	if not runOk then
+		warn(string.format("[%s] FAIL: suite error: %s", label, tostring(runErr)))
+	end
+end
+
+-- Suites analytics destructives (FlushAllPlayers) avant toute session joueur réelle.
+if RunService:IsStudio() then
+	runSuite("AnalyticsConfigTests", function()
+		return require(Shared.AnalyticsConfigTests)
+	end)
+	runSuite("DataServiceAnalyticsTests", function()
+		return require(script.DataServiceAnalyticsTests)
+	end)
+	runSuite("GameAnalyticsServiceTests", function()
+		return require(script.GameAnalyticsServiceTests)
+	end)
+end
 
 -- Analytics avant DataService (InitPlayer / flush à la déconnexion).
 do
@@ -38,27 +71,8 @@ for _, service in ipairs(services) do
 	if not ok then warn("[BPW] échec du démarrage d'un service: " .. tostring(err)) end
 end
 
--- Validations (dev) — chaque suite isolée : FAIL d'une suite n'empêche pas les suivantes.
+-- Validations (dev) — hors analytics (déjà exécutées avant Start en Studio).
 do
-	local Shared = ReplicatedStorage:WaitForChild("Shared")
-
-	local function runSuite(label: string, loader: () -> any)
-		local requireOk, testsOrErr = pcall(loader)
-		if not requireOk then
-			warn(string.format("[%s] FAIL: require error: %s", label, tostring(testsOrErr)))
-			return
-		end
-		local tests = testsOrErr
-		if type(tests) ~= "table" or type(tests.Run) ~= "function" then
-			warn(string.format("[%s] FAIL: missing Run()", label))
-			return
-		end
-		local runOk, runErr = pcall(tests.Run)
-		if not runOk then
-			warn(string.format("[%s] FAIL: suite error: %s", label, tostring(runErr)))
-		end
-	end
-
 	runSuite("ZoneAccessTests", function()
 		return require(Shared.ZoneAccessTests)
 	end)
@@ -92,9 +106,6 @@ do
 	runSuite("SummerDecorSceneClassifierTests", function()
 		return require(Shared.SummerDecorSceneClassifierTests)
 	end)
-	runSuite("AnalyticsConfigTests", function()
-		return require(Shared.AnalyticsConfigTests)
-	end)
 	runSuite("ShopCatalogTests", function()
 		return require(Shared.ShopCatalogTests)
 	end)
@@ -112,12 +123,6 @@ do
 	end)
 	runSuite("ItemSpawnTests", function()
 		return require(Shared.ItemSpawnTests)
-	end)
-	runSuite("DataServiceAnalyticsTests", function()
-		return require(script.DataServiceAnalyticsTests)
-	end)
-	runSuite("GameAnalyticsServiceTests", function()
-		return require(script.GameAnalyticsServiceTests)
 	end)
 	runSuite("ShopServiceTests", function()
 		return require(script.ShopServiceTests)
