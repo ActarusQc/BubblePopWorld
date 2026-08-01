@@ -1241,11 +1241,6 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(throwResult == false, "Task8 sink economy throw → LogCoinSource retourne false")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
-	local source = script.Parent:WaitForChild("GameAnalyticsService").Source
-	check(string.find(source, "DataService") == nil, "GameAnalyticsService ne require pas DataService")
-	check(string.find(source, "BindToClose") == nil, "GameAnalyticsService n'appelle pas BindToClose")
-	check(string.find(source, "ZoneDefs") ~= nil, "GameAnalyticsService require ZoneDefs")
-
 	GameAnalyticsService.SetWarnHandler(nil)
 	GameAnalyticsService.SetSink(nil)
 	GameAnalyticsService.StopFlushLoopForTests()

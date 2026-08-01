@@ -226,7 +226,7 @@ local function createDefaultSink(): AnalyticsSink
 	}
 end
 
--- Sink lazy : InitPlayer peut tourner avant Start() (ordre DataService actuel jusqu'à Task 9).
+-- Sink lazy : InitPlayer peut tourner avant Start() (ordre de démarrage serveur).
 local function getSink(): AnalyticsSink
 	if not sink then
 		sink = createDefaultSink()
