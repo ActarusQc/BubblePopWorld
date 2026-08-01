@@ -203,14 +203,14 @@ local function countProgression(recording: RecordingSink, level: number): number
 	return count
 end
 
-local function economyFlowName(flowType: any): string
-	if type(flowType) == "string" then
-		return flowType
+local function economyFlowName(value: any): string
+	if type(value) == "string" then
+		return value
 	end
-	if type(flowType) == "userdata" and type(flowType.Name) == "string" then
-		return flowType.Name
-	end
-	return tostring(flowType)
+	local ok, name = pcall(function()
+		return (value :: any).Name
+	end)
+	return if ok then tostring(name) else tostring(value)
 end
 
 local function onboardingStepNames(recording: RecordingSink): { string }
@@ -223,13 +223,38 @@ end
 
 function GameAnalyticsServiceTests.Run(): boolean
 	local ok = true
+	local passCount = 0
+	local failCount = 0
 	local function check(cond: boolean, msg: string)
 		if not cond then
 			warn("[GameAnalyticsServiceTests] FAIL:", msg)
 			ok = false
+			failCount += 1
 		else
 			print("[GameAnalyticsServiceTests] PASS:", msg)
+			passCount += 1
 		end
+	end
+
+	local caseSeq = 0
+	local warnCalls: { { any } } = {}
+	local recording = newRecordingSink()
+	local playerA: any = fakePlayer("TestPlayer", 1)
+	local playerB: any = fakePlayer("OtherPlayer", 2)
+
+	local function beginIsolatedCase()
+		caseSeq += 1
+		GameAnalyticsService.FlushAllPlayers()
+		warnCalls = {}
+		GameAnalyticsService.SetWarnHandler(function(...)
+			table.insert(warnCalls, { ... })
+		end)
+		recording = newRecordingSink()
+		attachRecordingSink(recording)
+		playerA = fakePlayer("GasA_" .. tostring(caseSeq), 100000 + caseSeq)
+		playerB = fakePlayer("GasB_" .. tostring(caseSeq), 200000 + caseSeq)
+		check(not GameAnalyticsService.HasSession(playerA), "isolation: playerA sans session")
+		check(not GameAnalyticsService.HasSession(playerB), "isolation: playerB sans session")
 	end
 
 	GameAnalyticsService.FlushAllPlayers()
@@ -237,18 +262,8 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.SetWarnHandler(nil)
 	GameAnalyticsService.Start()
 
-	local warnCalls: { { any } } = {}
-	GameAnalyticsService.SetWarnHandler(function(...)
-		table.insert(warnCalls, { ... })
-	end)
-
-	local recording = newRecordingSink()
-	attachRecordingSink(recording)
-
-	local playerA = fakePlayer("TestPlayer", 1)
-	local playerB = fakePlayer("OtherPlayer", 2)
-
-	-- Task 2 socle
+	-- Task 2 socle — session + dump
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), true)
 	check(GameAnalyticsService.HasSession(playerA), "InitPlayer crée une session")
 	local dumpA = GameAnalyticsService.DumpPlayerState(playerA)
@@ -256,11 +271,17 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(string.find(dumpA, "sessionId=") ~= nil, "Dump contient sessionId")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
-	warnCalls = {}
+	-- Task 2 — DebugEmitCustom sans session (isolation stricte : pas de FirstSessionDuration résiduel)
+	beginIsolatedCase()
+	check(not GameAnalyticsService.HasSession(playerA), "DebugEmitCustom setup → aucune session")
+	local customBefore = #recording.custom
 	GameAnalyticsService.DebugEmitCustom(playerA, "TestEvent", 1)
 	check(#warnCalls == 1, "DebugEmitCustom sans session appelle le warn handler")
-	check(#recording.custom == 0, "DebugEmitCustom sans session n'appelle pas le sink")
+	check(#recording.custom == customBefore, "DebugEmitCustom sans session n'appelle pas le sink")
+	check(#recording.custom == 0, "DebugEmitCustom sans session → sink custom vide")
 
+	-- Task 2 — sink en erreur
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
 	local okCall = pcall(function()
 		GameAnalyticsService.SetSink({
@@ -283,12 +304,10 @@ function GameAnalyticsServiceTests.Run(): boolean
 		GameAnalyticsService.DebugEmitCustom(playerA, "ResilientEvent", 42)
 	end)
 	check(okCall, "sink en erreur : DebugEmitCustom ne propage pas l'exception")
-	attachRecordingSink(recording)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 4 — cas 1 : nouveau profil
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
-	GameAnalyticsService.FlushAllPlayers()
+	beginIsolatedCase()
 
 	local newProfile = buildAnalyticsProfile()
 	GameAnalyticsService.InitPlayer(playerA, newProfile, true)
@@ -305,8 +324,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 4 — cas 2 : profil reconcilié existant
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local reconciled = buildAnalyticsProfile()
 	GameAnalyticsService.InitPlayer(playerA, reconciled, false)
 	check(reconciled.Analytics.OnboardingStarted == false, "isNewProfile=false → OnboardingStarted reste false")
@@ -314,8 +332,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 4 — cas 3 : reconnexion onboarding en cours
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local reconnectProfile = buildAnalyticsProfile({
 		Analytics = {
 			OnboardingStarted = true,
@@ -345,8 +362,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 4 — cas 4 : onboarding terminé
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local completedProfile = buildAnalyticsProfile({
 		Analytics = {
 			OnboardingStarted = true,
@@ -364,8 +380,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 4 — cas 5 : bump Summer version
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local summerBumpProfile = buildAnalyticsProfile({
 		Analytics = {
 			SummerZoneVersion = 0,
@@ -402,8 +417,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 4 — cas 6 : niveau Summer déjà atteint
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local summerLevel = ZoneDefs.GetRequiredLevel("SummerZone")
 	local levelProfile = buildAnalyticsProfile({
 		Level = summerLevel,
@@ -433,8 +447,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- EnsureBagValueCoverage
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local bagProfile = buildAnalyticsProfile({
 		PendingSellValue = 50,
 		Analytics = {
@@ -463,9 +476,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(not GameAnalyticsService.HasSession(playerB), "FlushAllPlayers purge playerB")
 
 	-- Task 5 — cas 1 : out of order (pop avant main room)
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
-	GameAnalyticsService.FlushAllPlayers()
+	beginIsolatedCase()
 	local outOfOrderProfile = buildAnalyticsProfile()
 	GameAnalyticsService.InitPlayer(playerA, outOfOrderProfile, true)
 	check(#recording.onboarding == 1 and recording.onboarding[1].stepName == "JoinedGame", "out-of-order init → JoinedGame seul")
@@ -483,8 +494,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 5 — cas 2 : lobby avant sac plein
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local lobbyProfile = buildAnalyticsProfile({
 		Analytics = {
 			OnboardingStarted = true,
@@ -514,8 +524,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 5 — cas 3 : seconde session sans First timing
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local secondSessionProfile = buildAnalyticsProfile({
 		Analytics = {
 			OnboardingStarted = true,
@@ -537,8 +546,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 5 — cas 4 : OnLevelReached n'ajoute pas d'onboarding
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local levelOnlyProfile = buildAnalyticsProfile({
 		Level = 5,
 		Analytics = {
@@ -556,8 +564,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 5 — cas 5 : duplicate observe
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local dupProfile = buildAnalyticsProfile({
 		Analytics = {
 			OnboardingStarted = true,
@@ -578,7 +585,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 5 — cas 6a : sink fail onboarding
-	recording = newRecordingSink()
+	beginIsolatedCase()
 	GameAnalyticsService.SetSink({
 		logOnboarding = function()
 			error("onboarding fail")
@@ -603,7 +610,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 5 — cas 6b : First timing échoue → étape quand même marquée ; pas de rejeu funnel
-	recording = newRecordingSink()
+	beginIsolatedCase()
 	GameAnalyticsService.SetSink({
 		logOnboarding = function(_player, _step, stepName, _fields)
 			table.insert(recording.onboarding, { step = _step, stepName = stepName })
@@ -637,7 +644,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	attachRecordingSink(recording)
 
 	-- Task 5 — cas 6c : SessionSeconds échoue → étape persistée ; pas de rejeu funnel ni First
-	recording = newRecordingSink()
+	beginIsolatedCase()
 	local firstTimingAttempts = 0
 	GameAnalyticsService.SetSink({
 		logOnboarding = function(_player, _step, stepName, _fields)
@@ -677,8 +684,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	attachRecordingSink(recording)
 
 	-- Task 5 — cas 7 : FirstSpecialBubble
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local specialProfile = buildAnalyticsProfile({
 		Analytics = {
 			OnboardingStarted = true,
@@ -706,8 +712,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 5 — cas 8 : OnReachedMainBubbleRoom zone filter
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local zoneProfile = buildAnalyticsProfile()
 	GameAnalyticsService.InitPlayer(playerA, zoneProfile, true)
 	GameAnalyticsService.OnReachedMainBubbleRoom(playerA, "SummerZone")
@@ -723,8 +728,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 5 — timing initial sur nouvelle session
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local timingProfile = buildAnalyticsProfile()
 	GameAnalyticsService.InitPlayer(playerA, timingProfile, true)
 	local timingSession = GameAnalyticsService.GetSessionForTests(playerA)
@@ -743,9 +747,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 6 — cas 1 : out of order summer (pop avant arrivée)
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
-	GameAnalyticsService.FlushAllPlayers()
+	beginIsolatedCase()
 	local summerOutOfOrder = buildAnalyticsProfile({
 		Level = summerLevel,
 		Analytics = {
@@ -782,8 +784,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 6 — cas 2 : Saw une fois par version
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local sawProfile = buildAnalyticsProfile({
 		Analytics = {
 			SummerZoneFunnelSessionId = "saw-guid",
@@ -799,8 +800,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 	sawProfile.Analytics.SummerZoneVersion = 0
 	sawProfile.Analytics.SummerZone = { SawSummerZoneRequirement = true }
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, sawProfile, false)
 	check(next(sawProfile.Analytics.SummerZone) == nil, "Task6 Saw bump → SummerZone vidé")
 	GameAnalyticsService.OnSawSummerZoneRequirement(playerA)
@@ -808,8 +808,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 6 — cas 3 : pending persiste reconnect + vente efface
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local pendingProfile = buildAnalyticsProfile({
 		Level = summerLevel,
 		Analytics = {
@@ -850,8 +849,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 6 — cas 4 : vente sans étapes summer → pending conservé
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local earlySaleProfile = buildAnalyticsProfile({
 		Analytics = {
 			SummerZoneFunnelSessionId = "early-sale-guid",
@@ -877,8 +875,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 6 — cas 5 : OnBackpackReset efface pending
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local resetProfile = buildAnalyticsProfile({
 		Analytics = {
 			SummerZoneFunnelSessionId = "reset-guid",
@@ -896,8 +893,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 6 — cas 6 : Selected custom répétable ; Arrived funnel
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local selectProfile = buildAnalyticsProfile({
 		Level = summerLevel,
 		Analytics = {
@@ -923,8 +919,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 6 — cas 7 : Selected sans Arrived → pas d'étape Arrived
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local selectOnlyProfile = buildAnalyticsProfile({
 		Analytics = {
 			SummerZoneFunnelSessionId = "select-only-guid",
@@ -942,8 +937,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 6 — cas 8 : champ version sur premier emit funnel summer
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local versionProfile = buildAnalyticsProfile({
 		Level = summerLevel,
 		Analytics = {
@@ -971,9 +965,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 7 — cas 1 : RecordPop + flush deltas
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
-	GameAnalyticsService.FlushAllPlayers()
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
 	GameAnalyticsService.RecordPop(playerA, nil)
 	GameAnalyticsService.RecordPop(playerA, nil)
@@ -989,8 +981,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 7 — cas 2 : delta incrémental
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
 	GameAnalyticsService.RecordPop(playerA, nil)
 	GameAnalyticsService.RecordPop(playerA, nil)
@@ -1003,8 +994,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 7 — cas 3 : zone seconds
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
 	local zoneSession = GameAnalyticsService.GetSessionForTests(playerA)
 	check(zoneSession ~= nil, "Task7 zone session exists")
@@ -1033,7 +1023,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(GameAnalyticsService.GetFlushLoopStartedForTests() == true, "Task7 flush loop actif")
 
 	-- Task 7 — cas 5 : sink fail sur SessionNormalPops
-	recording = newRecordingSink()
+	beginIsolatedCase()
 	local failNormalPops = true
 	GameAnalyticsService.SetSink({
 		logOnboarding = function() end,
@@ -1068,8 +1058,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	attachRecordingSink(recording)
 
 	-- Task 7 — cas 6 : FlushAndRemovePlayer + FirstSessionDuration
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), true)
 	local initialSession = GameAnalyticsService.GetSessionForTests(playerA)
 	if initialSession then
@@ -1083,9 +1072,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(not GameAnalyticsService.HasSession(playerA), "Task7 FlushAndRemovePlayer → session supprimée")
 
 	-- Task 8 — cas 1 : LogCoinSource valide
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
-	GameAnalyticsService.FlushAllPlayers()
+	beginIsolatedCase()
 	local economyProfile = buildAnalyticsProfile({ Coins = 150 })
 	GameAnalyticsService.InitPlayer(playerA, economyProfile, false)
 	local sourceOk = GameAnalyticsService.LogCoinSource(playerA, {
@@ -1108,8 +1095,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 8 — cas 2 : validations LogCoinSource
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
 	GameAnalyticsService.LogCoinSource(playerA, {
 		amount = 10,
@@ -1133,8 +1119,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 8 — cas 3 : LogCoinSink
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({ Coins = 80 }), false)
 	local sinkOk = GameAnalyticsService.LogCoinSink(playerA, {
 		amount = 15,
@@ -1152,8 +1137,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 8 — cas 4 : LogBackpackSaleEconomy portions + reset
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local saleProfile = buildAnalyticsProfile({
 		Coins = 200,
 		Analytics = {
@@ -1177,8 +1161,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 8 — cas 5 : OnLevelReached dedup + nouveaux niveaux
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local progressionProfile = buildAnalyticsProfile({
 		Level = 1,
 		Analytics = {
@@ -1213,8 +1196,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 8 — cas 6 : OnLevelReached n'ajoute pas d'onboarding
-	recording = newRecordingSink()
-	attachRecordingSink(recording)
+	beginIsolatedCase()
 	local levelOnboardingProfile = buildAnalyticsProfile({
 		Level = 2,
 		Analytics = {
@@ -1236,6 +1218,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
 	-- Task 8 — cas 7 : sink economy throw → LogCoinSource false sans throw
+	beginIsolatedCase()
 	GameAnalyticsService.SetSink({
 		logOnboarding = function() end,
 		logFunnel = function() end,
@@ -1257,7 +1240,6 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(throwOk, "Task8 sink economy throw → pas d'exception vers l'appelant")
 	check(throwResult == false, "Task8 sink economy throw → LogCoinSource retourne false")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
-	attachRecordingSink(recording)
 
 	local source = script.Parent:WaitForChild("GameAnalyticsService").Source
 	check(string.find(source, "DataService") == nil, "GameAnalyticsService ne require pas DataService")
@@ -1268,6 +1250,7 @@ function GameAnalyticsServiceTests.Run(): boolean
 	GameAnalyticsService.SetSink(nil)
 	GameAnalyticsService.StopFlushLoopForTests()
 
+	print(string.format("[GameAnalyticsServiceTests] assertions: %d pass / %d fail", passCount, failCount))
 	if ok then
 		print("[GameAnalyticsServiceTests] OK")
 	end
