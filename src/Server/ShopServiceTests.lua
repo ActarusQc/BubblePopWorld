@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
+local ShopService = require(script.Parent.ShopService)
 
 local ShopServiceTests = {}
 
@@ -206,7 +207,20 @@ function ShopServiceTests.Run(context: Context?): boolean
 		))
 	end
 
+	local upgradeAnalytics: { any } = {}
+	local itemSinkAnalytics: { any } = {}
+	ShopService.SetAnalyticsHooksForTests({
+		onUpgradePurchased = function(p, ctx)
+			table.insert(upgradeAnalytics, { player = p, ctx = ctx })
+		end,
+		logCoinSink = function(p, ctx)
+			table.insert(itemSinkAnalytics, { player = p, ctx = ctx })
+		end,
+	})
+
 	context.ResetCounters()
+	upgradeAnalytics = {}
+	itemSinkAnalytics = {}
 	profile.Coins = 10000
 	profile.Upgrades.Speed = 1
 	local speedCost = Config.UpgradeCost("Speed", 1)
@@ -216,6 +230,16 @@ function ShopServiceTests.Run(context: Context?): boolean
 		"achat Speed débite le coût exact et augmente le niveau")
 	check(context.Counters.ApplyCharacterStats == 1 and context.Counters.Push == 1
 		and context.Counters.NotifyCoinsChanged == 1, "achat Speed appelle Apply/Push/Notify")
+	check(#upgradeAnalytics == 1, "Task12 achat Speed → onUpgradePurchased une fois")
+	check(
+		upgradeAnalytics[1] ~= nil
+			and upgradeAnalytics[1].ctx ~= nil
+			and upgradeAnalytics[1].ctx.upgradeId == "Speed"
+			and upgradeAnalytics[1].ctx.amount == speedCost
+			and upgradeAnalytics[1].ctx.endingBalance == profile.Coins,
+		"Task12 achat Speed → ctx upgradeId/amount/endingBalance"
+	)
+	check(#itemSinkAnalytics == 0, "Task12 achat Speed → pas de logCoinSink item")
 	print(("  PREUVE Speed cost=%d coins=10000->%d level=1->%d Apply=%d Push=%d Notify=%d"):format(
 		speedCost,
 		profile.Coins,
@@ -226,6 +250,8 @@ function ShopServiceTests.Run(context: Context?): boolean
 	))
 
 	context.ResetCounters()
+	upgradeAnalytics = {}
+	itemSinkAnalytics = {}
 	profile.Coins = Config.ShopItems.BackpackGold.Cost + 500
 	profile.OwnedItems = {}
 	profile.EquippedBackpack = ""
@@ -242,6 +268,17 @@ function ShopServiceTests.Run(context: Context?): boolean
 	check(context.Counters.Push == 1 and context.Counters.NotifyCoinsChanged == 1
 		and context.Counters.Announce == 1 and context.Counters.Refresh == 1,
 		"achat BackpackGold appelle Push/Notify/Announce/Refresh")
+	check(#itemSinkAnalytics == 1, "Task12 achat item → logCoinSink une fois")
+	check(
+		itemSinkAnalytics[1] ~= nil
+			and itemSinkAnalytics[1].ctx ~= nil
+			and itemSinkAnalytics[1].ctx.itemSku == "BackpackGold"
+			and itemSinkAnalytics[1].ctx.amount == goldCost
+			and itemSinkAnalytics[1].ctx.endingBalance == profile.Coins
+			and itemSinkAnalytics[1].ctx.transactionType == "Shop",
+		"Task12 achat item → sink Shop + sku id brut"
+	)
+	check(#upgradeAnalytics == 0, "Task12 achat item → pas d'onUpgradePurchased")
 	print(("  PREUVE BackpackGold cost=%d coins=%d->%d owned=%s equipped=%s Push=%d Notify=%d Announce=%d Refresh=%d"):format(
 		goldCost,
 		goldCost + 500,
@@ -253,6 +290,15 @@ function ShopServiceTests.Run(context: Context?): boolean
 		context.Counters.Announce,
 		context.Counters.Refresh
 	))
+
+	upgradeAnalytics = {}
+	itemSinkAnalytics = {}
+	local failOk = buyUpgrade(player, "Magnet")
+	check(failOk == false, "Task12 achat échoué → false")
+	check(#upgradeAnalytics == 0 and #itemSinkAnalytics == 0,
+		"Task12 achat échoué → aucun hook analytics")
+
+	ShopService.SetAnalyticsHooksForTests(nil)
 
 	context.ResetCounters()
 	local comingSoonOk = equipBackpack(player, "Cap")

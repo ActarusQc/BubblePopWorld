@@ -130,6 +130,9 @@ do
 	runSuite("BackpackServiceTests", function()
 		return require(script.BackpackServiceTests)
 	end)
+	runSuite("ChestServiceTests", function()
+		return require(script.ChestServiceTests)
+	end)
 end
 
 print("[Bubble Pop World] serveur prêt.")

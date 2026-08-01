@@ -1898,6 +1898,250 @@ function GameAnalyticsServiceTests.Run(): boolean
 	check(GameAnalyticsService.SumBagValueByZone(soldOrderProfile) == 0, "Task11 sell-order → bag 0 après")
 	GameAnalyticsService.FlushAndRemovePlayer(playerA)
 
+	--------------------------------------------------------------------
+	-- Task 12 — Shop OnUpgradePurchased + sinks / sources
+	--------------------------------------------------------------------
+
+	-- Task12-1 : OnUpgradePurchased → sink Shop + sku id brut + onboarding
+	beginIsolatedCase()
+	local upgradeProfile = buildAnalyticsProfile({
+		Coins = 9000,
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+				SoldFirstBackpack = true,
+			},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, upgradeProfile, true)
+	check(AnalyticsConfig.IsEconomySkuAllowed("Speed") == true, "Task12 SKU Speed allowlist (id brut)")
+	GameAnalyticsService.OnUpgradePurchased(playerA, {
+		upgradeId = "Speed",
+		amount = 1087,
+		endingBalance = 8913,
+	})
+	check(countOnboarding(recording, "PurchasedFirstUpgrade") == 1, "Task12 upgrade → PurchasedFirstUpgrade")
+	check(#recording.economy == 1, "Task12 upgrade → un sink économie")
+	check(
+		economyFlowName(recording.economy[1].flowType) == "Sink"
+			and recording.economy[1].transactionType == "Shop"
+			and recording.economy[1].itemSku == "Speed"
+			and recording.economy[1].amount == 1087
+			and recording.economy[1].endingBalance == 8913,
+		"Task12 upgrade → Sink Shop sku=Speed amount/endingBalance"
+	)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task12-2 : premier upgrade → onboarding une fois
+	beginIsolatedCase()
+	local firstUpgradeProfile = buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+				SoldFirstBackpack = true,
+			},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, firstUpgradeProfile, true)
+	GameAnalyticsService.OnUpgradePurchased(playerA, {
+		upgradeId = "Jump",
+		amount = 1000,
+		endingBalance = 500,
+	})
+	check(countOnboarding(recording, "PurchasedFirstUpgrade") == 1, "Task12 premier upgrade → onboarding une fois")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task12-3 : second upgrade → pas de second onboarding emit
+	beginIsolatedCase()
+	local secondUpgradeProfile = buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			OnboardingCompleted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+				SoldFirstBackpack = true,
+				PurchasedFirstUpgrade = true,
+			},
+		},
+	})
+	GameAnalyticsService.InitPlayer(playerA, secondUpgradeProfile, false)
+	GameAnalyticsService.OnUpgradePurchased(playerA, {
+		upgradeId = "Power",
+		amount = 500,
+		endingBalance = 100,
+	})
+	check(countOnboarding(recording, "PurchasedFirstUpgrade") == 0, "Task12 second upgrade → pas de re-emit onboarding")
+	check(countEconomy(recording, "Power") == 1, "Task12 second upgrade → sink Power quand même")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task12-4 : sink item (LogCoinSink) → aucun onboarding
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+				SoldFirstBackpack = true,
+			},
+		},
+	}), true)
+	check(AnalyticsConfig.IsEconomySkuAllowed("BackpackGold") == true, "Task12 SKU BackpackGold allowlist (id brut)")
+	GameAnalyticsService.LogCoinSink(playerA, {
+		amount = 10000,
+		endingBalance = 500,
+		transactionType = "Shop",
+		itemSku = "BackpackGold",
+	})
+	check(countEconomy(recording, "BackpackGold") == 1, "Task12 item sink → BackpackGold")
+	check(countOnboarding(recording, "PurchasedFirstUpgrade") == 0, "Task12 item sink → aucun onboarding upgrade")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task12-5 : sku invalide → aucun sink + warn ; pas d'onboarding
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+				SoldFirstBackpack = true,
+			},
+		},
+	}), true)
+	warnCalls = {}
+	GameAnalyticsService.OnUpgradePurchased(playerA, {
+		upgradeId = "NotARealUpgradeSku",
+		amount = 10,
+		endingBalance = 5,
+	})
+	check(#recording.economy == 0, "Task12 sku invalide → aucun sink")
+	check(countOnboarding(recording, "PurchasedFirstUpgrade") == 0, "Task12 sku invalide → aucun onboarding")
+	check(#warnCalls >= 1, "Task12 sku invalide → warn")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task12-6 : ctx invalide → drop
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	warnCalls = {}
+	GameAnalyticsService.OnUpgradePurchased(playerA, nil)
+	GameAnalyticsService.OnUpgradePurchased(playerA, "bad")
+	check(#recording.economy == 0, "Task12 ctx invalide → aucun sink")
+	check(#warnCalls >= 1, "Task12 ctx invalide → warn")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task12-7 : erreur sink → pas de throw
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+				SoldFirstBackpack = true,
+			},
+		},
+	}), true)
+	GameAnalyticsService.SetSink({
+		logOnboarding = function() end,
+		logFunnel = function() end,
+		logCustom = function() end,
+		logEconomy = function()
+			error("economy sink boom")
+		end,
+		logProgressionComplete = function() end,
+	})
+	local sinkErrOk = pcall(function()
+		GameAnalyticsService.OnUpgradePurchased(playerA, {
+			upgradeId = "CoinMult",
+			amount = 200,
+			endingBalance = 50,
+		})
+	end)
+	check(sinkErrOk == true, "Task12 sink error → OnUpgradePurchased ne throw pas")
+	attachRecordingSink(recording)
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task12-8 : sku ne contient jamais Name/UserId
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile(), false)
+	GameAnalyticsService.OnUpgradePurchased(playerA, {
+		upgradeId = "Speed",
+		amount = 10,
+		endingBalance = 1,
+	})
+	GameAnalyticsService.LogCoinSink(playerA, {
+		amount = 20,
+		endingBalance = 1,
+		transactionType = "Shop",
+		itemSku = "BackpackEmerald",
+	})
+	GameAnalyticsService.LogCoinSource(playerA, {
+		amount = 30,
+		endingBalance = 31,
+		transactionType = "Gameplay",
+		itemSku = "Chest",
+	})
+	local skuLeak = false
+	for _, entry in ipairs(recording.economy) do
+		local sku = tostring(entry.itemSku or "")
+		if string.find(sku, "Name", 1, true) or string.find(sku, "UserId", 1, true) or string.find(sku, playerA.Name, 1, true) then
+			skuLeak = true
+		end
+	end
+	check(skuLeak == false, "Task12 → aucun Name/UserId dans itemSku")
+	check(#recording.economy == 3, "Task12 → trois emits economy (upgrade/item/chest)")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
+	-- Task12-9 : amount invalide → pas de sink ; onboarding si upgradeId allowlist
+	beginIsolatedCase()
+	GameAnalyticsService.InitPlayer(playerA, buildAnalyticsProfile({
+		Analytics = {
+			OnboardingStarted = true,
+			Onboarding = {
+				JoinedGame = true,
+				ReachedMainBubbleRoom = true,
+				PoppedFirstBubble = true,
+				BackpackFullFirstTime = true,
+				ReturnedToLobbyAfterFullBackpack = true,
+				SoldFirstBackpack = true,
+			},
+		},
+	}), true)
+	warnCalls = {}
+	GameAnalyticsService.OnUpgradePurchased(playerA, {
+		upgradeId = "Speed",
+		amount = 0,
+		endingBalance = 10,
+	})
+	check(countOnboarding(recording, "PurchasedFirstUpgrade") == 1, "Task12 amount invalide → onboarding si sku valide")
+	check(#recording.economy == 0, "Task12 amount invalide → aucun sink")
+	check(#warnCalls >= 1, "Task12 amount invalide → warn sink")
+	GameAnalyticsService.FlushAndRemovePlayer(playerA)
+
 	GameAnalyticsService.SetWarnHandler(nil)
 	GameAnalyticsService.SetSink(nil)
 	GameAnalyticsService.StopFlushLoopForTests()

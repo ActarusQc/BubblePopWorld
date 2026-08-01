@@ -932,8 +932,32 @@ function GameAnalyticsService.OnBackpackSold(
 	})
 end
 
-function GameAnalyticsService.OnUpgradePurchased(player: Player, _ctx: any?)
+function GameAnalyticsService.OnUpgradePurchased(player: Player, ctx: any?)
+	if type(ctx) ~= "table" then
+		warnEconomyDrop(player, "OnUpgradePurchased", "invalid ctx")
+		return
+	end
+	local upgradeId = ctx.upgradeId
+	if type(upgradeId) ~= "string" or upgradeId == "" then
+		warnEconomyDrop(player, "OnUpgradePurchased", "invalid upgradeId")
+		return
+	end
+
+	-- SKU = id upgrade brut (GameConfig / BuildEconomySkuSet), pas Upgrade_<id>.
+	if not AnalyticsConfig.IsEconomySkuAllowed(upgradeId) then
+		warnEconomyDrop(player, "OnUpgradePurchased", "sku not allowed")
+		return
+	end
+
+	-- Achat shop déjà réussi + id config valide → onboarding même si le sink échoue ensuite.
 	GameAnalyticsService.ObserveOnboarding(player, "PurchasedFirstUpgrade")
+
+	GameAnalyticsService.LogCoinSink(player, {
+		amount = ctx.amount,
+		endingBalance = ctx.endingBalance,
+		transactionType = "Shop",
+		itemSku = upgradeId,
+	})
 end
 
 function GameAnalyticsService.LogCoinSource(player: Player, ctx: CoinEconomyContext): boolean

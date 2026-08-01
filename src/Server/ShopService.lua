@@ -12,6 +12,39 @@ local BackpackVisual = require(script.Parent.BackpackVisual)
 
 local ShopService = {}
 
+-- Seam tests (harness externe) : évite require GameAnalyticsService hors Roblox.
+type AnalyticsHooksForTests = {
+	onUpgradePurchased: ((player: Player, ctx: any) -> ())?,
+	logCoinSink: ((player: Player, ctx: any) -> ())?,
+}
+local analyticsHooksForTests: AnalyticsHooksForTests? = nil
+
+function ShopService.SetAnalyticsHooksForTests(hooks: AnalyticsHooksForTests?)
+	analyticsHooksForTests = hooks
+end
+
+local function notifyUpgradePurchased(player: Player, ctx: any)
+	if analyticsHooksForTests and analyticsHooksForTests.onUpgradePurchased then
+		analyticsHooksForTests.onUpgradePurchased(player, ctx)
+		return
+	end
+	pcall(function()
+		local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+		GameAnalyticsService.OnUpgradePurchased(player, ctx)
+	end)
+end
+
+local function notifyItemCoinSink(player: Player, ctx: any)
+	if analyticsHooksForTests and analyticsHooksForTests.logCoinSink then
+		analyticsHooksForTests.logCoinSink(player, ctx)
+		return
+	end
+	pcall(function()
+		local GameAnalyticsService = require(script.Parent.GameAnalyticsService)
+		GameAnalyticsService.LogCoinSink(player, ctx)
+	end)
+end
+
 local ITEM_LABELS: { [string]: string } = {
 	BackpackGold = L10n.GoldBackpack,
 	BackpackEmerald = L10n.EmeraldBackpack,
@@ -182,6 +215,12 @@ local function buyUpgrade(player: Player, id: any)
 	DataService.ApplyCharacterStats(player)
 	DataService.Push(player)
 	DataService.NotifyCoinsChanged(player)
+	-- Analytics post-succès uniquement (SKU = id upgrade brut, allowlist BuildEconomySkuSet).
+	notifyUpgradePurchased(player, {
+		upgradeId = id,
+		amount = cost,
+		endingBalance = profile.Coins,
+	})
 	return true, ("%s level %d"):format(def.Label, level + 1)
 end
 
@@ -220,6 +259,13 @@ local function buyItem(player: Player, id: any)
 	DataService.Push(player)
 	DataService.NotifyCoinsChanged(player)
 	Remotes.Event("Announce"):FireClient(player, L10n.ItemPurchased, "item")
+	-- Analytics post-succès uniquement (SKU = id item brut ; jamais d'onboarding item).
+	notifyItemCoinSink(player, {
+		amount = def.Cost,
+		endingBalance = profile.Coins,
+		transactionType = "Shop",
+		itemSku = id,
+	})
 	return true, L10n.ItemPurchased
 end
 
