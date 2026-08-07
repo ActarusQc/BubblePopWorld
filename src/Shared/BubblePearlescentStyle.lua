@@ -4,19 +4,18 @@
 -- modification de la logique de pop / récompense. Le coeur clair est un dôme
 -- Neon local, superposé au dôme serveur pour garder un rendu stable selon la caméra.
 
+local ENABLED_ZONES: { [string]: boolean } = {
+	ClassicZone = true,
+	GameRoom = true,
+	SummerZone = false,
+}
+
 local BubblePearlescentStyle = {
 	Enabled = true,
-
-	-- Première passe : zone principale uniquement. Summer garde son identité orange.
-	Zones = {
-		ClassicZone = true,
-		GameRoom = true,
-		SummerZone = false,
-	},
-
-	CoreName = "BPW_PearlCore",
+	Zones = ENABLED_ZONES,
 
 	-- Géométrie du petit dôme clair qui émerge du centre de la bulle.
+	CoreName = "BPW_PearlCore",
 	CoreScaleXZ = 0.78,
 	CoreScaleY = 0.90,
 	CoreYOffset = 0.23,
