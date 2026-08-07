@@ -1,8 +1,11 @@
 --!strict
 -- Configuration visuelle du fini « Pearlescent Toy ».
--- Rendu client-only, sans vraie lumière et sans Glass afin de garder un aspect stable
--- quand la caméra tourne. Le dôme serveur reste la bordure colorée; un large dôme
--- nacré translucide + un petit reflet fixe donnent le relief.
+-- Rendu client-only : la Part serveur garde toute la physique/gameplay, mais elle est
+-- masquée localement près du joueur et remplacée par 3 couches simples :
+--   1) un disque/rim nacré;
+--   2) un dôme coloré plus haut et plus doux;
+--   3) un petit reflet blanc fixe.
+-- Aucun Glass, aucune vraie lumière, aucun post-FX : rendu stable quand la caméra tourne.
 
 local ENABLED_ZONES: { [string]: boolean } = {
 	ClassicZone = true,
@@ -14,38 +17,42 @@ local BubblePearlescentStyle = {
 	Enabled = true,
 	Zones = ENABLED_ZONES,
 
-	ShellName = "BPW_PearlShell",
+	RimName = "BPW_PearlRim",
+	DomeName = "BPW_PearlDome",
 	GlintName = "BPW_PearlGlint",
 
-	-- Large dôme intérieur : presque toute la bulle, pour éviter l'effet « rond blanc au centre ».
-	ShellScaleXZ = 0.94,
-	ShellScaleY = 0.97,
-	ShellYOffset = 0.08,
+	-- Rim visible sous le dôme : donne la bordure claire de la maquette.
+	RimDiameterScale = 0.94,
+	RimThickness = 0.16,
+	RimYOffset = -0.60,
+	RimWhiteMix = 0.52,
+	RimTransparency = 0.04,
+	RimMaterial = Enum.Material.Neon,
 
-	-- Mélange léger vers un blanc froid : la teinte originale reste bien visible.
+	-- Dôme principal : plus étroit mais plus haut que l'ancienne bulle plate.
+	DomeScaleXZ = 0.86,
+	DomeScaleY = 1.30,
+	DomeYOffset = 0.20,
 	PearlTint = Color3.fromRGB(250, 248, 255),
-	NormalWhiteMix = 0.34,
-	SpecialWhiteMix = 0.20,
+	NormalWhiteMix = 0.28,
+	SpecialWhiteMix = 0.12,
+	DomeMaterial = Enum.Material.Neon,
+	NearTransparency = 0.12,
+	FarTransparency = 0.48,
 
-	-- Neon translucide = rendu stable et doux, sans shading caméra-dépendant.
-	ShellMaterial = Enum.Material.Neon,
-	NearTransparency = 0.30,
-	FarTransparency = 0.62,
-
-	-- Petit reflet « jouet » placé de façon fixe par rapport à la bulle.
-	-- Comme il ne suit pas la caméra, il ne recrée pas l'ancien bug sombre/clair.
+	-- Petit reflet « jouet » fixe. Il ne suit pas la caméra, donc pas d'effet sombre/clair.
 	GlintMaterial = Enum.Material.Neon,
 	GlintColor = Color3.fromRGB(255, 255, 255),
-	GlintTransparency = 0.22,
-	GlintScale = Vector3.new(0.18, 0.10, 0.14),
-	GlintOffsetFraction = Vector3.new(-0.14, 0.31, -0.13),
+	GlintTransparency = 0.16,
+	GlintScale = Vector3.new(0.13, 0.07, 0.11),
+	GlintOffsetFraction = Vector3.new(-0.18, 0.38, -0.16),
 
-	-- LOD : deux petites Parts locales par bulle proche seulement.
-	DesktopMaxDistance = 150,
-	DesktopMaxActiveBubbles = 650,
+	-- LOD : 3 petites Parts locales par bulle proche seulement.
+	DesktopMaxDistance = 155,
+	DesktopMaxActiveBubbles = 550,
 	MobileMaxDistance = 100,
-	MobileMaxActiveBubbles = 300,
-	FadeStartRatio = 0.70,
+	MobileMaxActiveBubbles = 260,
+	FadeStartRatio = 0.72,
 	LodRefreshSeconds = 0.45,
 	VisualRefreshSeconds = 0.10,
 }
@@ -55,11 +62,15 @@ function BubblePearlescentStyle.IsZoneEnabled(zoneId: string): boolean
 		and BubblePearlescentStyle.Zones[zoneId] == true
 end
 
-function BubblePearlescentStyle.ResolveShellColor(baseColor: Color3, isSpecial: boolean): Color3
+function BubblePearlescentStyle.ResolveDomeColor(baseColor: Color3, isSpecial: boolean): Color3
 	local mix = if isSpecial
 		then BubblePearlescentStyle.SpecialWhiteMix
 		else BubblePearlescentStyle.NormalWhiteMix
 	return baseColor:Lerp(BubblePearlescentStyle.PearlTint, mix)
+end
+
+function BubblePearlescentStyle.ResolveRimColor(baseColor: Color3): Color3
+	return baseColor:Lerp(BubblePearlescentStyle.PearlTint, BubblePearlescentStyle.RimWhiteMix)
 end
 
 function BubblePearlescentStyle.ResolveTransparency(distance: number, maxDistance: number): number
@@ -76,8 +87,8 @@ function BubblePearlescentStyle.ResolveTransparency(distance: number, maxDistanc
 end
 
 function BubblePearlescentStyle.ResolveGlintTransparency(distance: number, maxDistance: number): number
-	local shellT = BubblePearlescentStyle.ResolveTransparency(distance, maxDistance)
-	return math.clamp(BubblePearlescentStyle.GlintTransparency + shellT * 0.35, 0, 1)
+	local domeT = BubblePearlescentStyle.ResolveTransparency(distance, maxDistance)
+	return math.clamp(BubblePearlescentStyle.GlintTransparency + domeT * 0.28, 0, 1)
 end
 
 return BubblePearlescentStyle
