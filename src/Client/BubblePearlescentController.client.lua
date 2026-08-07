@@ -1,9 +1,10 @@
 --!strict
 -- Finition locale « Pearlescent Toy » pour les bulles.
--- Deux petites couches visuelles seulement sur les bulles proches :
---   1) un large dôme nacré translucide qui laisse la bordure colorée visible;
---   2) un petit reflet fixe qui donne l'aspect jouet/glossy.
--- Aucune vraie lumière, aucun Glass, aucune collision et aucune logique gameplay.
+-- Près du joueur, la Part serveur est masquée uniquement sur ce client puis remplacée par :
+--   1) un rim/disque nacré;
+--   2) un dôme plus haut et plus doux;
+--   3) un petit reflet blanc fixe.
+-- La Part serveur conserve toute la collision et toute la logique gameplay.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -16,8 +17,9 @@ if Style.Enabled ~= true then
 end
 
 type Decoration = {
-	shell: Part,
-	shellMesh: SpecialMesh,
+	rim: Part,
+	dome: Part,
+	domeMesh: SpecialMesh,
 	glint: Part,
 	glintMesh: SpecialMesh,
 }
@@ -64,17 +66,21 @@ local function register(inst: Instance)
 	end
 end
 
+local function restoreSource(part: BasePart)
+	if part.Parent then
+		part.LocalTransparencyModifier = 0
+	end
+end
+
 local function destroyDecoration(part: BasePart)
 	local state = decorated[part]
 	decorated[part] = nil
 	wantedDistance[part] = nil
+	restoreSource(part)
 	if state then
-		if state.shell.Parent then
-			state.shell:Destroy()
-		end
-		if state.glint.Parent then
-			state.glint:Destroy()
-		end
+		if state.rim.Parent then state.rim:Destroy() end
+		if state.dome.Parent then state.dome:Destroy() end
+		if state.glint.Parent then state.glint:Destroy() end
 	end
 end
 
@@ -95,7 +101,7 @@ local function baseMeshScale(part: BasePart): Vector3
 	return Vector3.new(0.92, 0.98, 0.92)
 end
 
-local function makeVisualPart(name: string, source: BasePart, offset: Vector3): (Part, SpecialMesh)
+local function makeSphereVisual(name: string, source: BasePart, offset: Vector3): (Part, SpecialMesh)
 	local p = Instance.new("Part")
 	p.Name = name
 	p.Archivable = false
@@ -126,8 +132,37 @@ local function makeVisualPart(name: string, source: BasePart, offset: Vector3): 
 	return p, mesh
 end
 
-local function shellOffset(part: BasePart): Vector3
-	return Vector3.new(0, Style.ShellYOffset, 0)
+local function makeRim(source: BasePart): Part
+	local baseScale = baseMeshScale(source)
+	local diameter = math.min(source.Size.X * baseScale.X, source.Size.Z * baseScale.Z) * Style.RimDiameterScale
+
+	local rim = Instance.new("Part")
+	rim.Name = Style.RimName
+	rim.Archivable = false
+	rim.Shape = Enum.PartType.Cylinder
+	rim.Anchored = true
+	rim.CanCollide = false
+	rim.CanTouch = false
+	rim.CanQuery = false
+	rim.CastShadow = false
+	rim.Massless = true
+	rim.Reflectance = 0
+	rim.TopSurface = Enum.SurfaceType.Smooth
+	rim.BottomSurface = Enum.SurfaceType.Smooth
+	rim.Size = Vector3.new(Style.RimThickness, diameter, diameter)
+	rim.CFrame = source.CFrame
+		* CFrame.new(0, Style.RimYOffset, 0)
+		* CFrame.Angles(0, 0, math.rad(90))
+	rim.Transparency = 1
+	rim.Parent = visualFolder
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = source
+	weld.Part1 = rim
+	weld.Parent = rim
+	rim.Anchored = false
+
+	return rim
 end
 
 local function glintOffset(part: BasePart): Vector3
@@ -137,12 +172,15 @@ end
 
 local function updateGeometry(part: BasePart, state: Decoration)
 	local baseScale = baseMeshScale(part)
+	local diameter = math.min(part.Size.X * baseScale.X, part.Size.Z * baseScale.Z) * Style.RimDiameterScale
 
-	state.shell.Size = part.Size
-	state.shellMesh.Scale = Vector3.new(
-		baseScale.X * Style.ShellScaleXZ,
-		baseScale.Y * Style.ShellScaleY,
-		baseScale.Z * Style.ShellScaleXZ
+	state.rim.Size = Vector3.new(Style.RimThickness, diameter, diameter)
+
+	state.dome.Size = part.Size
+	state.domeMesh.Scale = Vector3.new(
+		baseScale.X * Style.DomeScaleXZ,
+		baseScale.Y * Style.DomeScaleY,
+		baseScale.Z * Style.DomeScaleXZ
 	)
 
 	state.glint.Size = part.Size
@@ -156,19 +194,25 @@ end
 
 local function ensureDecoration(part: BasePart): Decoration?
 	local existing = decorated[part]
-	if existing and existing.shell.Parent and existing.glint.Parent then
+	if existing and existing.rim.Parent and existing.dome.Parent and existing.glint.Parent then
 		return existing
 	end
 	if not part.Parent then
 		return nil
 	end
 
-	local shell, shellMesh = makeVisualPart(Style.ShellName, part, shellOffset(part))
-	local glint, glintMesh = makeVisualPart(Style.GlintName, part, glintOffset(part))
+	local rim = makeRim(part)
+	local dome, domeMesh = makeSphereVisual(
+		Style.DomeName,
+		part,
+		Vector3.new(0, Style.DomeYOffset, 0)
+	)
+	local glint, glintMesh = makeSphereVisual(Style.GlintName, part, glintOffset(part))
 
 	local state: Decoration = {
-		shell = shell,
-		shellMesh = shellMesh,
+		rim = rim,
+		dome = dome,
+		domeMesh = domeMesh,
 		glint = glint,
 		glintMesh = glintMesh,
 	}
@@ -177,35 +221,49 @@ local function ensureDecoration(part: BasePart): Decoration?
 	return state
 end
 
-local function hideDecoration(state: Decoration)
-	state.shell.Transparency = 1
+local function hideDecoration(part: BasePart, state: Decoration)
+	state.rim.Transparency = 1
+	state.dome.Transparency = 1
 	state.glint.Transparency = 1
+	restoreSource(part)
 end
 
 local function updateDecoration(part: BasePart, distance: number)
 	local state = decorated[part]
-	if not state or not state.shell.Parent or not state.glint.Parent or not part.Parent then
+	if not state or not state.rim.Parent or not state.dome.Parent or not state.glint.Parent or not part.Parent then
 		return
 	end
 
 	local zoneIdAny = part:GetAttribute("ZoneId")
 	if type(zoneIdAny) ~= "string" or not Style.IsZoneEnabled(zoneIdAny) then
-		hideDecoration(state)
+		hideDecoration(part, state)
 		return
 	end
 
 	local alive = part:GetAttribute("Alive") == true and part.Transparency < 0.99
 	if not alive then
-		hideDecoration(state)
+		hideDecoration(part, state)
 		return
 	end
 
 	local isSpecial = part:GetAttribute("IsSpecial") == true
-	state.shell.Material = Style.ShellMaterial
-	state.shell.Color = Style.ResolveShellColor(part.Color, isSpecial)
-	state.shell.Reflectance = 0
-	state.shell.CastShadow = false
-	state.shell.Transparency = Style.ResolveTransparency(distance, maxDistance)
+	local domeTransparency = Style.ResolveTransparency(distance, maxDistance)
+
+	-- Masque seulement le rendu de la Part serveur sur ce client.
+	-- Collision, attributs, pop et événements restent sur la vraie Part.
+	part.LocalTransparencyModifier = 1
+
+	state.rim.Material = Style.RimMaterial
+	state.rim.Color = Style.ResolveRimColor(part.Color)
+	state.rim.Reflectance = 0
+	state.rim.CastShadow = false
+	state.rim.Transparency = math.clamp(Style.RimTransparency + domeTransparency * 0.18, 0, 1)
+
+	state.dome.Material = Style.DomeMaterial
+	state.dome.Color = Style.ResolveDomeColor(part.Color, isSpecial)
+	state.dome.Reflectance = 0
+	state.dome.CastShadow = false
+	state.dome.Transparency = domeTransparency
 
 	state.glint.Material = Style.GlintMaterial
 	state.glint.Color = Style.GlintColor
@@ -235,10 +293,7 @@ local function refreshLod()
 			if type(zoneId) == "string" and Style.IsZoneEnabled(zoneId) and alive then
 				local distance = (cameraPos - part.Position).Magnitude
 				if distance <= maxDistance then
-					table.insert(candidates, {
-						part = part,
-						distance = distance,
-					})
+					table.insert(candidates, { part = part, distance = distance })
 				end
 			end
 		end
@@ -289,7 +344,7 @@ gameZones.DescendantRemoving:Connect(unregister)
 refreshLod()
 refreshVisuals()
 
-print(("[BubblePearlescent] v2 enabled | mobile=%s | max=%d | distance=%d")
+print(("[BubblePearlescent] v3 enabled | mobile=%s | max=%d | distance=%d")
 	:format(tostring(isMobile), maxActiveBubbles, maxDistance))
 
 task.spawn(function()
