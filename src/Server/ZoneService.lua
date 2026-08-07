@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
@@ -32,6 +33,9 @@ local DataService = require(script.Parent.DataService)
 local BackpackService = require(script.Parent.BackpackService)
 local ZoneAccess = require(script.Parent.ZoneAccess)
 local ZoneBuilder = require(script.Parent.ZoneBuilder)
+local CentralHubBuilder = require(script.Parent.CentralHubBuilder)
+local HubLayout = require(Shared.HubLayout)
+local ItemShopVisualShell = require(Shared.ItemShopVisualShell)
 local LobbyEditingPreview = require(Shared.LobbyEditingPreview)
 local SummerZoneEditingPreview = require(Shared.SummerZoneEditingPreview)
 local EnvironmentBackdropBuilder = require(Shared.EnvironmentBackdropBuilder)
@@ -265,6 +269,15 @@ local gameRoomSpawnPart: BasePart? = nil
 -- Zone de vente des bulles uniquement (la boutique d'items n'en a pas).
 local sellZonePart: BasePart? = nil
 
+-- Hub central actif : le lobby séparé, le passage physique et les pads sud ne sont
+-- plus construits. Le hub porte spawn, vente, boutique, classement, règles et transit.
+-- `TeleportToLobby` et `TeleportToGameRoom` visent alors la même cible (le hub) :
+-- tous les comportements existants (spawn initial, FallReset, filet onboarding)
+-- continuent de fonctionner sans branche supplémentaire.
+local function hubActive(): boolean
+	return Config.Hub.Enabled == true and Config.Hub.ReplacesLobby == true
+end
+
 local function disableStudioBaseplate()
 	local baseplate = workspace:FindFirstChild("Baseplate")
 	if baseplate and baseplate:IsA("BasePart") then
@@ -348,29 +361,42 @@ local function buildSafetyBorders(gameRoom: Folder)
 	local safetyGap = 2
 	local bubbleExtentX = ((G.SizeX / 2) - 0.5) * G.Spacing + G.BubbleSize.X / 2 + safetyGap
 	local bubbleExtentZ = ((G.SizeZ / 2) - 0.5) * G.Spacing + G.BubbleSize.Z / 2 + safetyGap
+	-- Fond ORIGINAL uniquement (jamais d'extension rear pour le hub Tripo).
+	local northExtentZ = bubbleExtentZ
 
 	ensureBorderPair(borders, "BorderNorth",
 		Vector3.new((bubbleExtentX + t) * 2, 0, t),
-		CFrame.new(G.Origin.X, 0, G.Origin.Z + bubbleExtentZ + t / 2))
+		CFrame.new(G.Origin.X, 0, G.Origin.Z + northExtentZ + t / 2))
 
 	-- Ouverture est vers la Summer Zone (passerelle) — même largeur que le pont.
 	local eastGap = Config.GameRoom.PathSize.X + 6
-	local eastSeg = math.max(0, bubbleExtentZ + t - eastGap / 2)
-	if eastSeg > 0 then
+	local eastSegNorth = math.max(0, northExtentZ + t - eastGap / 2)
+	local eastSegSouth = math.max(0, bubbleExtentZ + t - eastGap / 2)
+	if eastSegNorth > 0 then
 		ensureBorderPair(borders, "BorderEastNorth",
-			Vector3.new(t, 0, eastSeg),
-			CFrame.new(G.Origin.X + bubbleExtentX + t / 2, 0, G.Origin.Z + (eastGap / 2 + eastSeg / 2)))
+			Vector3.new(t, 0, eastSegNorth),
+			CFrame.new(G.Origin.X + bubbleExtentX + t / 2, 0, G.Origin.Z + (eastGap / 2 + eastSegNorth / 2)))
+	end
+	if eastSegSouth > 0 then
 		ensureBorderPair(borders, "BorderEastSouth",
-			Vector3.new(t, 0, eastSeg),
-			CFrame.new(G.Origin.X + bubbleExtentX + t / 2, 0, G.Origin.Z - (eastGap / 2 + eastSeg / 2)))
+			Vector3.new(t, 0, eastSegSouth),
+			CFrame.new(G.Origin.X + bubbleExtentX + t / 2, 0, G.Origin.Z - (eastGap / 2 + eastSegSouth / 2)))
 	end
 
 	ensureBorderPair(borders, "BorderWest",
-		Vector3.new(t, 0, (bubbleExtentZ + t) * 2),
-		CFrame.new(G.Origin.X - bubbleExtentX - t / 2, 0, G.Origin.Z))
+		Vector3.new(t, 0, (northExtentZ + bubbleExtentZ + t * 2)),
+		CFrame.new(G.Origin.X - bubbleExtentX - t / 2, 0, G.Origin.Z + (northExtentZ - bubbleExtentZ) / 2))
 
 	-- Ouverture sud calibrée sur la passerelle (ArrivalPath) : juste assez large pour
-	-- la traverser, pas assez pour ouvrir un trou de chaque côté.
+	-- la traverser, pas assez pour ouvrir un trou de chaque côté. Avec le hub central,
+	-- plus aucune passerelle sud n'existe : la barrière se referme entièrement.
+	if hubActive() then
+		ensureBorderPair(borders, "BorderSouth",
+			Vector3.new((bubbleExtentX + t) * 2, 0, t),
+			CFrame.new(G.Origin.X, 0, G.Origin.Z - bubbleExtentZ - t / 2))
+		return
+	end
+
 	local gapWidth = Config.GameRoom.PathSize.X + 8
 	local segLen = math.max(0, bubbleExtentX + t - gapWidth / 2)
 	if segLen > 0 then
@@ -2346,6 +2372,22 @@ end
 -- Ne désactive PAS CharacterAutoLoads. Pose uniquement le SpawnLocation pour que
 -- le premier personnage de Test/F5 n'apparaisse pas à l'origine monde.
 function ZoneService.EnsureEarlySpawnLocation(): BasePart
+	if hubActive() then
+		local root = workspace:FindFirstChild("BubblePopWorld")
+		if not (root and root:IsA("Folder")) then
+			if root then
+				root:Destroy()
+			end
+			local folder = Instance.new("Folder")
+			folder.Name = "BubblePopWorld"
+			folder.Parent = workspace
+			root = folder
+		end
+		local hubSpawn = CentralHubBuilder.EnsureEarlySpawnLocation(root)
+		spawnDebug("EnsureEarlySpawnLocation hub", hubSpawn.Position)
+		return hubSpawn
+	end
+
 	local G = Config.Grid
 	local R = Config.GameRoom
 	local spawnPos = R.SpawnPadPosition
@@ -2416,6 +2458,67 @@ function ZoneService.EnsureEarlySpawnLocation(): BasePart
 end
 
 --------------------------------------------------------------------
+-- Décor Studio du lobby : rangé hors du Workspace quand le hub le remplace
+--------------------------------------------------------------------
+-- Le lobby n'est plus atteignable : laisser son décor Studio en place afficherait des
+-- bâtiments flottants à l'horizon (le plancher, lui, n'est plus généré). On le déplace
+-- dans ServerStorage : invisible pour les clients. Jamais de masquage par Y élevé.
+-- Restauration via `restoreParkedLobbyDecor` si `Hub.Enabled = false` dans la session.
+local function parkLobbyStudioDecor(lobby: Folder)
+	local parked = ensureFolder(ServerStorage, ItemShopVisualShell.ParkedFolderName)
+	local moved = 0
+	local fromAttr = ItemShopVisualShell.ParkedFromAttribute
+
+	for _, child in ipairs(lobby:GetChildren()) do
+		if child:GetAttribute("GeneratedByCode") ~= true then
+			child:SetAttribute(fromAttr, "Lobby")
+			child.Parent = parked
+			moved += 1
+		end
+	end
+
+	-- Toute copie d'ItemShopVisual (racine, imbriquée, Workspace, Lobby).
+	moved += ItemShopVisualShell.ParkLobbyShopVisuals(parked)
+
+	local stray = ItemShopVisualShell.ListStrayShopVisualPaths()
+	if #stray > 0 then
+		warn(("[ZoneService] Hub central : boutique Studio encore dans Workspace après park : %s")
+			:format(table.concat(stray, ", ")))
+	elseif ItemShopVisualShell.HasAbnormallyHighShopGeometry() then
+		warn("[ZoneService] Hub central : géométrie de boutique à altitude anormale encore présente.")
+	end
+
+	if moved > 0 then
+		print(("[ZoneService] Hub central : %d décor(s) Studio du lobby rangés dans ServerStorage.%s.")
+			:format(moved, parked.Name))
+	end
+end
+
+local function restoreParkedLobbyDecor(lobby: Folder)
+	local parked = ServerStorage:FindFirstChild(ItemShopVisualShell.ParkedFolderName)
+	if not parked then
+		return
+	end
+	local decorRoot = workspace:FindFirstChild(ItemShopVisualShell.GetStudioDecorationRootName())
+	if not decorRoot then
+		decorRoot = Instance.new("Folder")
+		decorRoot.Name = ItemShopVisualShell.GetStudioDecorationRootName()
+		decorRoot.Parent = workspace
+	end
+	local restored = ItemShopVisualShell.RestoreParkedLobbyShopVisuals(parked, lobby, decorRoot)
+	-- Autres décors lobby (SellKiosk, etc.) encore dans le dossier park.
+	for _, child in ipairs(parked:GetChildren()) do
+		child:SetAttribute(ItemShopVisualShell.ParkedFromAttribute, nil)
+		child.Parent = lobby
+		restored += 1
+	end
+	if restored > 0 then
+		print(("[ZoneService] Lobby restauré : %d décor(s) ressortis de ServerStorage.%s.")
+			:format(restored, parked.Name))
+	end
+end
+
+--------------------------------------------------------------------
 -- Monde additif
 --------------------------------------------------------------------
 function ZoneService.EnsureWorld(): Folder
@@ -2437,9 +2540,32 @@ function ZoneService.EnsureWorld(): Folder
 	local connectionFolder = ensureFolder(root, "Connection")
 	clearGeneratedChildren(connectionFolder)
 
-	buildLobby(lobby)
-	buildGameRoom(gameRoom)
-	buildPhysicalConnection(root)
+	if hubActive() then
+		parkLobbyStudioDecor(lobby)
+		-- Anciens panneaux HOW TO PLAY / classement lobby devenus inutiles.
+		local lobbyDecor = lobby:FindFirstChild("LobbyDecor")
+		if lobbyDecor then
+			for _, name in ipairs({ "InstructionBoard", "GlobalLeaderboardBoard", "LeaderboardBoard", "LeaderboardHeader", "GuideSign" }) do
+				local inst = lobbyDecor:FindFirstChild(name, true)
+				if inst then
+					print("[CentralHub] removed legacy board:", inst:GetFullName())
+					inst:Destroy()
+				end
+			end
+		end
+		CentralHubBuilder.Build(root)
+		local marker = CentralHubBuilder.GetSpawnMarker()
+		-- Une seule destination : le hub est à la fois « lobby » et « salle de jeu ».
+		lobbySpawnPart = marker
+		gameRoomSpawnPart = marker
+		sellZonePart = CentralHubBuilder.GetSellZone()
+		buildSafetyBorders(gameRoom)
+	else
+		restoreParkedLobbyDecor(lobby)
+		buildLobby(lobby)
+		buildGameRoom(gameRoom)
+		buildPhysicalConnection(root)
+	end
 
 	-- Zones de jeu (planches / passerelle / barrière). Ne touche jamais StudioDecoration.
 	ZoneBuilder.EnsureStudioDecoration()
@@ -2453,7 +2579,7 @@ function ZoneService.EnsureWorld(): Folder
 		BubbleTransitBuilder.EnsureTerminals()
 	end
 
-	-- Décor d'horizon (montagnes) : Workspace.GeneratedWorld.EnvironmentBackdrop uniquement.
+	-- Décor d'horizon (océan / îlots) : Workspace.GeneratedWorld.EnvironmentBackdrop uniquement.
 	EnvironmentBackdropBuilder.Build()
 
 	-- Remplit le panneau Top 10 dès que le décor lobby est prêt.
@@ -2532,8 +2658,42 @@ local function doTeleport(
 	return true
 end
 
--- Spawn initial / FallReset lobby uniquement.
+-- Spawn initial / FallReset / retours hub : hauteur = MainHubFloor uniquement.
+local function teleportToHub(player: Player, bypassCooldown: boolean?, reason: string?): boolean
+	if not bypassCooldown then
+		local last = teleportLast[player]
+		if last and os.clock() - last < Config.World.TeleportCooldown then
+			return false
+		end
+	end
+	local char = player.Character
+	if not char then
+		local _, hrp = waitForHRP(player)
+		if not hrp then
+			return false
+		end
+		char = player.Character
+	end
+	if not char then
+		return false
+	end
+	char:WaitForChild("Humanoid", 5)
+	char:WaitForChild("HumanoidRootPart", 5)
+	RunService.Heartbeat:Wait()
+	local ok = false
+	local HubSpawnService = require(script.Parent.HubSpawnService)
+	ok = HubSpawnService.ReloadCharacterAtHubSpawn(player)
+	if ok then
+		teleportLast[player] = os.clock()
+		player:SetAttribute("PlayerArea", "GameRoom")
+	end
+	return ok
+end
+
 function ZoneService.TeleportToLobby(player: Player, bypassCooldown: boolean?): boolean
+	if hubActive() then
+		return teleportToHub(player, bypassCooldown, "TeleportToLobby")
+	end
 	if not lobbySpawnPart then
 		return false
 	end
@@ -2542,6 +2702,9 @@ end
 
 -- FallReset salle / filet de sécurité onboarding (orientation vers la grille +Z).
 function ZoneService.TeleportToGameRoom(player: Player, bypassCooldown: boolean?): boolean
+	if hubActive() then
+		return teleportToHub(player, bypassCooldown, "FallReset")
+	end
 	if not gameRoomSpawnPart then
 		return false
 	end
@@ -2642,7 +2805,15 @@ local function onCharacterAdded(player: Player)
 		end)
 		spawnDebug("stayInRoom=", stayInRoom)
 
-		if not stayInRoom then
+		if hubActive() then
+			-- Apparition hub : SpawnLocation + RespawnLocation uniquement (0 téléport).
+			local HubSpawnService = require(script.Parent.HubSpawnService)
+			HubSpawnService.ApplyRespawnLocation(player)
+			local char, _hrp = waitForHRP(player, 5)
+			if char then
+				player:SetAttribute("PlayerArea", "GameRoom")
+			end
+		elseif not stayInRoom then
 			ZoneService.TeleportToLobby(player, true)
 		else
 			-- Filet de sécurité idempotent : si le SpawnLocation n'a pas placé

@@ -162,6 +162,7 @@ function HubAssetContractTests.Run(): boolean
 	check(#modules == 12, ("12 modules attendus, trouvé %d"):format(#modules))
 
 	local expectedNames = {
+		HubDeckShell_New = true,
 		HubDeckShell = true,
 		HubSellStandShell = true,
 		HubShopStandShell = true,
@@ -208,6 +209,16 @@ function HubAssetContractTests.Run(): boolean
 	check(HubAssetContract.GetVisualPath() == "Workspace.StudioDecoration.CentralHubVisual",
 		"chemin visuel")
 
+	-- Deck : bbox 84×8.7×60, pivot décentré (ailes surélevées à Y=13.20).
+	local deckSpec = HubAssetContract.GetModule("Deck")
+	assert(deckSpec)
+	check(deckSpec.TargetSize == Vector3.new(84, 8.7, 60), "Deck TargetSize 84×8.7×60")
+	check(deckSpec.Center == Vector3.new(0, 8.85, 0), "Deck WorldCenter (0, 8.85, 0)")
+	check(deckSpec.Pivot == Vector3.new(0, 8.25, 0), "Deck Pivot (0, 8.25, 0)")
+	check(math.abs(deckSpec.Center.Y - deckSpec.Pivot.Y - 0.6) < 1e-6,
+		"Deck : centre bbox 0.6 au-dessus du pivot (ailes +1.2 / 2)")
+	check(deckSpec.Pivot.Y ~= deckSpec.Center.Y, "Deck : pivot ≠ centre bbox")
+
 	-- Surfaces GUI obligatoires pour les modules interactifs.
 	local faces = {
 		SellStand = { "SellSignFace", "SellValueFace" },
@@ -234,8 +245,8 @@ function HubAssetContractTests.Run(): boolean
 
 	local deck = buildValidModel("Deck", visual)
 	local valid = HubAssetContract.Validate(deck, "Deck")
-	check(valid.Valid == true, "HubDeckShell valide")
-	check(#valid.Issues == 0, "HubDeckShell sans issues")
+	check(valid.Valid == true, "HubDeckShell_New valide")
+	check(#valid.Issues == 0, "HubDeckShell_New sans issues")
 
 	local loop = buildValidModel("LoopPanel", visual)
 	local loopValid = HubAssetContract.Validate(loop, "LoopPanel")
@@ -252,7 +263,7 @@ function HubAssetContractTests.Run(): boolean
 	local badName = HubAssetContract.Validate(deck, "Deck")
 	check(badName.Valid == false, "nom legacy refusé")
 	check(hasCode(badName, "bad_name"), "code bad_name")
-	deck.Name = "HubDeckShell"
+	deck.Name = "HubDeckShell_New"
 
 	--------------------------------------------------------------------
 	print("\n4. Bounding box hors tolérance")
@@ -423,7 +434,8 @@ function HubAssetContractTests.Run(): boolean
 	check(cmp ~= nil, "CompareWithAnchor retourne un résultat")
 	if cmp then
 		check(cmp.Matches == false, "Deck : ancre prototype ≠ cote approuvée (attendu)")
-		check(math.abs(cmp.SizeDelta.Y - 5.5) < 1e-6, "Deck SizeDelta.Y = +5.5")
+		-- Approuvé 8.7 − prototype 2.0 = +6.7
+		check(math.abs(cmp.SizeDelta.Y - 6.7) < 1e-6, "Deck SizeDelta.Y = +6.7")
 	end
 	anchor:Destroy()
 
@@ -457,6 +469,152 @@ function HubAssetContractTests.Run(): boolean
 	check(sellSpec.MaxTriangles == shopSpec.MaxTriangles, "Sell/Shop budget identiques")
 	check(math.abs(sellSpec.Center.X + shopSpec.Center.X) < 1e-6, "Sell/Shop symétriques en X")
 	check(sellSpec.Center.Y == shopSpec.Center.Y, "Sell/Shop même hauteur")
+
+	--------------------------------------------------------------------
+	print("\n16. Variante Composite Tripo (HubDeckShell_New)")
+	--------------------------------------------------------------------
+	clearFolder(visual)
+	local compositeSize = HubAssetContract.CompositeDeck.TargetSize
+	check(compositeSize == Vector3.new(84, 14, 60), "Composite TargetSize 84×14×60")
+	check(HubAssetContract.CompositeDeck.BottomY == 4.5, "Composite BottomY = 4.5")
+	check(HubAssetContract.CompositeDeck.YawDegrees == 0, "Composite AuthoredYaw contrat = 0")
+	check(HubAssetContract.CompositeDeck.RuntimeYawDegrees == 180, "Composite RuntimeYaw = 180")
+	check(A.Variant == "BPW_HubAssetVariant", "attribut Variant")
+	check(deckSpec.ModelName == "HubDeckShell_New", "Deck ModelName HubDeckShell_New")
+	check(deckSpec.LegacyModelName == "HubDeckShell", "Deck LegacyModelName HubDeckShell")
+
+	local function buildCompositeDeck(parent: Instance?): Model
+		local model = Instance.new("Model")
+		model.Name = "HubDeckShell_New"
+		model.WorldPivot = CFrame.new(Vector3.new(12, 3, -7))
+		model:SetAttribute(A.Marker, true)
+		model:SetAttribute(A.Key, "HubDeckShell_New")
+		model:SetAttribute(A.Version, 1)
+		model:SetAttribute(A.AuthoredSize, compositeSize)
+		model:SetAttribute(A.AuthoredYaw, HubAssetContract.CompositeDeck.YawDegrees)
+		model:SetAttribute(A.Variant, HubAssetContract.CompositeVariant)
+		local visualPart = Instance.new("MeshPart")
+		visualPart.Name = "Visual"
+		visualPart.Size = compositeSize
+		-- Pose Studio autoritative — yaw runtime ensuite ; Prepare ne doit pas altérer.
+		visualPart.CFrame = CFrame.new(Vector3.new(5, 20, 5))
+			* CFrame.Angles(math.rad(18), math.rad(40), math.rad(-12))
+		visualPart.PivotOffset = CFrame.Angles(math.rad(15), 0, 0)
+		visualPart.Transparency = 0
+		visualPart.Anchored = true
+		visualPart.CanCollide = true -- doit devenir false (collision seule)
+		visualPart.Material = material("Metal")
+		visualPart.Parent = model
+		local appearance = Instance.new("SurfaceAppearance")
+		appearance.Name = "SurfaceAppearance"
+		appearance.Parent = visualPart
+		if parent then
+			model.Parent = parent
+		end
+		return model
+	end
+
+	local composite = buildCompositeDeck(visual)
+	check(HubAssetContract.IsCompositeVariant(composite) == true, "IsCompositeVariant")
+	check(HubAssetContract.GetEffectiveTargetSize(composite, deckSpec) == compositeSize,
+		"GetEffectiveTargetSize Composite")
+	local compositeValid = HubAssetContract.Validate(composite, "Deck")
+	check(compositeValid.Valid == true, "Composite valide (Visual + SurfaceAppearance)")
+	check(#compositeValid.Issues == 0, "Composite sans issues")
+
+	-- Le contrat standard (Base/Moulding/…) reste exigé sans variante.
+	local standard = buildValidModel("Deck", nil)
+	standard.Parent = nil
+	local stillStandard = HubAssetContract.Validate(standard, "Deck")
+	check(stillStandard.Valid == true, "contrat standard non Composite inchangé")
+	standard:Destroy()
+
+	-- Script interdit.
+	local evil = Instance.new("Script")
+	evil.Name = "No"
+	evil.Parent = composite
+	local badCompositeScript = HubAssetContract.Validate(composite, "Deck")
+	check(badCompositeScript.Valid == false, "Composite + Script refusé")
+	check(hasCode(badCompositeScript, "forbidden_class"), "Composite forbidden_class")
+	evil:Destroy()
+
+	-- Visual manquant / mauvaise classe.
+	local visualPart = composite:FindFirstChild("Visual")
+	assert(visualPart and visualPart:IsA("MeshPart"))
+	visualPart.Name = "NotVisual"
+	local missingVisual = HubAssetContract.Validate(composite, "Deck")
+	check(missingVisual.Valid == false and hasCode(missingVisual, "missing_child"),
+		"Composite sans Visual refusé")
+	visualPart.Name = "Visual"
+	local partInstead = Instance.new("Part")
+	partInstead.Name = "Visual"
+	partInstead.Size = compositeSize
+	partInstead.CFrame = visualPart.CFrame
+	partInstead.Anchored = true
+	partInstead.Parent = composite
+	visualPart.Parent = nil
+	local badClass = HubAssetContract.Validate(composite, "Deck")
+	check(badClass.Valid == false and hasCode(badClass, "bad_child"),
+		"Composite Visual non-MeshPart refusé")
+	partInstead:Destroy()
+	visualPart.Parent = composite
+
+	-- Taille hors tolérance.
+	visualPart.Size = Vector3.new(90, 14, 60)
+	composite:SetAttribute(A.AuthoredSize, Vector3.new(90, 14, 60))
+	local badCompositeSize = HubAssetContract.Validate(composite, "Deck")
+	check(badCompositeSize.Valid == false and hasCode(badCompositeSize, "bad_size"),
+		"Composite taille 90×14×60 refusée")
+	visualPart.Size = compositeSize
+	composite:SetAttribute(A.AuthoredSize, compositeSize)
+
+	--------------------------------------------------------------------
+	-- Yaw runtime 180° (idempotent) puis Prepare sans altérer la pose
+	--------------------------------------------------------------------
+	local yawAttr = HubAssetContract.CompositeDeck.RuntimeYawAttribute
+	local lookBefore = visualPart.CFrame.LookVector
+	local yaw1 = HubAssetContract.ApplyCompositeRuntimeYaw(composite)
+	check(yaw1 == true, "premier ApplyCompositeRuntimeYaw applique 180°")
+	check(composite:GetAttribute(yawAttr) == 180, "attribut RuntimeYaw = 180")
+	check(math.abs(visualPart.CFrame.LookVector:Dot(lookBefore) + 1) < 1e-3
+		or (visualPart.CFrame.LookVector - lookBefore).Magnitude > 0.1,
+		"LookVector modifié par yaw Y (pas identité)")
+	local yaw2 = HubAssetContract.ApplyCompositeRuntimeYaw(composite)
+	check(yaw2 == false, "second ApplyCompositeRuntimeYaw no-op")
+
+	local before = HubAssetContract.SnapshotCompositeVisual(composite)
+	assert(before)
+	HubAssetContract.PrepareCompositeStudioSource(composite)
+	local okUnchanged, reason = HubAssetContract.AssertCompositeVisualUnchanged(composite, before)
+	check(okUnchanged == true, "Prepare ne modifie pas CFrame/Size/PivotOffset/Transparency (" .. tostring(reason) .. ")")
+	check(visualPart.CanCollide == false, "Visual non collisionnable après Prepare")
+	check(visualPart.CastShadow == false, "Visual CastShadow off (hub moins sombre)")
+	check(visualPart.Transparency == 0, "Visual reste visible (Transparency inchangée)")
+	check(composite.Parent == visual, "Parent reste CentralHubVisual")
+	check(composite:FindFirstChild("Visual") == visualPart, "aucun clone de Visual")
+	HubAssetContract.PrepareCompositeStudioSource(composite)
+	local ok2, reason2 = HubAssetContract.AssertCompositeVisualUnchanged(composite, before)
+	check(ok2 == true, "deux Prepare → source inchangée (" .. tostring(reason2) .. ")")
+
+	-- Legacy HubDeckShell coexistant : masqué, New reste visible.
+	local legacy = Instance.new("Model")
+	legacy.Name = "HubDeckShell"
+	legacy.Parent = visual
+	local legacyMesh = Instance.new("MeshPart")
+	legacyMesh.Name = "Visual"
+	legacyMesh.Size = Vector3.new(10, 2, 10)
+	legacyMesh.Transparency = 0
+	legacyMesh.Anchored = true
+	legacyMesh.CanCollide = true
+	legacyMesh.Parent = legacy
+	HubAssetContract.HideLegacyCompositeDeck(visual, composite)
+	check(legacyMesh.Transparency == 1, "legacy HubDeckShell masqué")
+	check(legacyMesh.CanCollide == false, "legacy non collisionnable")
+	check(visualPart.Transparency == 0, "HubDeckShell_New reste visible")
+
+	local decision = HubAssetContract.Decide("Deck", visual, true)
+	check(decision.Status == "imported" and decision.BuildPrototype == false,
+		"Composite valide → imported, pas de prototype")
 
 	clearFolder(visual)
 

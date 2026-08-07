@@ -22,6 +22,8 @@ local rng = Random.new()
 
 local activeByZone: { [string]: number } = {}
 local zoneLoops: { [string]: boolean } = {}
+-- Drops tutoriel : ne comptent pas dans le cap de zone aléatoire.
+local tutorialActiveByZone: { [string]: number } = {}
 
 local function zoneQuery(zoneId: string): ItemSpawnPlanner.CellQuery?
 	local board = BubbleService.GetBoard(zoneId)
@@ -182,56 +184,114 @@ local function spawnInZone(zoneId: string): boolean
 		return false
 	end
 
-	local folder = BubbleService.BoardFolder(zoneId)
-	if not folder then
+	if not BubbleService.BoardFolder(zoneId) then
 		ItemSpawnPlanner.LogFailure(zoneId, "board folder missing")
 		return false
 	end
 
-	local def = ToolDefs.Get(plan.ItemId)
-	if not def then
+	if not ToolDefs.Get(plan.ItemId) then
 		ItemSpawnPlanner.LogFailure(zoneId, "unknown item " .. plan.ItemId)
 		return false
 	end
 
-	local pos = BubbleService.CellToWorld(plan.X, plan.Z, zoneId)
+	return DropService.SpawnDropAt(zoneId, plan.ItemId, plan.X, plan.Z, {
+		countTowardCap = true,
+		announceRare = true,
+	}) ~= nil
+end
+
+export type SpawnDropOptions = {
+	countTowardCap: boolean?,
+	announceRare: boolean?,
+	lifetime: number?,
+	ownerUserId: number?,
+	tutorial: boolean?,
+}
+
+-- Spawn générique d'un drop au sol (aléatoire ou tutoriel guidé).
+function DropService.SpawnDropAt(
+	zoneId: string,
+	itemId: string,
+	cellX: number,
+	cellZ: number,
+	opts: SpawnDropOptions?
+): BasePart?
+	local options = opts or {}
+	local def = ToolDefs.Get(itemId)
+	if not def then
+		return nil
+	end
+	local folder = BubbleService.BoardFolder(zoneId)
+	if not folder then
+		return nil
+	end
+	if not BubbleService.InBounds(cellX, cellZ, zoneId) then
+		return nil
+	end
+
+	local pos = BubbleService.CellToWorld(cellX, cellZ, zoneId)
 		+ Vector3.new(0, ItemSpawnPlanner.SpawnHeightOffset, 0)
 
-	local model = buildDropVisual(plan.ItemId, def, pos)
+	local model = buildDropVisual(itemId, def, pos)
 	model:SetAttribute("ZoneId", zoneId)
-	model:SetAttribute("ToolId", plan.ItemId)
-	model:SetAttribute("CellX", plan.X)
-	model:SetAttribute("CellZ", plan.Z)
+	model:SetAttribute("ToolId", itemId)
+	model:SetAttribute("CellX", cellX)
+	model:SetAttribute("CellZ", cellZ)
+	if options.tutorial == true then
+		model:SetAttribute("TutorialDrop", true)
+	end
+	if type(options.ownerUserId) == "number" then
+		model:SetAttribute("TutorialOwnerUserId", options.ownerUserId)
+	end
 	model.Parent = folder
 
-	activeByZone[zoneId] = (activeByZone[zoneId] or 0) + 1
+	local countCap = options.countTowardCap ~= false
 	local released = false
+	if countCap then
+		activeByZone[zoneId] = (activeByZone[zoneId] or 0) + 1
+	else
+		tutorialActiveByZone[zoneId] = (tutorialActiveByZone[zoneId] or 0) + 1
+	end
 	model.Destroying:Connect(function()
 		if released then
 			return
 		end
 		released = true
-		activeByZone[zoneId] = math.max(0, (activeByZone[zoneId] or 1) - 1)
+		if countCap then
+			activeByZone[zoneId] = math.max(0, (activeByZone[zoneId] or 1) - 1)
+		else
+			tutorialActiveByZone[zoneId] = math.max(0, (tutorialActiveByZone[zoneId] or 1) - 1)
+		end
 	end)
 
 	ItemSpawnPlanner.Log(
-		"Spawned %s in %s at cell (%d, %d) world (%.1f, %.1f, %.1f)",
-		def.Name, zoneId, plan.X, plan.Z, pos.X, pos.Y, pos.Z
+		"Spawned %s in %s at cell (%d, %d) world (%.1f, %.1f, %.1f)%s",
+		def.Name,
+		zoneId,
+		cellX,
+		cellZ,
+		pos.X,
+		pos.Y,
+		pos.Z,
+		if options.tutorial then " [tutorial]" else ""
 	)
 
-	-- Ramassage automatique : le premier joueur qui passe assez près l'emporte.
 	local taken = false
+	local ownerUserId = options.ownerUserId
 	task.spawn(function()
 		local radius = Config.Drops.PickupRadius
 		while model.Parent and not taken do
 			for _, plr in ipairs(Players:GetPlayers()) do
+				if type(ownerUserId) == "number" and plr.UserId ~= ownerUserId then
+					continue
+				end
 				local char = plr.Character
 				local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 				local hum = char and char:FindFirstChildOfClass("Humanoid")
 				if root and hum and hum.Health > 0 then
 					if (root.Position - pos).Magnitude <= radius then
 						taken = true
-						ToolService.Give(plr, plan.ItemId)
+						ToolService.Give(plr, itemId)
 						ItemSpawnPlanner.Log("Picked up %s in %s by %s", def.Name, zoneId, plr.Name)
 						model:Destroy()
 						break
@@ -242,7 +302,6 @@ local function spawnInZone(zoneId: string): boolean
 		end
 	end)
 
-	-- Rotation d'ambiance
 	task.spawn(function()
 		while model.Parent do
 			model.CFrame = model.CFrame * CFrame.Angles(0, math.rad(2), 0)
@@ -250,13 +309,55 @@ local function spawnInZone(zoneId: string): boolean
 		end
 	end)
 
-	if def.Rarity == "Epic" or def.Rarity == "Mythic" then
+	if options.announceRare ~= false and (def.Rarity == "Epic" or def.Rarity == "Mythic") then
 		Remotes.Event("Announce"):FireAllClients(
 			("A %s item just appeared: %s"):format(def.Rarity, def.Name), "item")
 	end
 
-	Debris:AddItem(model, Config.Drops.Lifetime)
-	return true
+	Debris:AddItem(model, options.lifetime or Config.Drops.Lifetime)
+	return model
+end
+
+-- Drop guidé pour le tutoriel : proche du joueur, réservé à ce UserId, hors cap aléatoire.
+function DropService.SpawnTutorialDrop(player: Player, itemId: string): BasePart?
+	if not player or not itemId then
+		return nil
+	end
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+
+	local zoneId = "ClassicZone"
+	local cellX, cellZ = 20, 6
+	if root then
+		local cx, cz, zid = BubbleService.WorldToCell(root.Position)
+		if type(zid) == "string" and zid ~= "" then
+			zoneId = zid
+		end
+		if type(cx) == "number" and type(cz) == "number" then
+			-- Décaler de 2–3 cellules pour que le joueur voie le drop, pas sous ses pieds.
+			cellX = cx + 2
+			cellZ = math.max(1, cz - 1)
+		end
+	end
+
+	if not BubbleService.InBounds(cellX, cellZ, zoneId) then
+		local sizeX, sizeZ = 40, 40
+		local board = BubbleService.GetBoard(zoneId)
+		if board then
+			sizeX = board.sizeX
+			sizeZ = board.sizeZ
+		end
+		cellX = math.clamp(cellX, 1, sizeX)
+		cellZ = math.clamp(cellZ, 1, sizeZ)
+	end
+
+	return DropService.SpawnDropAt(zoneId, itemId, cellX, cellZ, {
+		countTowardCap = false,
+		announceRare = false,
+		tutorial = true,
+		ownerUserId = player.UserId,
+		lifetime = math.max(Config.Drops.Lifetime, 180),
+	})
 end
 
 local function zoneLoop(zoneId: string)

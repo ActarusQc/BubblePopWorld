@@ -16,6 +16,7 @@ local DataService = {}
 local profiles: { [Player]: any } = {}
 local mutationWaiter: ((Player, number) -> boolean)? = nil
 local coinsChangedListeners: { (Player, number) -> () } = {}
+local levelChangedListeners: { (Player, number) -> () } = {}
 
 local function notifyCoinsChanged(player: Player)
 	local d = profiles[player]
@@ -28,12 +29,31 @@ local function notifyCoinsChanged(player: Player)
 	end
 end
 
+local function notifyLevelChanged(player: Player)
+	local d = profiles[player]
+	if not d then
+		return
+	end
+	local level = d.Level
+	for _, listener in ipairs(levelChangedListeners) do
+		task.spawn(listener, player, level)
+	end
+end
+
 function DataService.OnCoinsChanged(listener: (Player, number) -> ())
 	table.insert(coinsChangedListeners, listener)
 end
 
+function DataService.OnLevelChanged(listener: (Player, number) -> ())
+	table.insert(levelChangedListeners, listener)
+end
+
 function DataService.NotifyCoinsChanged(player: Player)
 	notifyCoinsChanged(player)
+end
+
+function DataService.NotifyLevelChanged(player: Player)
+	notifyLevelChanged(player)
 end
 
 -- XP : champ hérité, conservé pour ne pas perdre les anciens profils, mais gelé —
@@ -57,7 +77,36 @@ local TEMPLATE = {
 	CurrentBubbles = 0,
 	BackpackCapacity = Config.Backpack.DefaultCapacity,
 	PendingSellValue = 0,
+	-- Bonus de vente temporaire (ex. Giant Bubble) — ne consomme pas de capacité.
+	PendingSellBonus = 0,
 	MusicMuted = false,
+	-- Tutoriel d'accueil progressif (une seule fois par joueur).
+	TutorialCompleted = false,
+	Tutorial = {
+		Version = 1,
+		Step = 0,
+		PopCount = 0,
+		SellCount = 0,
+		HammerPicked = false,
+		HammerMultiDone = false,
+		Rewarded = {},
+	},
+	-- Défis quotidiens / hebdo (structure versionnée, réconciliée par ChallengeService).
+	Challenges = {
+		Version = 1,
+		DailyKey = "",
+		WeeklyKey = "",
+		DailyBubblePops = 0,
+		Daily = {},
+		Weekly = nil,
+		TrackedId = nil,
+		MilestoneNotified = {},
+	},
+	-- Score hebdomadaire (Weekly Best board) — pops valides sur la semaine ISO courante.
+	WeeklyBest = {
+		WeekKey = "",
+		Score = 0,
+	},
 	Version = 1,
 	Analytics = {
 		OnboardingVersion = 1,
@@ -147,6 +196,7 @@ local function reconcileBackpack(data)
 	data.BackpackCapacity = capacity
 	data.CurrentBubbles = bubbles
 	data.PendingSellValue = pending
+	data.PendingSellBonus = math.max(0, math.floor(finiteNumber(data.PendingSellBonus, 0)))
 end
 
 -- TotalBubblesSold est l'unique source de vérité du niveau : on l'assainit au chargement
@@ -253,6 +303,7 @@ function DataService.Load(player: Player)
 	refreshZoneAccess(player)
 	if data.__loaded then
 		notifyCoinsChanged(player)
+		notifyLevelChanged(player)
 	end
 
 	local gasOk, GameAnalyticsService = pcall(function()
@@ -336,6 +387,7 @@ function DataService.Push(player: Player)
 	player:SetAttribute("CurrentBubbles", d.CurrentBubbles)
 	player:SetAttribute("BackpackCapacity", d.BackpackCapacity)
 	player:SetAttribute("PendingSellValue", d.PendingSellValue)
+	player:SetAttribute("PendingSellBonus", math.max(0, math.floor(finiteNumber(d.PendingSellBonus, 0))))
 	player:SetAttribute("TotalBubblesSold", d.TotalBubblesSold)
 	player:SetAttribute("EquippedBackpack", d.EquippedBackpack or "")
 	player:SetAttribute("PlayerLevel", d.Level)
@@ -371,6 +423,7 @@ local CREDIT_SOURCES = {
 	DailyReward = true,
 	Code = true,
 	Admin = true,
+	Tutorial = true,
 }
 
 function DataService.AddCoins(player: Player, amount: number, source: string?): (boolean, number?)
@@ -408,6 +461,7 @@ function DataService.AddBubblesSold(player: Player, amount: number): boolean
 		Remotes.Event("Announce"):FireClient(player, ("Level %d reached!"):format(d.Level), "level")
 		-- Accès zones (collision groups) immédiat, sans respawn.
 		refreshZoneAccess(player)
+		notifyLevelChanged(player)
 	end
 	return true
 end

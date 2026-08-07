@@ -65,6 +65,24 @@ AnalyticsConfig.CustomEvents = {
 	"SessionZoneSecondsGameRoom",
 	"SessionZoneSecondsSummerZone",
 	"SessionZoneChanges",
+	"MiniEventCountdownStarted",
+	"MiniEventStarted",
+	"MiniEventParticipationStarted",
+	"MiniEventProgress",
+	"MiniEventCompleted",
+	"MiniEventFailed",
+	"MiniEventRewardGranted",
+	-- Challenges
+	"ChallengeAssigned",
+	"ChallengeProgressMilestone",
+	"ChallengeCompleted",
+	"ChallengeRewardClaimed",
+	"WeeklyChallengeCompleted",
+	"FeaturedEventParticipated",
+	"DailyLeaderboardScoreUpdated",
+	"DailyLeaderboardTop10Entered",
+	"ChallengesPanelOpened",
+	"ChallengePinned",
 }
 
 AnalyticsConfig.EconomySkus = {

@@ -10,6 +10,19 @@ local DataService = require(script.DataService)
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 
+-- Observateur Studio AVANT builders : qui écrit CFrame/Size sur l'ancre transit.
+do
+	local watchOk, watchErr = pcall(function()
+		require(script.TransitAnchorWatch).Install()
+	end)
+	if not watchOk then
+		warn("[TransitAnchorWatch] install failed:", tostring(watchErr))
+	end
+end
+
+-- Preuve d'exécution du nouveau code (recherche cette ligne dans F5).
+print("[RearHubManualCollision] CODE VERSION " .. require(Shared.RearHubManualRig).CODE_VERSION)
+
 -- SpawnLocation AVANT les suites Studio / Start : CharacterAutoLoads reste true
 -- (le désactiver casse Test/F5 : aucun Player injecté). Filet de sécurité ensuite.
 do
@@ -17,6 +30,7 @@ do
 	if OnboardingConfig.EarlySpawnLocationBootstrap then
 		local ok, err = pcall(function()
 			require(script.ZoneService).EnsureEarlySpawnLocation()
+			require(script.HubSpawnService).PrepareForPlay()
 		end)
 		if not ok then
 			warn("[BPW] EnsureEarlySpawnLocation échoué: " .. tostring(err))
@@ -64,6 +78,8 @@ end
 
 local services = {
 	DataService,
+	-- Spawn manuel hub (avant teleports Zone / CharacterAdded rivaux).
+	require(script.HubSpawnService),
 	-- Après DataService / GameAnalyticsService, avant ZoneService (spawn première session).
 	require(script.OnboardingService),
 	require(script.BackpackService),
@@ -74,11 +90,18 @@ local services = {
 	require(script.AmbianceService),
 	require(script.BubbleService),
 	require(script.ToolService),
+	require(script.MiniEventService),
+	require(script.ChallengeService),
 	require(script.DropService),
 	require(script.ChestService),
 	require(script.ShopService),
 	require(script.ItemShopBuilder),
+	-- Ancrages tableaux hub avant services classements.
+	require(script.HubDisplaysService),
 	require(script.LeaderboardService),
+	require(script.WeeklyBestService),
+	require(script.LevelLeaderboardService),
+	require(script.TutorialService),
 	require(script.AdminService),
 }
 
@@ -92,14 +115,32 @@ do
 	runSuite("OnboardingConfigTests", function()
 		return require(Shared.OnboardingConfigTests)
 	end)
+	runSuite("TutorialConfigTests", function()
+		return require(Shared.TutorialConfigTests)
+	end)
 	runSuite("ZoneAccessTests", function()
 		return require(Shared.ZoneAccessTests)
 	end)
 	runSuite("MusicConfigTests", function()
 		return require(Shared.MusicConfigTests)
 	end)
+	runSuite("HudChromeTests", function()
+		return require(Shared.HudChromeTests)
+	end)
 	runSuite("LeaderboardTests", function()
 		return require(Shared.LeaderboardTests)
+	end)
+	runSuite("HubDisplaysLogicTests", function()
+		return require(Shared.HubDisplaysLogicTests)
+	end)
+	runSuite("TransitAnchorLogicTests", function()
+		return require(Shared.TransitAnchorLogicTests)
+	end)
+	runSuite("WeeklyBestLogicTests", function()
+		return require(Shared.WeeklyBestLogicTests)
+	end)
+	runSuite("ChallengeBoardUtilTests", function()
+		return require(Shared.ChallengeBoardUtilTests)
 	end)
 	runSuite("SummerZoneStringLightsTests", function()
 		return require(Shared.SummerZoneStringLightsTests)
@@ -107,8 +148,44 @@ do
 	runSuite("TravelConfigTests", function()
 		return require(Shared.TravelConfigTests)
 	end)
+	runSuite("TravelLogicTests", function()
+		return require(Shared.TravelLogicTests)
+	end)
+	runSuite("HubLayoutTests", function()
+		return require(Shared.HubLayoutTests)
+	end)
+	runSuite("RearHubLogicTests", function()
+		return require(Shared.RearHubLogicTests)
+	end)
+	runSuite("RearHubIdentityTests", function()
+		return require(Shared.RearHubIdentityTests)
+	end)
+	runSuite("RearHubCollisionLogicTests", function()
+		return require(Shared.RearHubCollisionLogicTests)
+	end)
+	runSuite("RearHubStudioInstallTests", function()
+		return require(Shared.RearHubStudioInstallTests)
+	end)
+	runSuite("HubSpawnLogicTests", function()
+		return require(Shared.HubSpawnLogicTests)
+	end)
+	runSuite("HubShopPromptLogicTests", function()
+		return require(Shared.HubShopPromptLogicTests)
+	end)
 	runSuite("BubbleValueTests", function()
 		return require(Shared.BubbleValueTests)
+	end)
+	runSuite("BubbleAppearanceTests", function()
+		return require(Shared.BubbleAppearanceTests)
+	end)
+	runSuite("MiniEventLogicTests", function()
+		return require(Shared.MiniEventLogicTests)
+	end)
+	runSuite("ChallengeLogicTests", function()
+		return require(Shared.ChallengeLogicTests)
+	end)
+	runSuite("ChallengeUiLayoutTests", function()
+		return require(Shared.ChallengeUiLayoutTests)
 	end)
 	runSuite("ZoneGameplayTests", function()
 		return require(Shared.ZoneGameplayTests)

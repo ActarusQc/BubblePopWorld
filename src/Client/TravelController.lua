@@ -6,12 +6,14 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
 local TravelConfig = require(Shared.TravelConfig)
+local TravelLogic = require(Shared.TravelLogic)
 
 local player = Players.LocalPlayer
 local TravelController = {}
@@ -47,6 +49,9 @@ local lastRequestedTransit: string? = nil
 local cardButtons: { TextButton } = {}
 local characterConns: { RBXScriptConnection } = {}
 local heartbeatConn: RBXScriptConnection? = nil
+local hubTransitConns: { RBXScriptConnection } = {}
+local hubTransitDebounceUntil = 0
+local HUB_TRANSIT_DEBOUNCE = 1.0
 
 local function debugLog(...: any)
 	if not TravelConfig.DEBUG_TRAVEL then
@@ -156,6 +161,166 @@ local function openMenu(transitId: string)
 	debugLog("Opened", "terminal=" .. transitId, "player=" .. player.Name)
 end
 
+-- Première vente : auto-open bloqué pendant Pop/Sell ; interaction manuelle ou post-vente OK.
+local function resolveTransitGate(): (boolean, boolean)
+	local gate = TravelLogic.ResolveTransitGate(
+		player:GetAttribute("TotalBubblesSold"),
+		player:GetAttribute("OnboardingObjective")
+	)
+	return gate.Allowed, gate.FirstSaleCompleted
+end
+
+local function isManualInteractionSource(source: string): boolean
+	return TravelLogic.IsManualInteractionSource(source)
+end
+
+-- Déclarations anticipées : en Luau, `local function a` avant `local function b`
+-- fait de `b()` un appel global nil à l'exécution (menu jamais ouvert).
+local findHubTransitPortalZone: () -> BasePart?
+local bindHubTransitInteraction: () -> ()
+
+local function activateBubbleTransit(targetPlayer: Player, source: string, transitIdHint: string?)
+	if targetPlayer ~= player then
+		return
+	end
+
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not character or not humanoid or humanoid.Health <= 0 then
+		return
+	end
+
+	if menuOpen or travelling then
+		return
+	end
+
+	if os.clock() < hubTransitDebounceUntil then
+		return
+	end
+
+	local transitAllowed = resolveTransitGate()
+	if not isManualInteractionSource(source) and not transitAllowed then
+		print("[BubbleTransit] Interaction received from " .. player.Name
+			.. " source=" .. source .. " blocked until first sale (onboarding)")
+		return
+	end
+
+	print("[BubbleTransit] Interaction received from " .. player.Name .. " source=" .. source)
+
+	hubTransitDebounceUntil = os.clock() + HUB_TRANSIT_DEBOUNCE
+	local transitId = transitIdHint
+	if type(transitId) ~= "string" or transitId == "" then
+		local zone = findHubTransitPortalZone()
+		local transitIdAttr = zone and zone:GetAttribute("TransitId")
+		transitId = if type(transitIdAttr) == "string" and transitIdAttr ~= ""
+			then transitIdAttr
+			else "LobbyTransit"
+	end
+	-- Normalise alias → id canonique (même source que le serveur).
+	local normalized = TravelConfig.NormalizeTransitId(transitId)
+	if normalized then
+		transitId = normalized
+	end
+	print("[BubbleTransit] Opening destination menu transitId=" .. transitId)
+	openMenu(transitId)
+end
+
+findHubTransitPortalZone = function(): BasePart?
+	-- Ancre permanente Studio : Workspace.BubbleTransitInteractionAnchor uniquement.
+	local rootAnchor = Workspace:FindFirstChild("BubbleTransitInteractionAnchor")
+	if rootAnchor and rootAnchor:IsA("BasePart") then
+		return rootAnchor
+	end
+	-- Lien optionnel (HubFunction) si déjà filé par le serveur.
+	local world = Workspace:FindFirstChild("BubblePopWorld")
+	local hub = world and world:FindFirstChild("CentralHub")
+	local functional = hub and hub:FindFirstChild("HubFunction")
+	if functional then
+		local link = functional:FindFirstChild("BubbleTransitInteractionAnchorLink")
+		if link and link:IsA("ObjectValue") and link.Value and link.Value:IsA("BasePart") then
+			return link.Value
+		end
+	end
+	return nil
+end
+
+local function disconnectHubTransit()
+	for _, conn in ipairs(hubTransitConns) do
+		conn:Disconnect()
+	end
+	table.clear(hubTransitConns)
+end
+
+local function playerFromHit(hit: BasePart): Player?
+	local model = hit:FindFirstAncestorOfClass("Model")
+	if not model then
+		return nil
+	end
+	return Players:GetPlayerFromCharacter(model)
+end
+
+local hubPortalBoundPart: BasePart? = nil
+local portalMissingWarned = false
+
+bindHubTransitInteraction = function()
+	local portalZone = findHubTransitPortalZone()
+	if not portalZone then
+		if not portalMissingWarned then
+			portalMissingWarned = true
+			warn("[BubbleTransit] Portal zone missing: Workspace.BubbleTransitInteractionAnchor")
+		end
+		return
+	end
+	portalMissingWarned = false
+	if hubPortalBoundPart == portalZone and #hubTransitConns > 0 then
+		return
+	end
+	disconnectHubTransit()
+	hubPortalBoundPart = portalZone
+	print("[BubbleTransit] Anchor source=Workspace.BubbleTransitInteractionAnchor")
+	print("[BubbleTransit] Anchor world position=" .. tostring(portalZone.Position))
+	print("[BubbleTransit] Active path=" .. portalZone:GetFullName())
+	local clientPrompt = portalZone:FindFirstChild("BubbleTransitPrompt", true)
+	if clientPrompt and clientPrompt:IsA("ProximityPrompt") then
+		print("[BubbleTransit] TransitVersion=" .. tostring(clientPrompt:GetAttribute("TransitVersion")))
+	end
+
+	-- Aligné sur MaxActivationDistance du ProximityPrompt.
+	local maxDist = 8
+	local function nearPortalZone(zone: BasePart): boolean
+		local character = player.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if not (hrp and hrp:IsA("BasePart")) then
+			return false
+		end
+		return (hrp.Position - zone.Position).Magnitude <= maxDist
+	end
+
+	-- Touched / Spatial OFF — uniquement ProximityPrompt (activation volontaire).
+	local prompt = portalZone:FindFirstChild("BubbleTransitPrompt", true)
+	if prompt and prompt:IsA("ProximityPrompt") then
+		local pr = prompt :: ProximityPrompt
+		pr.RequiresLineOfSight = false
+		pr.HoldDuration = 0
+		pr.MaxActivationDistance = math.max(pr.MaxActivationDistance, 8)
+		table.insert(hubTransitConns, pr.Triggered:Connect(function(triggeringPlayer)
+			if not nearPortalZone(portalZone) then
+				print("[BubbleTransit] Interaction ignored: too far from portal")
+				return
+			end
+			activateBubbleTransit(triggeringPlayer, "ProximityPrompt", "LobbyTransit")
+		end))
+	else
+		warn("[BubbleTransit] Prompt missing: BubbleTransitPrompt under " .. portalZone:GetFullName())
+	end
+	-- Pas de Heartbeat Spatial OBB (ouvrait le menu au spawn / en marchant sur le portail).
+end
+
+-- Alias historique
+local function requestOpenBubbleTransit(transitId: string, reason: string)
+	activateBubbleTransit(player, reason, transitId)
+end
+
 local function playTravelFx(thenFn: () -> ())
 	fadeFrame.Visible = true
 	fadeFrame.BackgroundTransparency = 1
@@ -188,6 +353,7 @@ local function requestTravel(destinationId: string)
 	if not menuOpen or travelling or not activeTransitId then
 		return
 	end
+	print("[BubbleTransit] Destination selected: " .. destinationId)
 	travelling = true
 	setButtonsEnabled(false)
 	statusLabel.Visible = true
@@ -404,6 +570,8 @@ local function handleTravelResult(payload: any)
 		return
 	end
 	if payload.Ok == true then
+		local destId = if type(payload.DestinationId) == "string" then payload.DestinationId else "?"
+		print("[BubbleTransit] Teleport success: " .. destId)
 		local suppress = TravelConfig.ArrivalSuppressSeconds
 		if type(payload.SuppressSeconds) == "number" then
 			suppress = payload.SuppressSeconds
@@ -414,6 +582,17 @@ local function handleTravelResult(payload: any)
 			closeMenu()
 		end)
 		return
+	end
+
+	if type(payload.Code) == "string" then
+		if payload.Code == "DESTINATION_LOCKED" then
+			print("[BubbleTransit] Destination rejected: level required")
+		elseif payload.Code == "ARRIVAL_MARKER_MISSING" then
+			print("[BubbleTransit] Arrival point missing: "
+				.. (if type(payload.DestinationId) == "string" then payload.DestinationId else "?"))
+		else
+			print("[BubbleTransit] Destination rejected: " .. payload.Code)
+		end
 	end
 
 	travelling = false
@@ -431,12 +610,39 @@ local function pointInPart(point: Vector3, part: BasePart): boolean
 		and math.abs(localPoint.Z) <= half.Z
 end
 
+local function considerTrigger(hrp: BasePart, trigger: BasePart): (string?, BasePart?)
+	if not pointInPart(hrp.Position, trigger) then
+		return nil, nil
+	end
+	local transitId = trigger:GetAttribute("TransitId")
+	if type(transitId) == "string" then
+		return transitId, trigger
+	end
+	return nil, nil
+end
+
 local function findLocalTriggerHit(): (string?, BasePart?)
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not (hrp and hrp:IsA("BasePart")) then
 		return nil, nil
 	end
+
+	-- Portail hub : PAS d'ouverture auto par proximité (ProximityPrompt seulement).
+	local workspaceAnchor = Workspace:FindFirstChild("BubbleTransitInteractionAnchor")
+	if workspaceAnchor and workspaceAnchor:IsA("BasePart") then
+		-- ignore hub anchor for Heartbeat auto-open
+	end
+	local world = Workspace:FindFirstChild("BubblePopWorld")
+	local hub = world and world:FindFirstChild("CentralHub")
+	local functional = hub and hub:FindFirstChild("HubFunction")
+	if functional then
+		local link = functional:FindFirstChild("BubbleTransitInteractionAnchorLink")
+		if link and link:IsA("ObjectValue") and link.Value and link.Value:IsA("BasePart") then
+			-- Ancre hub liée : pas d'auto Heartbeat
+		end
+	end
+
 	local terminals = Workspace:FindFirstChild("GameZones")
 	local root = terminals and terminals:FindFirstChild("TravelTerminals")
 	if not root then
@@ -444,11 +650,12 @@ local function findLocalTriggerHit(): (string?, BasePart?)
 	end
 	for _, child in ipairs(root:GetChildren()) do
 		if child:IsA("Model") then
-			local trigger = child:FindFirstChild("TransitTrigger")
-			if trigger and trigger:IsA("BasePart") and pointInPart(hrp.Position, trigger) then
-				local transitId = trigger:GetAttribute("TransitId")
-				if type(transitId) == "string" then
-					return transitId, trigger
+			local trigger = child:FindFirstChild("BubbleTransitTrigger")
+				or child:FindFirstChild("TransitTrigger")
+			if trigger and trigger:IsA("BasePart") then
+				local id, part = considerTrigger(hrp, trigger)
+				if id then
+					return id, part
 				end
 			end
 		end
@@ -619,6 +826,45 @@ function TravelController.Start()
 	Remotes.Event("DestinationListUpdated").OnClientEvent:Connect(populateDestinations)
 	Remotes.Event("TravelResult").OnClientEvent:Connect(handleTravelResult)
 
+	ProximityPromptService.PromptTriggered:Connect(function(prompt, triggeringPlayer)
+		if triggeringPlayer ~= player then
+			return
+		end
+		if prompt.Name ~= "BubbleTransitPrompt" then
+			return
+		end
+		local transitHint: string? = nil
+		local walk: Instance? = prompt
+		while walk do
+			local attr = walk:GetAttribute("TransitId")
+			if type(attr) == "string" and attr ~= "" then
+				transitHint = TravelConfig.NormalizeTransitId(attr) or attr
+				break
+			end
+			walk = walk.Parent
+		end
+		-- Ancre hub permanente : id canonique LobbyTransit.
+		if not transitHint then
+			local root = Workspace:FindFirstChild(TravelConfig.HUB_INTERACTION_ANCHOR_NAME)
+			if root and prompt:IsDescendantOf(root) then
+				transitHint = "LobbyTransit"
+			end
+		end
+		activateBubbleTransit(player, "ProximityPromptService", transitHint)
+	end)
+
+	bindHubTransitInteraction()
+	task.defer(bindHubTransitInteraction)
+	Workspace.DescendantAdded:Connect(function(desc)
+		if desc.Name == "BubbleTransitInteractionAnchor"
+			or desc.Name == "BubbleTransitPrompt"
+			or desc.Name == "PromptAttachment"
+			or desc.Name == "BubbleTransitInteractionAnchorLink"
+		then
+			task.defer(bindHubTransitInteraction)
+		end
+	end)
+
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
 			return
@@ -648,7 +894,7 @@ function TravelController.Start()
 		local isInside = transitId ~= nil
 
 		if isInside and not wasInside and os.clock() >= travelSuppressedUntil then
-			openMenu(transitId :: string)
+			activateBubbleTransit(player, "Heartbeat", transitId)
 		elseif isInside and menuOpen and activeTransitId and transitId ~= activeTransitId then
 			activeTransitId = transitId
 			if os.clock() >= travelSuppressedUntil then

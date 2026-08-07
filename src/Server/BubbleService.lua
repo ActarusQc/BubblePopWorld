@@ -11,7 +11,9 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
 local ZoneDefs = require(Shared.ZoneDefs)
 local BubbleTypes = require(Shared.BubbleTypes)
+local BubbleAppearance = require(Shared.BubbleAppearance)
 local BubbleValue = require(Shared.BubbleValue)
+local HubLayout = require(Shared.HubLayout)
 local Remotes = require(Shared.Remotes)
 
 local DataService = require(script.Parent.DataService)
@@ -134,56 +136,10 @@ end
 --------------------------------------------------------------------
 -- Apparence visuelle (ne touche pas à la physique)
 --------------------------------------------------------------------
-local STALE_VISUAL_NAMES = {
-	BubbleSurface = true,
-	BubbleTexture = true,
-	BubbleGlow = true,
-	BubbleGui = true,
-	BubbleSheet = true,
-}
-
-local function clearStaleVisuals(bubble: BasePart)
-	for _, child in ipairs(bubble:GetChildren()) do
-		if STALE_VISUAL_NAMES[child.Name] then
-			child:Destroy()
-		elseif child:IsA("SurfaceGui") or child:IsA("BillboardGui") then
-			if child.Name:find("Bubble") then
-				child:Destroy()
-			end
-		elseif (child:IsA("Decal") or child:IsA("Texture")) and child.Name:find("Bubble") then
-			child:Destroy()
-		end
-	end
-end
-
-local function normalizeCommonTints(common: any): { Color3 }?
-	if common == nil then
-		return nil
-	end
-	if typeof(common) == "Color3" then
-		return { common :: Color3 }
-	end
-	if type(common) == "table" then
-		local asTable = common :: { any }
-		-- Liste de variantes (TintVariants) vs Color3 unique (champs R/G/B).
-		if asTable[1] ~= nil then
-			return asTable :: { Color3 }
-		end
-		if type(asTable.R) == "number" then
-			return { common :: Color3 }
-		end
-	end
-	return nil
-end
-
--- Palette Normal par zone ; raretés restent sur BubbleTypes.
 local function tintVariantsForZone(zoneId: string, zoneDef: any): { Color3 }
-	local palettes = Config.ZoneBubblePalettes
-	local paletteKey = if zoneId == "ClassicZone" then "GameRoom" else zoneId
-	local palette = palettes and palettes[paletteKey]
-	local fromPalette = palette and normalizeCommonTints(palette.Common)
-	if fromPalette then
-		return fromPalette
+	local palette = BubbleAppearance.GetNormalPalette(zoneId)
+	if #palette > 0 then
+		return palette
 	end
 	if zoneDef and zoneDef.BubbleTintVariants and #zoneDef.BubbleTintVariants > 0 then
 		return zoneDef.BubbleTintVariants
@@ -191,91 +147,24 @@ local function tintVariantsForZone(zoneId: string, zoneDef: any): { Color3 }
 	return B.Appearance.TintVariants
 end
 
-local function resolveBubbleColor(def, tintIndex: number, tintVariants: { Color3 }): Color3
-	local A = B.Appearance
-	if def.Id == "Normal" then
-		return tintVariants[((tintIndex - 1) % #tintVariants) + 1]
+local function neighborTintIndices(board: BoardState, x: number, z: number): { number }
+	local indices: { number } = {}
+	for dx = -1, 1 do
+		for dz = -1, 1 do
+			if dx ~= 0 or dz ~= 0 then
+				local col = board.grid[x + dx]
+				local cell = col and col[z + dz]
+				if cell and cell.def and cell.def.Id == "Normal" and type(cell.tintIndex) == "number" then
+					table.insert(indices, cell.tintIndex)
+				end
+			end
+		end
 	end
-	local base = A.BaseColor
-	local c = def.Color
-	return Color3.new(
-		c.R * 0.75 + base.R * 0.25,
-		c.G * 0.75 + base.G * 0.25,
-		c.B * 0.75 + base.B * 0.25
-	)
+	return indices
 end
 
-local function ensureHighlight(bubble: BasePart)
-	local A = B.Appearance
-	local highlight = bubble:FindFirstChild("BubbleHighlight") :: Highlight?
-	if not A.EnableHighlight then
-		if highlight then highlight:Destroy() end
-		return
-	end
-	if not highlight then
-		highlight = Instance.new("Highlight")
-		highlight.Name = "BubbleHighlight"
-		highlight.Adornee = bubble
-		highlight.DepthMode = Enum.HighlightDepthMode.Occluded
-		highlight.Parent = bubble
-	end
-	highlight.FillTransparency = 1
-	highlight.FillColor = Color3.fromRGB(0, 0, 0)
-	highlight.OutlineTransparency = A.OutlineTransparency
-	highlight.OutlineColor = A.OutlineColor
-end
-
-local function ensureReflection(bubble: BasePart)
-	local A = B.Appearance
-	local spark = bubble:FindFirstChild("BubbleReflection") :: BasePart?
-	if not A.EnableReflection then
-		if spark then spark:Destroy() end
-		return
-	end
-	if not spark then
-		spark = Instance.new("Part")
-		spark.Name = "BubbleReflection"
-		spark.Shape = Enum.PartType.Ball
-		spark.Size = A.ReflectionSize
-		spark.Transparency = A.ReflectionTransparency
-		spark.Color = Color3.fromRGB(210, 240, 255)
-		spark.CanCollide = false
-		spark.CanQuery = false
-		spark.CanTouch = false
-		spark.CastShadow = false
-		spark.Massless = true
-		spark.Anchored = false
-		spark.Material = Enum.Material.SmoothPlastic
-		spark.Reflectance = 0
-		spark.CFrame = bubble.CFrame * CFrame.new(0.85, bubble.Size.Y * 0.28, -0.65)
-		spark.Parent = bubble
-
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = bubble
-		weld.Part1 = spark
-		weld.Parent = spark
-	else
-		spark.Size = A.ReflectionSize
-		spark.Transparency = A.ReflectionTransparency
-		spark.Color = Color3.fromRGB(210, 240, 255)
-	end
-end
-
-local function applyBubbleAppearance(bubble: BasePart, def, tintIndex: number, alive: boolean, tintVariants: { Color3 })
-	local A = B.Appearance
-	clearStaleVisuals(bubble)
-
-	bubble.Material = A.Material
-	bubble.Color = resolveBubbleColor(def, tintIndex, tintVariants)
-	bubble.Reflectance = A.Reflectance
-	bubble.CastShadow = A.CastShadow
-	if alive then
-		bubble.Transparency = A.Transparency
-	end
-	bubble:SetAttribute("Rarity", def.Id)
-
-	ensureHighlight(bubble)
-	ensureReflection(bubble)
+local function applyBubbleAppearance(bubble: BasePart, zoneId: string, def, tintIndex: number, alive: boolean)
+	BubbleAppearance.ApplyToPart(bubble, zoneId, def.Id, tintIndex, alive)
 end
 
 --------------------------------------------------------------------
@@ -294,7 +183,6 @@ local function buildBubble(board: BoardState, x: number, z: number)
 	part:SetAttribute("CellZ", z)
 	part:SetAttribute("Alive", true)
 	part:SetAttribute("ZoneId", board.zoneId)
-	-- Area : GameRoom (ClassicZone) ou SummerZone — identification explicite hors position joueur.
 	part:SetAttribute("Area", if board.zoneId == "SummerZone" then "SummerZone" else "GameRoom")
 	part:SetAttribute("ThemeId", board.themeId)
 	part.CanQuery = true
@@ -307,17 +195,29 @@ local function buildBubble(board: BoardState, x: number, z: number)
 
 	part.Parent = board.folder
 
-	local tintIndex = rng:NextInteger(1, #board.tintVariants)
+	-- 1) type réel d'abord (jamais une couleur)
+	local def = BubbleTypes.Roll(rng)
+	local tintIndex = 1
+	if def.Id == "Normal" then
+		-- 2) palette zone uniquement pour Normal
+		tintIndex = BubbleAppearance.PickTintIndex(
+			#board.tintVariants,
+			neighborTintIndices(board, x, z),
+			rng
+		)
+	end
+
 	local cell = {
 		part = part,
 		mesh = mesh,
-		def = BubbleTypes.Roll(rng),
+		def = def,
 		alive = true,
 		home = part.CFrame,
 		tintIndex = tintIndex,
 		zoneId = board.zoneId,
 	}
-	applyBubbleAppearance(part, cell.def, tintIndex, true, board.tintVariants)
+	-- 3) apparence + effets après type confirmé
+	applyBubbleAppearance(part, board.zoneId, cell.def, tintIndex, true)
 	return cell
 end
 
@@ -410,15 +310,29 @@ function BubbleService.BuildBoard(zoneDef: any)
 		floor.Parent = folder
 	end
 
+	-- Cellules réservées : emprise du hub central + sa descente. La case reste nil
+	-- (jamais de bulle fantôme dans la structure) ; tous les accès grid sont déjà
+	-- protégés par `if cell then`.
+	local reserved = 0
 	for x = 1, sizeX do
 		board.grid[x] = {}
 		for z = 1, sizeZ do
-			board.grid[x][z] = buildBubble(board, x, z)
+			if HubLayout.IsCellReserved(zoneId, x, z) then
+				reserved += 1
+			else
+				board.grid[x][z] = buildBubble(board, x, z)
+			end
 		end
 		if x % 6 == 0 then
 			task.wait()
 		end
 	end
+	if reserved > 0 then
+		print(("[BubbleService] %s : %d cellules réservées au hub central."):format(zoneId, reserved))
+	end
+
+	BubbleService.RunBubbleDiagnostics(zoneId)
+	BubbleService.MaybeBuildSpecialPreviewRow(zoneId)
 
 	return board
 end
@@ -450,6 +364,7 @@ end
 --------------------------------------------------------------------
 local function regen(cell)
 	cell.popClaim = nil
+	-- 1) type réel d'abord
 	cell.def = BubbleTypes.Roll(rng)
 	cell.alive = true
 	cell.part.CanCollide = true
@@ -459,8 +374,27 @@ local function regen(cell)
 	cell.part.CFrame = cell.home
 	cell.mesh.Scale = B.MeshScale
 	local board = boards[cell.zoneId]
-	local tints = if board then board.tintVariants else B.Appearance.TintVariants
-	applyBubbleAppearance(cell.part, cell.def, cell.tintIndex, true, tints)
+	local paletteSize = if board then #board.tintVariants else #B.Appearance.TintVariants
+	local x = cell.part:GetAttribute("CellX")
+	local z = cell.part:GetAttribute("CellZ")
+	if cell.def.Id == "Normal" then
+		local neighbors = if board and type(x) == "number" and type(z) == "number"
+			then neighborTintIndices(board, x, z)
+			else {}
+		cell.tintIndex = BubbleAppearance.PickTintIndex(paletteSize, neighbors, rng)
+	else
+		cell.tintIndex = 1
+	end
+	applyBubbleAppearance(cell.part, cell.zoneId, cell.def, cell.tintIndex, true)
+	cell.eventVariant = nil
+	cell.part:SetAttribute("EventVariant", nil)
+	local ring = cell.part:FindFirstChild("EventMarkRing")
+	if ring then
+		ring:Destroy()
+	end
+	pcall(function()
+		require(script.Parent.MiniEventService).OnBubbleReady(cell)
+	end)
 end
 
 local function tryClaim(cell: any): any?
@@ -485,8 +419,8 @@ local function applyPop(cell: any, _x: number, _z: number): boolean
 	part.CanCollide = false
 	part.CanQuery = false
 	part.CanTouch = false
-	part.Transparency = 1
 	part:SetAttribute("Alive", false)
+	applyBubbleAppearance(part, cell.zoneId, cell.def, cell.tintIndex, false)
 
 	table.insert(effectQueue, { _x, _z, cell.def.Id, cell.zoneId })
 	task.delay(B.RegenTime, function()
@@ -596,9 +530,27 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 	local bagValue = BubbleValue.GetBubbleBagValue(def.Id, zoneId)
 	BubbleValue.DebugLog(zoneId, def.Id, baseSell, zoneBagMult, bagValue)
 
-	local raw = bagValue * ctx.coinMult * ctx.worldMult * ctx.extra * ctx.combo()
+	local eventMult = 1
+	pcall(function()
+		local MiniEventService = require(script.Parent.MiniEventService)
+		eventMult = MiniEventService.GetPopSellMultiplier(cell)
+	end)
+	if type(eventMult) ~= "number" or eventMult ~= eventMult or eventMult <= 0 then
+		eventMult = 1
+	end
+
+	local otherMult = ctx.coinMult * ctx.worldMult * ctx.extra * ctx.combo()
+	local raw = bagValue * otherMult * eventMult
 	local sellValue = BackpackService.RoundSellValue(raw, baseSell)
 	if not sellValue or sellValue <= 0 then return "skip" end
+
+	local eventBonusCoins = 0
+	if eventMult > 1 then
+		local sellWithout = BackpackService.RoundSellValue(bagValue * otherMult, baseSell)
+		if sellWithout then
+			eventBonusCoins = math.max(0, sellValue - sellWithout)
+		end
+	end
 
 	local wasBelowCapacity = not BackpackService.IsFull(player)
 	local added, err, tx = BackpackService.AddBubbles(player, storage, sellValue)
@@ -616,6 +568,29 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 		end
 		return "skip"
 	end
+
+	local challengeTags = { isGoldenWave = false, isColorRushMatch = false }
+	pcall(function()
+		local MiniEventService = require(script.Parent.MiniEventService)
+		if MiniEventService.GetPopChallengeTags then
+			challengeTags = MiniEventService.GetPopChallengeTags(cell)
+		end
+	end)
+
+	pcall(function()
+		require(script.Parent.ChallengeService).OnBubblePopped(player, {
+			zoneId = zoneId,
+			rarityId = def.Id,
+			isSpecial = isSpecialRarity(def.Id),
+			isGoldenWave = challengeTags.isGoldenWave == true,
+			isColorRushMatch = challengeTags.isColorRushMatch == true,
+			isTutorial = false,
+		})
+	end)
+
+	pcall(function()
+		require(script.Parent.MiniEventService).OnBubblePopped(player, cell, eventBonusCoins)
+	end)
 
 	local becameFull = wasBelowCapacity and BackpackService.IsFull(player)
 	notifyBubblePoppedAnalytics(player, zoneId, def.Id)
@@ -693,6 +668,10 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 	DataService.Push(player)
 	GlobalCounterService.Add(count)
 
+	pcall(function()
+		require(script.Parent.TutorialService).OnBubblesPopped(player, count)
+	end)
+
 	if announce then
 		Remotes.Event("Announce"):FireAllClients(
 			("%s popped a %s!"):format(player.DisplayName, announce.Label), "legendary")
@@ -755,13 +734,24 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 	if not root then return end
 
 	local zoneId = resolvePopBoardZone(x, z, zoneIdArg)
-	if not zoneId then return end
+	if not zoneId then
+		-- Tentative Giant Bubble même hors cellule de grille.
+		pcall(function()
+			require(script.Parent.MiniEventService).TryGiantHit(player, root.Position, "Jump")
+		end)
+		return
+	end
 
 	local target = BubbleService.CellToWorld(x, z, zoneId)
 	local maxRange = if player:GetAttribute("HasWings") == true then B.WingPopRange else B.MaxPopRange
 	if (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(target.X, 0, target.Z)).Magnitude > maxRange then
 		return
 	end
+
+	-- Giant bubble prioritaire si à portée
+	pcall(function()
+		require(script.Parent.MiniEventService).TryGiantHit(player, root.Position, "Jump")
+	end)
 
 	local profile = DataService.Get(player)
 	if not profile or not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zoneId) then
@@ -805,6 +795,203 @@ end
 
 function BubbleService.CurrentWorld() return currentWorld end
 
+-- Compte les bulles d'une planche (Studio / DiagnosticsEnabled).
+function BubbleService.CountBoardRarities(zoneId: string): {
+	byType: { [string]: number },
+	total: number,
+	totalSpecial: number,
+	minValue: number,
+	maxValue: number,
+}
+	local board = boards[zoneId]
+	local byType: { [string]: number } = {}
+	local total = 0
+	local totalSpecial = 0
+	local minValue = math.huge
+	local maxValue = 0
+	if board then
+		for x = 1, board.sizeX do
+			local col = board.grid[x]
+			if col then
+				for z = 1, board.sizeZ do
+					local cell = col[z]
+					if cell and cell.def then
+						local id = cell.def.Id
+						byType[id] = (byType[id] or 0) + 1
+						total += 1
+						local v = BubbleValue.GetBaseBubbleValue(id)
+						if v < minValue then
+							minValue = v
+						end
+						if v > maxValue then
+							maxValue = v
+						end
+						if id ~= "Normal" then
+							totalSpecial += 1
+						end
+					end
+				end
+			end
+		end
+	end
+	if minValue == math.huge then
+		minValue = 0
+	end
+	return {
+		byType = byType,
+		total = total,
+		totalSpecial = totalSpecial,
+		minValue = minValue,
+		maxValue = maxValue,
+	}
+end
+
+function BubbleService.RunBubbleDiagnostics(zoneId: string)
+	local inStudio = RunService:IsStudio()
+	local verbose = B.DiagnosticsEnabled == true
+	if not inStudio and not verbose then
+		return
+	end
+
+	local counts = BubbleService.CountBoardRarities(zoneId)
+	local area = if zoneId == "SummerZone" then "SummerZone" else "GameRoom"
+
+	-- Poids spéciaux configurés > 0 ?
+	local specialWeight = 0
+	for _, def in ipairs(BubbleTypes.List) do
+		if def.Id ~= "Normal" and type(def.Weight) == "number" and def.Weight > 0 then
+			specialWeight += def.Weight
+		end
+	end
+
+	if inStudio and counts.total > 0 and counts.totalSpecial == 0 and specialWeight > 0 then
+		warn(("[BubbleDiagnostics] %s : 0 bulles spéciales après génération (poids spéciaux=%d, total=%d)"):format(
+			area,
+			specialWeight,
+			counts.total
+		))
+	end
+
+	if inStudio and boards[zoneId] then
+		local board = boards[zoneId]
+		for x = 1, board.sizeX do
+			local col = board.grid[x]
+			if col then
+				for z = 1, board.sizeZ do
+					local cell = col[z]
+					if cell and cell.part and cell.def then
+						local part = cell.part
+						local id = cell.def.Id
+						local base = BubbleValue.GetBaseBubbleValue(id)
+						local normalBase = BubbleValue.GetBaseBubbleValue("Normal")
+						if id ~= "Normal" and base <= normalBase then
+							warn(("[BubbleDiagnostics] spéciale %s valeur <= Normal (base=%s)"):format(id, tostring(base)))
+						end
+						if id ~= "Normal" then
+							if BubbleAppearance.IsNormalPaletteColor(zoneId, part.Color) then
+								warn(("[BubbleDiagnostics] spéciale %s a une couleur de palette normale"):format(id))
+							end
+							if part:GetAttribute("Alive") == true then
+								local mainZone = zoneId == "ClassicZone" or zoneId == "GameRoom"
+								if mainZone then
+									if BubbleAppearance.HasRarityMarker(part)
+										or BubbleAppearance.HasSpecialBorder(part)
+										or BubbleAppearance.HasSpecialSymbol(part)
+									then
+										warn(("[BubbleDiagnostics] spéciale main %s a encore un marqueur de rareté"):format(id))
+									end
+								end
+								if BubbleAppearance.HasRealLights(part) then
+									warn(("[BubbleDiagnostics] spéciale %s a encore une vraie lumière"):format(id))
+								end
+								if BubbleAppearance.HasBeam(part) then
+									warn(("[BubbleDiagnostics] spéciale %s a encore un Beam/colonne"):format(id))
+								end
+							end
+						else
+							if zoneId == "ClassicZone" or zoneId == "GameRoom" then
+								if BubbleAppearance.HasRarityMarker(part)
+									or BubbleAppearance.HasSpecialBorder(part)
+									or BubbleAppearance.HasSpecialSymbol(part)
+								then
+									warn("[BubbleDiagnostics] bulle Normal avec marqueur de rareté")
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	if not verbose then
+		return
+	end
+
+	print(("[BubbleDiagnostics] Zone=%s"):format(area))
+	print(("  Normal=%d"):format(counts.byType.Normal or 0))
+	for _, def in ipairs(BubbleTypes.List) do
+		if def.Id ~= "Normal" then
+			print(("  %s=%d"):format(def.Id, counts.byType[def.Id] or 0))
+		end
+	end
+	print(("  TotalSpecial=%d Total=%d"):format(counts.totalSpecial, counts.total))
+	print(("  MinValue=%s MaxValue=%s"):format(tostring(counts.minValue), tostring(counts.maxValue)))
+end
+
+-- Studio only : rangée d'exemples de chaque type (ne change pas les proba de jeu).
+function BubbleService.MaybeBuildSpecialPreviewRow(zoneId: string)
+	if not RunService:IsStudio() then
+		return
+	end
+	if B.StudioSpecialPreviewRow ~= true then
+		return
+	end
+	if zoneId ~= defaultZoneId and zoneId ~= "ClassicZone" then
+		return
+	end
+
+	local board = boards[zoneId]
+	if not board or not board.folder then
+		return
+	end
+
+	local existing = board.folder:FindFirstChild("SpecialPreviewRow")
+	if existing then
+		existing:Destroy()
+	end
+
+	local folder = Instance.new("Folder")
+	folder.Name = "SpecialPreviewRow"
+	folder.Parent = board.folder
+
+	local origin = board.origin + Vector3.new(0, 8, -(board.sizeZ * G.Spacing) * 0.5 - 14)
+	local types = { "Normal", "Rare", "Golden", "Diamond", "Legendary" }
+	for i, id in ipairs(types) do
+		local part = Instance.new("Part")
+		part.Name = "Preview_" .. id
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanQuery = false
+		part.Size = G.BubbleSize
+		part.CFrame = CFrame.new(origin + Vector3.new((i - 3) * 7, 0, 0))
+		part.Parent = folder
+		local mesh = Instance.new("SpecialMesh")
+		mesh.MeshType = Enum.MeshType.Sphere
+		mesh.Scale = B.MeshScale
+		mesh.Parent = part
+		BubbleAppearance.ApplyToPart(part, zoneId, id, i, true)
+		print(("[SpecialBubbleVisual] Preview Type=%s Path=%s Marker=%s Lights=%s Beam=%s"):format(
+			id,
+			part:GetFullName(),
+			tostring(BubbleAppearance.HasRarityMarker(part)),
+			tostring(BubbleAppearance.HasRealLights(part)),
+			tostring(BubbleAppearance.HasBeam(part))
+		))
+	end
+	print("[SpecialBubbleVisual] Preview row (StudioSpecialPreviewRow=true).")
+end
+
 -- Compat : dossier de la planche classique (drops / coffres).
 function BubbleService.WorldFolder()
 	local board = boards[defaultZoneId]
@@ -835,9 +1022,34 @@ end
 function BubbleService.Start()
 	-- ZoneService.EnsureWorld crée GameZones avant ; BuildAllBoards y accroche les planches.
 	BubbleService.BuildAllBoards()
+	-- Réapplique le rendu stable Neon sur les bulles actives (évite templates/anciens mats).
+	BubbleService.ReapplyMainZoneVisuals()
 	Remotes.Event("PopRequest").OnServerEvent:Connect(onPopRequest)
 	Players.PlayerRemoving:Connect(function(p) budget[p] = nil end)
 	startEffectLoop()
+end
+
+-- Force le pipeline d’apparence actuel sur toutes les bulles de zone principale.
+function BubbleService.ReapplyMainZoneVisuals()
+	for _, board in ipairs(boardList) do
+		local zid = board.zoneId
+		if zid ~= "SummerZone" then
+			for x = 1, board.sizeX do
+				for z = 1, board.sizeZ do
+					local cell = board.grid[x] and board.grid[x][z]
+					if cell and cell.part and cell.def then
+						applyBubbleAppearance(
+							cell.part,
+							cell.zoneId,
+							cell.def,
+							cell.tintIndex or 1,
+							cell.alive == true
+						)
+					end
+				end
+			end
+		end
+	end
 end
 
 return BubbleService

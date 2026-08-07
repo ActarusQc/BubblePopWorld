@@ -1,15 +1,17 @@
 --!strict
 -- Table de raretés des bulles + tirage pondéré.
+-- Colors spéciales = identité visuelle réservée (jamais palette Normal).
 
 local BubbleTypes = {}
 
 BubbleTypes.List = {
-	-- Teintes bulle de savon (pas de blanc opaque)
-	{ Id = "Normal",    Label = "Bubble",           Weight = 1000, StorageValue = 1, SellValue = 1,    Coins = 1,    Color = Color3.fromRGB(145, 225, 255) },
-	{ Id = "Rare",      Label = "Rare bubble",      Weight = 110,  StorageValue = 1, SellValue = 8,    Coins = 8,    Color = Color3.fromRGB(90, 170, 255) },
-	{ Id = "Golden",    Label = "Golden bubble",    Weight = 30,   StorageValue = 1, SellValue = 45,   Coins = 45,   Color = Color3.fromRGB(255, 200, 70) },
-	{ Id = "Diamond",   Label = "Diamond bubble",   Weight = 7,    StorageValue = 1, SellValue = 220,  Coins = 220,  Color = Color3.fromRGB(100, 240, 230) },
-	{ Id = "Legendary", Label = "Legendary bubble", Weight = 1,    StorageValue = 1, SellValue = 1800, Coins = 1800, Color = Color3.fromRGB(255, 110, 210), Announce = true },
+	-- Normal : teinte fallback ; zone principale utilise MainZoneNormalColors (Neon).
+	{ Id = "Normal",    Label = "Bubble",           Weight = 1000, StorageValue = 1, SellValue = 1,    Coins = 1,    Color = Color3.fromRGB(85, 165, 215) },
+	-- Spéciales : couleurs vives calibrées Neon zone principale (weights/valeurs inchangés).
+	{ Id = "Rare",      Label = "Rare bubble",      Weight = 110,  StorageValue = 1, SellValue = 8,    Coins = 8,    Color = Color3.fromRGB(200, 45, 45) },
+	{ Id = "Golden",    Label = "Golden bubble",    Weight = 30,   StorageValue = 1, SellValue = 45,   Coins = 45,   Color = Color3.fromRGB(200, 155, 25) },
+	{ Id = "Diamond",   Label = "Diamond bubble",   Weight = 7,    StorageValue = 1, SellValue = 220,  Coins = 220,  Color = Color3.fromRGB(20, 175, 195) },
+	{ Id = "Legendary", Label = "Legendary bubble", Weight = 1,    StorageValue = 1, SellValue = 1800, Coins = 1800, Color = Color3.fromRGB(185, 35, 140), Announce = true },
 }
 
 BubbleTypes.ById = {}

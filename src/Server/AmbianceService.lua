@@ -18,29 +18,30 @@ end
 
 function AmbianceService.Apply(worldDef)
 	Lighting.ClockTime = 14.5
+	-- Ombres globales OK pour le hub ; décors d'horizon + bulles ont CastShadow=false.
 	Lighting.GlobalShadows = true
 
-	-- Atmosphère / profondeur d'horizon via le décor montagneux (préserve le Sky existant).
+	-- Atmosphère / éclairage plat (horizon océan) — stabilise le shading des bulles.
 	EnvironmentBackdropBuilder.ApplyAtmosphere(worldDef.Sky)
 
 	clear("BloomEffect")
 	local bloom = Instance.new("BloomEffect")
-	bloom.Intensity = 0.15
-	bloom.Size = 12
-	bloom.Threshold = 1.5
+	bloom.Intensity = 0.08
+	bloom.Size = 10
+	bloom.Threshold = 1.8
 	bloom.Parent = Lighting
 
 	clear("SunRaysEffect")
 	local rays = Instance.new("SunRaysEffect")
-	rays.Intensity = 0.08
-	rays.Spread = 0.8
+	rays.Intensity = 0.04
+	rays.Spread = 0.7
 	rays.Parent = Lighting
 
 	clear("ColorCorrectionEffect")
 	local cc = Instance.new("ColorCorrectionEffect")
-	cc.Saturation = 0.12
-	cc.Contrast = 0.08
-	cc.Brightness = 0
+	cc.Saturation = 0.08
+	cc.Contrast = 0 -- contrast > 0 assombrit les faces déjà sombres des bulles
+	cc.Brightness = 0.02
 	cc.Parent = Lighting
 end
 

@@ -52,6 +52,9 @@ Vector3 = {
 	new = newVector3,
 	zero = newVector3(0, 0, 0),
 	one = newVector3(1, 1, 1),
+	xAxis = newVector3(1, 0, 0),
+	yAxis = newVector3(0, 1, 0),
+	zAxis = newVector3(0, 0, 1),
 }
 
 --------------------------------------------------------------------
@@ -107,6 +110,22 @@ cframe.__mul = function(a, b)
 		return a._pos + rotateVector(a._rot, b)
 	end
 	return newCF(a._pos + rotateVector(a._rot, b._pos), matMul(a._rot, b._rot))
+end
+
+cframe.Inverse = function(self)
+	local r = self._rot
+	local rt = {
+		{ r[1][1], r[2][1], r[3][1] },
+		{ r[1][2], r[2][2], r[3][2] },
+		{ r[1][3], r[2][3], r[3][3] },
+	}
+	local p = self._pos
+	local invP = newVector3(
+		-(rt[1][1] * p.X + rt[1][2] * p.Y + rt[1][3] * p.Z),
+		-(rt[2][1] * p.X + rt[2][2] * p.Y + rt[2][3] * p.Z),
+		-(rt[3][1] * p.X + rt[3][2] * p.Y + rt[3][3] * p.Z)
+	)
+	return newCF(invP, rt)
 end
 
 CFrame = {
@@ -207,6 +226,7 @@ local CLASS_PARENTS = {
 	ModuleScript = { "LuaSourceContainer", "Instance" },
 	SurfaceGui = { "LayerCollector", "Instance" },
 	BillboardGui = { "LayerCollector", "Instance" },
+	SurfaceAppearance = { "Instance" },
 	ProximityPrompt = { "Instance" },
 	ClickDetector = { "Instance" },
 	PointLight = { "Light", "Instance" },
@@ -331,8 +351,75 @@ function instanceMethods:GetPivot()
 	return self.WorldPivot or CFrame.identity
 end
 
+function instanceMethods:IsDescendantOf(target)
+	local parent = self.Parent
+	while parent do
+		if parent == target then
+			return true
+		end
+		parent = parent.Parent
+	end
+	return false
+end
+
+function instanceMethods:GetScale()
+	return rawget(self, "_props").Scale or 1
+end
+
+function instanceMethods:ScaleTo(newScale)
+	local old = self:GetScale()
+	local factor = newScale / math.max(old, 1e-9)
+	rawget(self, "_props").Scale = newScale
+	local pivot = self:GetPivot().Position
+	local function scalePart(part)
+		local pos = part.CFrame.Position
+		local rel = pos - pivot
+		part.Size = part.Size * factor
+		part.CFrame = CFrame.new(pivot + rel * factor)
+	end
+	if self:IsA("BasePart") then
+		scalePart(self)
+	end
+	for _, d in ipairs(self:GetDescendants()) do
+		if d:IsA("BasePart") then
+			scalePart(d)
+		end
+	end
+end
+
 function instanceMethods:PivotTo(cf)
+	local current = self:GetPivot()
+	local transform = cf * current:Inverse()
+	local function movePart(part)
+		part.CFrame = transform * part.CFrame
+	end
+	if self:IsA("BasePart") then
+		movePart(self)
+	end
+	for _, d in ipairs(self:GetDescendants()) do
+		if d:IsA("BasePart") then
+			movePart(d)
+		end
+	end
 	self.WorldPivot = cf
+end
+
+function instanceMethods:Clone()
+	local copy = Instance.new(self.ClassName)
+	copy.Name = self.Name
+	for key, value in pairs(rawget(self, "_props")) do
+		if key ~= "Parent" and key ~= "ClassName" then
+			rawget(copy, "_props")[key] = value
+		end
+	end
+	for key, value in pairs(rawget(self, "_attributes")) do
+		copy:SetAttribute(key, value)
+	end
+	for _, child in ipairs(self:GetChildren()) do
+		local childCopy = child:Clone()
+		childCopy.Parent = copy
+	end
+	return copy
 end
 
 -- AABB monde de tous les BasePart descendants (approximation de Model:GetExtentsSize).
@@ -366,6 +453,38 @@ function instanceMethods:GetExtentsSize()
 	return newVector3(maxX - minX, maxY - minY, maxZ - minZ)
 end
 
+function instanceMethods:GetBoundingBox()
+	local size = self:GetExtentsSize()
+	local minX, minY, minZ = math.huge, math.huge, math.huge
+	local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
+	local found = false
+	local function consider(part)
+		if not part:IsA("BasePart") then
+			return
+		end
+		found = true
+		local pos = part.CFrame.Position
+		local half = part.Size * 0.5
+		minX = math.min(minX, pos.X - half.X)
+		minY = math.min(minY, pos.Y - half.Y)
+		minZ = math.min(minZ, pos.Z - half.Z)
+		maxX = math.max(maxX, pos.X + half.X)
+		maxY = math.max(maxY, pos.Y + half.Y)
+		maxZ = math.max(maxZ, pos.Z + half.Z)
+	end
+	if self:IsA("BasePart") then
+		consider(self)
+	end
+	for _, d in ipairs(self:GetDescendants()) do
+		consider(d)
+	end
+	if not found then
+		return CFrame.identity, Vector3.zero
+	end
+	local center = newVector3((minX + maxX) * 0.5, (minY + maxY) * 0.5, (minZ + maxZ) * 0.5)
+	return CFrame.new(center), size
+end
+
 Instance = {
 	new = function(className)
 		local props = {
@@ -381,6 +500,7 @@ Instance = {
 			Position = newVector3(0, 0, 0),
 			Material = materialEnum.Metal,
 			WorldPivot = CFrame.identity,
+			Scale = 1,
 		}
 		return setmetatable({
 			_props = props,

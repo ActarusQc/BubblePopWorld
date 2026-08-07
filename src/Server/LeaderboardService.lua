@@ -4,6 +4,7 @@
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -13,10 +14,16 @@ local Remotes = require(Shared.Remotes)
 local L10n = require(Shared.LocalizationStrings)
 local L10nUtil = require(Shared.LocalizationUtil)
 local LeaderboardUtil = require(Shared.LeaderboardUtil)
+local HubDisplaysLogic = require(Shared.HubDisplaysLogic)
+local HubDisplaysLayout = require(Shared.HubDisplaysLayout)
+local HubBoardGui = require(Shared.HubBoardGui)
 local DataService = require(script.Parent.DataService)
 
 local ORDERED_STORE_NAME = Config.Data.GlobalCoinsLeaderboardStore or "GlobalCoinsLeaderboard_v1"
 local TOP_N = 10
+-- Nombre de lignes réellement affichées sur le panneau monde. Le hub central demande
+-- un aperçu TOP 3 (attribut BPW_Rows) ; le cache et le classement restent en TOP 10.
+local displayRows = TOP_N
 local WRITE_THROTTLE_SEC = Config.Data.LeaderboardWriteThrottle or 45
 local REFRESH_INTERVAL_SEC = Config.Data.LeaderboardRefreshInterval or 60
 local NAME_CACHE_TTL_SEC = 600
@@ -34,7 +41,11 @@ local COLORS = {
 	Silver = Color3.fromRGB(200, 210, 230),
 	Bronze = Color3.fromRGB(210, 140, 70),
 	Stroke = Color3.fromRGB(40, 70, 120),
+	ArchBg = Color3.fromRGB(6, 12, 26),
+	ArchMetal = Color3.fromRGB(72, 80, 94),
+	ArchCyan = Color3.fromRGB(70, 210, 255),
 }
+
 
 local LeaderboardService = {}
 
@@ -89,6 +100,10 @@ local function comma(n: number): string
 	return LeaderboardUtil.Comma(n)
 end
 
+local function compact(n: number): string
+	return LeaderboardUtil.FormatCompact(n)
+end
+
 local function getStore(): OrderedDataStore?
 	if orderedStore then
 		return orderedStore
@@ -111,55 +126,65 @@ local function getStore(): OrderedDataStore?
 end
 
 local function findDisplaySurface(): BasePart?
-	-- 1) Panneau physique existant portant le titre TOP COIN COLLECTORS
-	local needle = "TOP COIN COLLECTORS"
-	for _, desc in ipairs(workspace:GetDescendants()) do
-		if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-			local text = string.upper(tostring((desc :: TextLabel).Text))
-			if string.find(text, needle, 1, true) then
-				local gui = desc:FindFirstAncestorWhichIsA("SurfaceGui")
-				if gui and gui.Parent and gui.Parent:IsA("BasePart") then
-					dbg("Found title panel model/part:", instancePath(gui.Parent))
-					dbg("Found title TextLabel:", instancePath(desc))
-					return gui.Parent :: BasePart
+	-- Priorité : ancrage Tripo HubDisplays (LeftLeaderboardAnchor).
+	local okHub, HubDisplaysService = pcall(function()
+		return require(script.Parent.HubDisplaysService)
+	end)
+	if okHub and HubDisplaysService and type(HubDisplaysService.FindAnchor) == "function" then
+		local anchor = HubDisplaysService.FindAnchor("Coins")
+		if HubDisplaysLogic.AsBasePart(anchor) then
+			print("[TopCoinsBoard] found via HubDisplays LeftLeaderboardAnchor")
+			return anchor
+		end
+	end
+
+	-- Tag unifié (ancrage uniquement)
+	for _, inst in ipairs(CollectionService:GetTagged("BPW_TopCoinsBoard")) do
+		local part = HubDisplaysLogic.AsBasePart(inst)
+		if part and part.Name == "LeftLeaderboardAnchor" then
+			print("[TopCoinsBoard] found via tag LeftLeaderboardAnchor:", instancePath(part))
+			return part
+		end
+	end
+	for _, inst in ipairs(CollectionService:GetTagged("BPW_TopCoinsBoard")) do
+		local part = HubDisplaysLogic.AsBasePart(inst)
+		if part and part:GetAttribute("BPW_LeaderboardRole") == "Coins" then
+			print("[TopCoinsBoard] found via tag role Coins:", instancePath(part))
+			return part
+		end
+	end
+
+	local hubRoot = workspace:FindFirstChild("BubblePopWorld")
+	local hub = hubRoot and hubRoot:FindFirstChild("CentralHub")
+	if hub then
+		local named = hub:FindFirstChild("LeftLeaderboardAnchor", true)
+		local left = HubDisplaysLogic.AsBasePart(named)
+		if left then
+			print("[TopCoinsBoard] found via name LeftLeaderboardAnchor")
+			return left
+		end
+		for _, d in ipairs(hub:GetDescendants()) do
+			if d:IsA("BasePart") and (
+				d:GetAttribute("BPW_TopCoinsBoard") == true
+				or d:GetAttribute("BPW_HubLeaderboard") == true
+			) and d.Name ~= "CenterLeaderboardAnchor"
+				and d.Name ~= "RightLeaderboardAnchor"
+			then
+				-- Ignore anciens panneaux flottants si ancrages existent ailleurs
+				if d:FindFirstAncestor("HubDisplays") or d.Name == "LeftLeaderboardAnchor" then
+					print("[TopCoinsBoard] found via attribute:", instancePath(d))
+					return d
 				end
 			end
 		end
 	end
 
-	local root = workspace:FindFirstChild("BubblePopWorld")
-	if not root then
-		return nil
-	end
-	local lobby = root:FindFirstChild("Lobby")
-	if not lobby then
+	-- Hub actif : ne jamais peindre Top5Face / panneaux Studio orphelins.
+	if Config.Hub and Config.Hub.Enabled == true then
+		print("[TopCoinsBoard] hub panel not found yet (skip legacy hosts)")
 		return nil
 	end
 
-	local candidates = {
-		lobby:FindFirstChild("GlobalLeaderboardBoard", true),
-		lobby:FindFirstChild("LeaderboardBoard", true),
-	}
-	local decor = lobby:FindFirstChild("LobbyDecor")
-	if decor then
-		table.insert(candidates, 1, decor:FindFirstChild("GlobalLeaderboardBoard"))
-		table.insert(candidates, 2, decor:FindFirstChild("LeaderboardBoard"))
-	end
-
-	for _, inst in ipairs(candidates) do
-		if inst and inst:IsA("BasePart") then
-			return inst
-		elseif inst and inst:IsA("Model") then
-			local surface = inst:FindFirstChild("DisplaySurface", true)
-			if surface and surface:IsA("BasePart") then
-				return surface
-			end
-			local part = inst:FindFirstChildWhichIsA("BasePart", true)
-			if part then
-				return part
-			end
-		end
-	end
 	return nil
 end
 
@@ -207,7 +232,7 @@ local function rankAccent(rank: number): Color3
 	return COLORS.Muted
 end
 
-local function buildRowsFrame(parent: Frame): Frame
+local function buildHubTop5Rows(parent: Frame): Frame
 	local existing = parent:FindFirstChild("Rows")
 	if existing then
 		existing:Destroy()
@@ -215,7 +240,177 @@ local function buildRowsFrame(parent: Frame): Frame
 
 	local rows = Instance.new("Frame")
 	rows.Name = "Rows"
-	rows.Size = UDim2.new(1, 0, 0, 400)
+	rows.Size = UDim2.fromScale(1, 0.72)
+	rows.Position = UDim2.fromScale(0, 0.2)
+	rows.BackgroundTransparency = 1
+	rows.ClipsDescendants = true
+	rows.LayoutOrder = 3
+	rows.Parent = parent
+
+	local rowsLayout = Instance.new("UIListLayout")
+	rowsLayout.FillDirection = Enum.FillDirection.Vertical
+	rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	rowsLayout.Padding = UDim.new(0.015, 0)
+	rowsLayout.Parent = rows
+
+	local rowScale = 1 / displayRows
+	for i = 1, displayRows do
+		local row = Instance.new("Frame")
+		row.Name = ("Row%02d"):format(i)
+		row.Size = UDim2.new(1, 0, rowScale - 0.015, 0)
+		row.BackgroundColor3 = if i % 2 == 0 then COLORS.RowB else COLORS.RowA
+		row.BackgroundTransparency = 0.25
+		row.BorderSizePixel = 0
+		row.LayoutOrder = i
+		row.ZIndex = 1
+		row.Parent = rows
+
+		local rowCorner = Instance.new("UICorner")
+		rowCorner.CornerRadius = UDim.new(0, 10)
+		rowCorner.Parent = row
+
+		local rank = makeLabel(row, "Rank", {
+			Size = UDim2.fromScale(0.12, 0.85),
+			Position = UDim2.fromScale(0.02, 0.075),
+			Text = tostring(i),
+			TextColor3 = rankAccent(i),
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Font = Enum.Font.GothamBlack,
+			ZIndex = 3,
+		}, false)
+		rank.TextScaled = true
+
+		local player = makeLabel(row, "Player", {
+			Size = UDim2.fromScale(0.52, 0.8),
+			Position = UDim2.fromScale(0.16, 0.1),
+			Text = "—",
+			TextColor3 = COLORS.Text,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Font = Enum.Font.GothamMedium,
+			ZIndex = 3,
+		}, false)
+		player.TextScaled = true
+
+		local coins = makeLabel(row, "Coins", {
+			Size = UDim2.fromScale(0.28, 0.8),
+			Position = UDim2.fromScale(0.7, 0.1),
+			Text = "—",
+			TextColor3 = if i <= 3 then rankAccent(i) else COLORS.Accent,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Font = Enum.Font.GothamBold,
+			ZIndex = 3,
+		}, false)
+		coins.TextScaled = true
+	end
+
+	return rows
+end
+
+local function buildHubTop5Screen(surfaceGui: SurfaceGui): (Frame, TextLabel)
+	for _, child in ipairs(surfaceGui:GetChildren()) do
+		child:Destroy()
+	end
+
+	local root = Instance.new("Frame")
+	root.Name = "Root"
+	root.Size = UDim2.fromScale(1, 1)
+	root.BackgroundColor3 = COLORS.ArchBg
+	root.BackgroundTransparency = 0.12
+	root.BorderSizePixel = 0
+	root.ClipsDescendants = true
+	root.Parent = surfaceGui
+	root:SetAttribute("BPW_ArchScreen", 2)
+
+	local rootCorner = Instance.new("UICorner")
+	rootCorner.CornerRadius = UDim.new(0, 18)
+	rootCorner.Parent = root
+
+	local metal = Instance.new("UIStroke")
+	metal.Name = "MetalStroke"
+	metal.Color = COLORS.ArchMetal
+	metal.Thickness = 3
+	metal.Transparency = 0.15
+	metal.Parent = root
+
+	local cyanRim = Instance.new("Frame")
+	cyanRim.Name = "CyanRim"
+	cyanRim.Size = UDim2.fromScale(1, 1)
+	cyanRim.BackgroundTransparency = 1
+	cyanRim.BorderSizePixel = 0
+	cyanRim.Parent = root
+	local cyanCorner = Instance.new("UICorner")
+	cyanCorner.CornerRadius = UDim.new(0, 18)
+	cyanCorner.Parent = cyanRim
+	local cyan = Instance.new("UIStroke")
+	cyan.Color = COLORS.ArchCyan
+	cyan.Thickness = 1.5
+	cyan.Transparency = 0.4
+	cyan.Parent = cyanRim
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0.035, 0)
+	padding.PaddingBottom = UDim.new(0.035, 0)
+	padding.PaddingLeft = UDim.new(0.045, 0)
+	padding.PaddingRight = UDim.new(0.045, 0)
+	padding.Parent = root
+
+	local header = Instance.new("Frame")
+	header.Name = "Header"
+	header.Size = UDim2.fromScale(1, 0.18)
+	header.BackgroundColor3 = COLORS.HeaderBg
+	header.BackgroundTransparency = 0.2
+	header.BorderSizePixel = 0
+	header.LayoutOrder = 1
+	header.Parent = root
+
+	local headerCorner = Instance.new("UICorner")
+	headerCorner.CornerRadius = UDim.new(0, 12)
+	headerCorner.Parent = header
+
+	local title = makeLabel(header, "Title", {
+		Size = UDim2.fromScale(0.92, 0.78),
+		Position = UDim2.fromScale(0.04, 0.11),
+		Text = L10n.HubTopTitle,
+		Font = Enum.Font.GothamBlack,
+		TextColor3 = COLORS.ArchCyan,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		ZIndex = 2,
+	}, false)
+	title.TextScaled = true
+
+	buildHubTop5Rows(root)
+
+	local status = makeLabel(root, "StatusLabel", {
+		Size = UDim2.fromScale(1, 0.06),
+		Position = UDim2.fromScale(0, 0.93),
+		Text = L10n.LoadingLeaderboard,
+		TextColor3 = COLORS.Muted,
+		Font = Enum.Font.Gotham,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		LayoutOrder = 4,
+		ZIndex = 2,
+	}, false)
+	status.TextScaled = true
+
+	return root, status
+end
+
+local function buildRowsFrame(parent: Frame): Frame
+	local existing = parent:FindFirstChild("Rows")
+	if existing then
+		existing:Destroy()
+	end
+
+	-- Aperçu court (hub) : lignes hautes et texte plus grand, sinon rien ne remplit
+	-- le panneau. Classement complet : lignes compactes historiques.
+	local compact = displayRows > 3
+	local rowHeight = if compact then 36 else 84
+	local textScale = if compact then 1 else 1.7
+
+	local rows = Instance.new("Frame")
+	rows.Name = "Rows"
+	rows.Size = UDim2.new(1, 0, 0, displayRows * (rowHeight + 4))
 	rows.BackgroundTransparency = 1
 	rows.LayoutOrder = 3
 	rows.Parent = parent
@@ -226,10 +421,10 @@ local function buildRowsFrame(parent: Frame): Frame
 	rowsLayout.Padding = UDim.new(0, 4)
 	rowsLayout.Parent = rows
 
-	for i = 1, TOP_N do
+	for i = 1, displayRows do
 		local row = Instance.new("Frame")
 		row.Name = ("Row%02d"):format(i)
-		row.Size = UDim2.new(1, 0, 0, 36)
+		row.Size = UDim2.new(1, 0, 0, rowHeight)
 		row.BackgroundColor3 = if i % 2 == 0 then COLORS.RowB else COLORS.RowA
 		row.BorderSizePixel = 0
 		row.LayoutOrder = i
@@ -262,7 +457,7 @@ local function buildRowsFrame(parent: Frame): Frame
 			Font = Enum.Font.GothamBlack,
 			ZIndex = 3,
 		}, false)
-		ensureTextConstraint(rank, 12, 20)
+		ensureTextConstraint(rank, 12, math.floor(20 * textScale))
 
 		local player = makeLabel(row, "Player", {
 			Size = UDim2.new(1, -190, 1, 0),
@@ -274,7 +469,7 @@ local function buildRowsFrame(parent: Frame): Frame
 			Font = Enum.Font.GothamMedium,
 			ZIndex = 3,
 		}, false)
-		ensureTextConstraint(player, 11, 18)
+		ensureTextConstraint(player, 11, math.floor(18 * textScale))
 
 		local coins = makeLabel(row, "Coins", {
 			Size = UDim2.new(0, 120, 1, 0),
@@ -285,207 +480,58 @@ local function buildRowsFrame(parent: Frame): Frame
 			Font = Enum.Font.GothamBold,
 			ZIndex = 3,
 		}, false)
-		ensureTextConstraint(coins, 11, 18)
+		ensureTextConstraint(coins, 11, math.floor(18 * textScale))
 	end
 
 	return rows
 end
 
 local function ensureBoardGui(surface: BasePart): (Frame, TextLabel)
-	local gui = surface:FindFirstChild("GlobalLeaderboardGui")
-	if not (gui and gui:IsA("SurfaceGui")) then
-		local legacy = surface:FindFirstChild("LeaderboardGui")
-		if legacy then
-			legacy:Destroy()
-		end
-		gui = Instance.new("SurfaceGui")
-		gui.Name = "GlobalLeaderboardGui"
-		gui.Parent = surface
+	-- Validations strictes : jamais FindFirstChild sur non-Instance.
+	if typeof(surface) ~= "Instance" or not surface:IsA("BasePart") then
+		error("[LeaderboardService] ensureBoardGui: surface is not a BasePart")
 	end
 
-	local surfaceGui = gui :: SurfaceGui
-	surfaceGui.Face = Enum.NormalId.Front
-	surfaceGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	surfaceGui.PixelsPerStud = 40
-	surfaceGui.LightInfluence = 0
-	surfaceGui.Brightness = 1
-	surfaceGui.AlwaysOnTop = false
-	surfaceGui.ClipsDescendants = true
-	surfaceGui.ZOffset = 1
-	surfaceGui.Enabled = true
-
-	local root = surfaceGui:FindFirstChild("Root")
-	local needsFullBuild = not (root and root:IsA("Frame"))
-	if needsFullBuild then
-		for _, child in ipairs(surfaceGui:GetChildren()) do
-			child:Destroy()
-		end
-		root = Instance.new("Frame")
-		root.Name = "Root"
-		root.Size = UDim2.fromScale(1, 1)
-		root.BackgroundColor3 = COLORS.Bg
-		root.BorderSizePixel = 0
-		root.Parent = surfaceGui
-
-		local rootCorner = Instance.new("UICorner")
-		rootCorner.CornerRadius = UDim.new(0, 10)
-		rootCorner.Parent = root
-
-		local rootStroke = Instance.new("UIStroke")
-		rootStroke.Color = COLORS.Stroke
-		rootStroke.Thickness = 2
-		rootStroke.Transparency = 0.35
-		rootStroke.Parent = root
-
-		local padding = Instance.new("UIPadding")
-		padding.PaddingTop = UDim.new(0, 10)
-		padding.PaddingBottom = UDim.new(0, 10)
-		padding.PaddingLeft = UDim.new(0, 12)
-		padding.PaddingRight = UDim.new(0, 12)
-		padding.Parent = root
-
-		local layout = Instance.new("UIListLayout")
-		layout.FillDirection = Enum.FillDirection.Vertical
-		layout.SortOrder = Enum.SortOrder.LayoutOrder
-		layout.Padding = UDim.new(0, 6)
-		layout.Parent = root
-
-		local header = Instance.new("Frame")
-		header.Name = "Header"
-		header.Size = UDim2.new(1, 0, 0, 70)
-		header.BackgroundColor3 = COLORS.HeaderBg
-		header.BorderSizePixel = 0
-		header.LayoutOrder = 1
-		header.Parent = root
-
-		local headerCorner = Instance.new("UICorner")
-		headerCorner.CornerRadius = UDim.new(0, 8)
-		headerCorner.Parent = header
-
-		local title = makeLabel(header, "Title", {
-			Size = UDim2.new(1, -16, 0, 38),
-			Position = UDim2.new(0, 8, 0, 6),
-			Text = L10n.TopCoinCollectors,
-			Font = Enum.Font.GothamBlack,
-			TextColor3 = COLORS.Text,
-			ZIndex = 2,
-		})
-		ensureTextConstraint(title, 18, 34)
-
-		local subtitle = makeLabel(header, "Subtitle", {
-			Size = UDim2.new(1, -16, 0, 22),
-			Position = UDim2.new(0, 8, 0, 42),
-			Text = L10n.GlobalLeaderboard,
-			Font = Enum.Font.GothamMedium,
-			TextColor3 = COLORS.Accent,
-			ZIndex = 2,
-		})
-		ensureTextConstraint(subtitle, 12, 18)
-
-		local columnHeader = Instance.new("Frame")
-		columnHeader.Name = "ColumnHeader"
-		columnHeader.Size = UDim2.new(1, 0, 0, 28)
-		columnHeader.BackgroundTransparency = 1
-		columnHeader.LayoutOrder = 2
-		columnHeader.Parent = root
-
-		local rankHeader = makeLabel(columnHeader, "RankHeader", {
-			Size = UDim2.new(0, 56, 1, 0),
-			Text = L10n.Rank,
-			TextColor3 = COLORS.Muted,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Font = Enum.Font.GothamBold,
-			ZIndex = 2,
-		})
-		ensureTextConstraint(rankHeader, 10, 16)
-
-		local playerHeader = makeLabel(columnHeader, "PlayerHeader", {
-			Size = UDim2.new(1, -190, 1, 0),
-			Position = UDim2.new(0, 60, 0, 0),
-			Text = L10n.Player,
-			TextColor3 = COLORS.Muted,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Font = Enum.Font.GothamBold,
-			ZIndex = 2,
-		})
-		ensureTextConstraint(playerHeader, 10, 16)
-
-		local coinsHeader = makeLabel(columnHeader, "CoinsHeader", {
-			Size = UDim2.new(0, 120, 1, 0),
-			Position = UDim2.new(1, -120, 0, 0),
-			Text = L10n.Coins,
-			TextColor3 = COLORS.Muted,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			Font = Enum.Font.GothamBold,
-			ZIndex = 2,
-		})
-		ensureTextConstraint(coinsHeader, 10, 16)
-
-		buildRowsFrame(root :: Frame)
-
-		local status = makeLabel(root, "StatusLabel", {
-			Size = UDim2.new(1, 0, 0, 22),
-			Text = L10n.LoadingLeaderboard,
-			TextColor3 = COLORS.Muted,
-			Font = Enum.Font.Gotham,
-			LayoutOrder = 4,
-			ZIndex = 2,
-		})
-		ensureTextConstraint(status, 10, 16)
-	else
-		local rootFrame = root :: Frame
-		local rows = rootFrame:FindFirstChild("Rows")
-		if not (rows and rows:IsA("Frame") and rows:FindFirstChild("Row01")) then
-			buildRowsFrame(rootFrame)
-		end
-	end
-
-	local rootFrame = root :: Frame
-	local statusLabel = rootFrame:FindFirstChild("StatusLabel")
-	if not (statusLabel and statusLabel:IsA("TextLabel")) then
-		statusLabel = makeLabel(rootFrame, "StatusLabel", {
-			Size = UDim2.new(1, 0, 0, 22),
-			Text = L10n.LoadingLeaderboard,
-			TextColor3 = COLORS.Muted,
-			Font = Enum.Font.Gotham,
-			LayoutOrder = 4,
-			ZIndex = 2,
-		})
-		ensureTextConstraint(statusLabel, 10, 16)
-	end
-
-	return rootFrame, statusLabel :: TextLabel
+	local spec = HubDisplaysLayout.SpecByRole("Coins")
+	local guiName = if spec then spec.GuiName else "CoinsLeaderboardGui"
+	local title = L10n.TopCoinCollectors or L10n.HubTopTitle or "TOP COIN COLLECTORS"
+	local theme = if spec then HubBoardGui.ThemeFromSpec(spec) else nil
+	local dual = HubBoardGui.EnsureDualBoard(
+		surface,
+		guiName,
+		title,
+		theme,
+		"Global · Top 10"
+	)
+	return dual.Roots[1], dual.Statuses[1]
 end
 
 local function setStatus(statusLabel: TextLabel, mode: StatusMode, detail: string?)
 	statusMode = mode
+	statusLabel.AutoLocalize = false
 	if mode == "loading" then
-		L10nUtil.localize(statusLabel, L10n.LoadingLeaderboard)
+		statusLabel.Text = L10n.LoadingLeaderboard or "Loading..."
 		statusLabel.TextColor3 = COLORS.Muted
 	elseif mode == "empty" then
-		L10nUtil.localize(statusLabel, L10n.NoRankingsYet)
+		statusLabel.Text = L10n.NoRankingsYet or "No rankings yet"
 		statusLabel.TextColor3 = COLORS.Muted
 	elseif mode == "unavailable" then
-		L10nUtil.localize(statusLabel, detail or L10n.LeaderboardUnavailable)
+		statusLabel.Text = detail or L10n.LeaderboardUnavailable or "Leaderboard unavailable"
 		statusLabel.TextColor3 = COLORS.Bronze
 	else
-		if detail and detail ~= "" then
-			L10nUtil.localize(statusLabel, detail)
-		else
-			L10nUtil.dynamic(statusLabel, "")
-		end
+		statusLabel.Text = if detail and detail ~= "" then detail else ""
 		statusLabel.TextColor3 = COLORS.Muted
 	end
 end
 
 local function countUiRows(root: Frame): number
-	local rows = root:FindFirstChild("Rows")
-	if not (rows and rows:IsA("Frame")) then
+	local rows = HubDisplaysLogic.SafeFindFirstChild(root, "Rows")
+	if not HubDisplaysLogic.AsFrame(rows) then
 		return 0
 	end
 	local n = 0
-	for i = 1, TOP_N do
-		if rows:FindFirstChild(("Row%02d"):format(i)) then
+	for i = 1, displayRows do
+		if HubDisplaysLogic.SafeFindFirstChild(rows, ("Row%02d"):format(i)) then
 			n += 1
 		end
 	end
@@ -525,78 +571,29 @@ local function logPresentPlayers()
 end
 
 local function paintRows(root: Frame, entries: { BoardEntry }?, showPlaceholders: boolean)
-	local rows = root:FindFirstChild("Rows")
-	if not (rows and rows:IsA("Frame")) then
-		dbg("paintRows: Rows frame missing under", instancePath(root))
-		return
-	end
-
-	local uiRowCount = countUiRows(root)
-	dbg("UI rows found before fill:", uiPropCount)
-	dbg("paintRows entries:", if entries then #entries else 0, "| showPlaceholders:", showPlaceholders)
-
-	-- Nettoyage : pas de lignes dynamiques parasites hors Row01..Row10
-	for _, child in ipairs(rows:GetChildren()) do
-		if child:IsA("Frame") and not string.match(child.Name, "^Row%d%d$") then
-			child:Destroy()
-		end
-	end
-
-	for i = 1, TOP_N do
-		local row = rows:FindFirstChild(("Row%02d"):format(i))
-		if not (row and row:IsA("Frame")) then
-			dbg("paintRows: missing", ("Row%02d"):format(i))
-			continue
-		end
-		local rankLabel = row:FindFirstChild("Rank")
-		local playerLabel = row:FindFirstChild("Player")
-		local coinsLabel = row:FindFirstChild("Coins")
-		local accent = row:FindFirstChild("Accent")
-		local entry = if entries then entries[i] else nil
-
-		if accent and accent:IsA("Frame") then
-			accent.BackgroundColor3 = rankAccent(i)
-			accent.Visible = entry ~= nil or showPlaceholders
-		end
-
-		if entry then
-			dbg("Filling rank", entry.Rank, "using", instancePath(row))
-			if rankLabel and rankLabel:IsA("TextLabel") then
-				rankLabel.Visible = true
-				rankLabel.TextTransparency = 0
-				L10nUtil.dynamic(rankLabel, tostring(entry.Rank))
-				rankLabel.TextColor3 = rankAccent(entry.Rank)
-			end
-			if playerLabel and playerLabel:IsA("TextLabel") then
-				playerLabel.Visible = true
-				playerLabel.TextTransparency = 0
-				L10nUtil.dynamic(playerLabel, entry.Name)
-				playerLabel.TextColor3 = COLORS.Text
-			end
-			if coinsLabel and coinsLabel:IsA("TextLabel") then
-				coinsLabel.Visible = true
-				coinsLabel.TextTransparency = 0
-				L10nUtil.dynamic(coinsLabel, comma(entry.Value))
-				coinsLabel.TextColor3 = if entry.Rank <= 3 then rankAccent(entry.Rank) else COLORS.Accent
-			end
-			dbg("Filled row", i, "| rank:", entry.Rank, "| name:", entry.Name, "| coins:", entry.Value)
-		elseif showPlaceholders then
-			if rankLabel and rankLabel:IsA("TextLabel") then
-				L10nUtil.dynamic(rankLabel, tostring(i))
-				rankLabel.TextColor3 = rankAccent(i)
-			end
-			if playerLabel and playerLabel:IsA("TextLabel") then
-				L10nUtil.dynamic(playerLabel, "—")
-				playerLabel.TextColor3 = COLORS.Muted
-			end
-			if coinsLabel and coinsLabel:IsA("TextLabel") then
-				L10nUtil.dynamic(coinsLabel, "—")
-				coinsLabel.TextColor3 = COLORS.Muted
-			end
-			dbg("Placeholder row", i)
-		end
+	local mode: StatusMode = if showPlaceholders and (not entries or #entries == 0)
+		then "empty"
+		elseif entries and #entries > 0
+		then "ready"
+		else statusMode
+	local spec = HubDisplaysLayout.SpecByRole("Coins")
+	local theme = if spec then HubBoardGui.ThemeFromSpec(spec) else nil
+	local status = HubDisplaysLogic.SafeFindFirstChild(root, "StatusLabel")
+	local statusLabel = if status and status:IsA("TextLabel") then status else nil
+	if statusLabel then
+		HubBoardGui.Paint(
+			root,
+			statusLabel,
+			entries,
+			if mode == "loading" then "loading" elseif mode == "empty" then "empty" elseif mode == "unavailable" then "unavailable" else "ready",
+			"Coins",
+			L10n.NoRankingsYet,
+			L10n.LeaderboardUnavailable,
+			theme
+		)
 	end
 end
+
 
 -- Résolution synchrone non-bloquante : cache + joueurs en ligne uniquement.
 -- Jamais GetNameFromUserIdAsync / GetUserInfosByUserIdsAsync ici (peuvent yield indéfiniment).
@@ -803,55 +800,85 @@ end
 local function fetchTopEntries(): (boolean, { BoardEntry }?, string?)
 	local store = getStore()
 	if not store then
+		print("[TopCoinsBoard] datastore error: store unavailable")
 		dbg("fetchTopEntries: store is nil")
 		return false, nil, "DataStore unavailable"
 	end
 
+	print("[TopCoinsBoard] requesting leaderboard store=", ORDERED_STORE_NAME)
 	dbg("Before GetSortedAsync(false,", TOP_N, ") store=", ORDERED_STORE_NAME)
-	local ok, pagesOrErr = pcall(function()
-		return store:GetSortedAsync(false, TOP_N)
-	end)
-	if not ok or not pagesOrErr then
-		dbg("GetSortedAsync pcall FAILED:", tostring(pagesOrErr))
-		return false, nil, tostring(pagesOrErr)
-	end
-	dbg("GetSortedAsync pcall OK")
 
-	local pageOk, pageOrErr = pcall(function()
-		return pagesOrErr:GetCurrentPage()
-	end)
-	if not pageOk or type(pageOrErr) ~= "table" then
-		dbg("GetCurrentPage pcall FAILED:", tostring(pageOrErr))
-		return false, nil, tostring(pageOrErr)
-	end
+	-- Timeout : GetSortedAsync peut bloquer indéfiniment (Studio / API off).
+	local FETCH_TIMEOUT_SEC = 8
+	local resultOk = false
+	local resultEntries: { BoardEntry }? = nil
+	local resultErr: string? = nil
+	local finished = false
 
-	dbg("After GetSortedAsync / GetCurrentPage entries received:", #pageOrErr)
-
-	local userIds: { number } = {}
-	local raw: { { UserId: number, Value: number, Rank: number } } = {}
-
-	for rank, entry in ipairs(pageOrErr) do
-		local userId = LeaderboardUtil.ParseUserIdKey(entry.key)
-		local value = sanitizeCoins(entry.value)
-		if userId and value ~= nil then
-			table.insert(userIds, userId)
-			table.insert(raw, { UserId = userId, Value = value, Rank = rank })
+	task.spawn(function()
+		local ok, pagesOrErr = pcall(function()
+			return store:GetSortedAsync(false, TOP_N)
+		end)
+		if finished then
+			return
 		end
-	end
+		if not ok or not pagesOrErr then
+			finished = true
+			resultOk = false
+			resultErr = tostring(pagesOrErr)
+			print("[TopCoinsBoard] datastore error:", resultErr)
+			return
+		end
+		local pageOk, pageOrErr = pcall(function()
+			return pagesOrErr:GetCurrentPage()
+		end)
+		if finished then
+			return
+		end
+		if not pageOk or type(pageOrErr) ~= "table" then
+			finished = true
+			resultOk = false
+			resultErr = tostring(pageOrErr)
+			print("[TopCoinsBoard] datastore error:", resultErr)
+			return
+		end
 
-	-- Immédiat : fallback Player <UserId> / cache / online — jamais d'API bloquante ici.
-	local names = resolveNamesImmediate(userIds)
-	local entries: { BoardEntry } = {}
-	for _, item in ipairs(raw) do
-		table.insert(entries, {
-			Rank = item.Rank,
-			UserId = item.UserId,
-			Name = names[item.UserId] or LeaderboardUtil.FallbackName(item.UserId),
-			Value = item.Value,
-		})
+		local userIds: { number } = {}
+		local raw: { { UserId: number, Value: number, Rank: number } } = {}
+		for rank, entry in ipairs(pageOrErr) do
+			local userId = LeaderboardUtil.ParseUserIdKey(entry.key)
+			local value = sanitizeCoins(entry.value)
+			if userId and value ~= nil then
+				table.insert(userIds, userId)
+				table.insert(raw, { UserId = userId, Value = value, Rank = rank })
+			end
+		end
+		local names = resolveNamesImmediate(userIds)
+		local entries: { BoardEntry } = {}
+		for _, item in ipairs(raw) do
+			table.insert(entries, {
+				Rank = item.Rank,
+				UserId = item.UserId,
+				Name = names[item.UserId] or LeaderboardUtil.FallbackName(item.UserId),
+				Value = item.Value,
+			})
+		end
+		finished = true
+		resultOk = true
+		resultEntries = entries
+		print("[TopCoinsBoard] received", #entries, "entries")
+	end)
+
+	local t0 = os.clock()
+	while not finished and (os.clock() - t0) < FETCH_TIMEOUT_SEC do
+		task.wait(0.1)
 	end
-	dbg("Entries prepared for rendering:", #entries)
-	return true, entries, nil
+	if not finished then
+		finished = true
+		print("[TopCoinsBoard] datastore error: GetSortedAsync timeout after", FETCH_TIMEOUT_SEC, "s")
+		return false, nil, "GetSortedAsync timeout"
+	end
+	return resultOk, resultEntries, resultErr
 end
 
 local function publishCache(entries: { BoardEntry }, preview: boolean?)
@@ -870,49 +897,63 @@ end
 local function updateWorldBoard(entries: { BoardEntry }?, mode: StatusMode, detail: string?)
 	local surface = findDisplaySurface()
 	if not surface then
-		warn("[LeaderboardDebug] SurfaceGui host NOT FOUND")
 		if not boardWarned then
 			boardWarned = true
-			warn("[LeaderboardService] panneau introuvable (attendu: BubblePopWorld.Lobby.LobbyDecor.GlobalLeaderboardBoard)")
+			warn("[TopCoinsBoard] board not found (LeftLeaderboardAnchor / HubDisplays)")
 		end
 		return
 	end
 
-	dbg("Panel part path:", instancePath(surface))
+	print("[TopCoinsBoard] board found:", instancePath(surface))
+	print("[TopCoinsBoard] updating mode=", mode, "entries=", if entries then #entries else "nil")
 
-	if surface.Name == "LeaderboardBoard" then
-		surface.Name = "GlobalLeaderboardBoard"
-	end
+	displayRows = TOP_N
 	if surface:GetAttribute("BPW_DisplaySurface") ~= true then
 		surface:SetAttribute("BPW_DisplaySurface", true)
 	end
 
-	local root, statusLabel = ensureBoardGui(surface)
-	local gui = surface:FindFirstChildWhichIsA("SurfaceGui")
-	dbg("SurfaceGui path:", instancePath(gui))
-	dbg("Root path:", instancePath(root))
-	dbg("updateWorldBoard mode:", mode, "| detail:", tostring(detail), "| entries:", if entries then #entries else "nil")
+	local paintMode: StatusMode = mode
+	local paintEntries = entries
 
 	if mode == "loading" and hasValidSnapshot and lastValidEntries and not usingStudioPreview then
-		paintRows(root, lastValidEntries, false)
-		setStatus(statusLabel, "ready", nil)
-		return
-	end
-
-	if entries then
-		paintRows(root, entries, #entries == 0)
+		paintEntries = lastValidEntries
+		paintMode = "ready"
+	elseif entries then
+		paintEntries = entries
 		if #entries == 0 then
-			setStatus(statusLabel, "empty", nil)
+			paintMode = "empty"
+		elseif mode == "unavailable" then
+			paintMode = "unavailable"
 		else
-			setStatus(statusLabel, mode == "unavailable" and "unavailable" or "ready", detail)
+			paintMode = "ready"
 		end
 	elseif hasValidSnapshot and lastValidEntries then
-		paintRows(root, lastValidEntries, false)
-		setStatus(statusLabel, "unavailable", detail)
+		paintEntries = lastValidEntries
+		paintMode = "unavailable"
 	else
-		paintRows(root, nil, true)
-		setStatus(statusLabel, mode, detail)
+		-- Rien encore : garder Loading tant que la fetch n'a pas échoué.
+		paintEntries = nil
+		paintMode = if mode == "loading" then "loading" else mode
 	end
+
+	statusMode = paintMode
+	local spec = HubDisplaysLayout.SpecByRole("Coins")
+	local theme = if spec then HubBoardGui.ThemeFromSpec(spec) else nil
+	local guiName = if spec then spec.GuiName else "CoinsLeaderboardGui"
+	local title = L10n.TopCoinCollectors or L10n.HubTopTitle or "TOP COIN COLLECTORS"
+	local n = HubBoardGui.PaintAnchor(
+		surface,
+		guiName,
+		title,
+		paintEntries,
+		paintMode,
+		"Coins",
+		theme,
+		"Global · Top 10",
+		L10n.NoRankingsYet,
+		detail or L10n.LeaderboardUnavailable
+	)
+	print("[TopCoinsBoard] UI updated mode=", paintMode, "rows=", n, "dualFaces=2")
 end
 
 local function applyStudioPreview(err: string?)
@@ -929,15 +970,17 @@ local function applyStudioPreview(err: string?)
 	for _, e in ipairs(localEntries) do
 		dbg("Studio local entry:", e.Rank, e.Name, e.Value)
 	end
+	-- Toujours publier pour le client TopCoinsBoardController.
 	publishCache(localEntries, true)
 	if #localEntries == 0 then
 		updateWorldBoard({}, "unavailable", L10n.LeaderboardUnavailableStudio)
 	else
-		updateWorldBoard(localEntries, "unavailable", L10n.LeaderboardStudioPreview)
+		updateWorldBoard(localEntries, "ready", L10n.LeaderboardStudioPreview)
 	end
 end
 
 local function RefreshLeaderboard()
+	print("[TopCoinsBoard] requesting leaderboard")
 	dbg("RefreshLeaderboard called")
 	dbg("RunService:IsStudio() =", RunService:IsStudio())
 	logPresentPlayers()
@@ -964,6 +1007,12 @@ local function RefreshLeaderboard()
 	usingStudioPreview = false
 	lastValidEntries = entries
 	hasValidSnapshot = true
+	-- Studio / ODS vide : encore aucune écriture mondiale → aperçu local des joueurs présents.
+	if #entries == 0 and RunService:IsStudio() then
+		applyStudioPreview("empty store")
+		dbg("RefreshLeaderboard END (empty store → studio preview)")
+		return
+	end
 	publishCache(entries, false)
 	updateWorldBoard(entries, if #entries == 0 then "empty" else "ready", nil)
 
@@ -1020,7 +1069,7 @@ function LeaderboardService.QueueUpdate(player: Player, force: boolean?)
 end
 
 function LeaderboardService.RefreshWorldBoard()
-	updateWorldBoard(lastValidEntries, if hasValidSnapshot then "ready" else "loading", nil)
+	-- Ne pas forcer "Loading" bloquant : rafraîchir directement (timeout dans fetch).
 	task.spawn(RefreshLeaderboard)
 end
 
@@ -1052,6 +1101,10 @@ function LeaderboardService.Start()
 	getStore()
 	print("[LeaderboardService] Start — store:", ORDERED_STORE_NAME)
 	dbg("Start() IsStudio=", RunService:IsStudio())
+	-- Loading immédiat même si le panel n'a pas encore de données.
+	pcall(function()
+		updateWorldBoard(nil, "loading", nil)
+	end)
 
 	DataService.OnCoinsChanged(function(player: Player, _coins: number)
 		queuePlayerCoins(player, false)

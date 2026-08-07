@@ -19,6 +19,17 @@ local EVENTS = {
 	"DestinationListUpdated", -- serveur -> client : liste destinations filtrée
 	"RequestTravel",          -- client -> serveur : destinationId, transitId
 	"TravelResult",           -- serveur -> client : ok / code / message
+	-- Mini-événements
+	"MiniEventState",         -- serveur -> client : état structuré (countdown/active/ended)
+	-- Défis quotidiens / hebdo
+	"ChallengeState",         -- serveur -> client : état challenges + LB
+	"ChallengeRequestState",  -- client -> serveur : demande état
+	"ChallengeClaim",         -- client -> serveur : challengeId (claim idempotent)
+	"ChallengeTrack",         -- client -> serveur : challengeId suivi UI
+	"ChallengeNotify",        -- serveur -> client : toasts (complete/claim/milestone)
+	"ChallengePanelOpened",   -- client -> serveur : analytics panel
+	-- Tutoriel d'accueil (serveur → client uniquement)
+	"TutorialState",          -- serveur -> client : étape / progrès / célébration / fin
 }
 
 local FUNCTIONS = {

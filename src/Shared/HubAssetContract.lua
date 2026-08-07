@@ -17,8 +17,7 @@
 -- Sources : docs/superpowers/specs/2026-08-01-central-hub-concept2-asset-pack-design.md
 --           docs/superpowers/specs/renders/transform-validation.txt
 --
--- Aucun script de production ne require encore ce module : le câblage de
--- CentralHubBuilder / HubLayout est planifié en P8.2 / P8.3.
+-- Câblé par CentralHubBuilder pour le Deck (variante Composite Tripo incluse).
 
 local HubAssetContract = {}
 
@@ -41,7 +40,11 @@ HubAssetContract.Attributes = {
 	AuthoredYaw = "BPW_AuthoredYaw",
 	-- Optionnel : renseigné par le modeleur, contrôlé s'il est présent.
 	TriangleCount = "BPW_TriangleCount",
+	-- Variante d'authoring : "Composite" = mesh Tripo fusionné (Deck uniquement).
+	Variant = "BPW_HubAssetVariant",
 }
+
+HubAssetContract.CompositeVariant = "Composite"
 
 -- Marquage de la géométrie générée par le code (appliqué en P8.3).
 HubAssetContract.PrototypeAttribute = "BPW_PrototypeVisualFallback"
@@ -153,6 +156,144 @@ local function v3(x: number, y: number, z: number): Vector3
 	return Vector3.new(x, y, z)
 end
 
+-- Deck composite Tripo : la source Studio est le visuel runtime (pas de clone).
+-- RuntimeYawDegrees : correction Y unique (ouverture / panneaux).
+HubAssetContract.CompositeDeck = {
+	TargetSize = v3(84, 14, 60),
+	BottomY = 4.5,
+	YawDegrees = 0,
+	RuntimeYawDegrees = 180,
+	RuntimeYawAttribute = "BPW_CompositeRuntimeYaw",
+	RequiredChild = "Visual",
+	RequiredChildClass = "MeshPart",
+	MaxTriangles = 200000,
+}
+
+export type CompositeVisualSnapshot = {
+	Parent: Instance?,
+	CFrame: CFrame,
+	Size: Vector3,
+	PivotOffset: CFrame,
+	Transparency: number,
+	TextureID: string,
+}
+
+function HubAssetContract.SnapshotCompositeVisual(model: Model): CompositeVisualSnapshot?
+	local visual = model:FindFirstChild("Visual")
+	if not visual or not visual:IsA("MeshPart") then
+		return nil
+	end
+	local mesh = visual :: MeshPart
+	local textureId = ""
+	pcall(function()
+		textureId = (mesh :: any).TextureID or ""
+	end)
+	return {
+		Parent = model.Parent,
+		CFrame = mesh.CFrame,
+		Size = mesh.Size,
+		PivotOffset = mesh.PivotOffset,
+		Transparency = mesh.Transparency,
+		TextureID = textureId,
+	}
+end
+
+function HubAssetContract.AssertCompositeVisualUnchanged(
+	model: Model,
+	before: CompositeVisualSnapshot
+): (boolean, string?)
+	local after = HubAssetContract.SnapshotCompositeVisual(model)
+	if not after then
+		return false, "Visual MeshPart manquant après build"
+	end
+	if after.Parent ~= before.Parent then
+		return false, "Parent modifié"
+	end
+	if (after.CFrame.Position - before.CFrame.Position).Magnitude > 1e-6
+		or math.abs(after.CFrame.LookVector:Dot(before.CFrame.LookVector) - 1) > 1e-6
+		or math.abs(after.CFrame.UpVector:Dot(before.CFrame.UpVector) - 1) > 1e-6
+	then
+		return false, "Visual.CFrame modifié"
+	end
+	if (after.Size - before.Size).Magnitude > 1e-6 then
+		return false, "Visual.Size modifié"
+	end
+	if (after.PivotOffset.Position - before.PivotOffset.Position).Magnitude > 1e-6
+		or math.abs(after.PivotOffset.LookVector:Dot(before.PivotOffset.LookVector) - 1) > 1e-6
+	then
+		return false, "Visual.PivotOffset modifié"
+	end
+	if math.abs(after.Transparency - before.Transparency) > 1e-6 then
+		return false, "Visual.Transparency modifié"
+	end
+	if after.TextureID ~= before.TextureID then
+		return false, "Visual.TextureID modifié"
+	end
+	return true, nil
+end
+
+-- Rotation Y runtime unique (idempotente via attribut). Pas de pitch/roll.
+function HubAssetContract.ApplyCompositeRuntimeYaw(model: Model): boolean
+	local cd = HubAssetContract.CompositeDeck
+	local attr = cd.RuntimeYawAttribute
+	local target = cd.RuntimeYawDegrees
+	if model:GetAttribute(attr) == target then
+		return false
+	end
+	local ok, packed = pcall(function()
+		local cf, size = model:GetBoundingBox()
+		return { cf, size }
+	end)
+	local origin = Vector3.zero
+	if ok and type(packed) == "table" and typeof(packed[1]) == "CFrame" then
+		local p = (packed[1] :: CFrame).Position
+		origin = Vector3.new(p.X, 0, p.Z)
+	end
+	local R = CFrame.new(origin) * CFrame.Angles(0, math.rad(target), 0) * CFrame.new(-origin)
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local part = descendant :: BasePart
+			part.CFrame = R * part.CFrame
+		end
+	end
+	model:SetAttribute(attr, target)
+	return true
+end
+
+-- Props collision / ombre uniquement — jamais de transparence / taille hors yaw runtime.
+function HubAssetContract.PrepareCompositeStudioSource(model: Model)
+	HubAssetContract.ApplyImportedRuntimeProps(model)
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			(descendant :: BasePart).CastShadow = false
+		end
+	end
+end
+
+-- Ancien HubDeckShell : masqué s’il coexiste avec HubDeckShell_New.
+function HubAssetContract.HideLegacyCompositeDeck(visualFolder: Instance?, activeModel: Model)
+	if not visualFolder then
+		return
+	end
+	for _, child in ipairs(visualFolder:GetChildren()) do
+		if child:IsA("Model") and child ~= activeModel then
+			local name = child.Name
+			if name == "HubDeckShell" or name == "HubDeck" then
+				for _, descendant in ipairs(child:GetDescendants()) do
+					if descendant:IsA("BasePart") then
+						local part = descendant :: BasePart
+						part.Transparency = 1
+						part.CanCollide = false
+						part.CanTouch = false
+						part.CanQuery = false
+						part.CastShadow = false
+					end
+				end
+			end
+		end
+	end
+end
+
 -- Normales des surfaces lisibles, exprimées en MONDE (non ambiguës).
 -- La convention d'authoring « -Z = face avant du module » reste à confirmer en Studio au
 -- premier import (P2.12) : en cas de doute, ces normales monde font foi.
@@ -163,12 +304,14 @@ local TOWARD_CENTER_FROM_RIGHT = v3(-1, 0, 0) -- aile SHOP (+X) : lisible vers -
 local MODULES: { ModuleSpec } = {
 	{
 		Key = "Deck",
-		ModelName = "HubDeckShell",
-		LegacyModelName = "HubDeck",
+		ModelName = "HubDeckShell_New",
+		LegacyModelName = "HubDeckShell",
 		Priority = 1,
 		Format = "FBX",
-		TargetSize = v3(84, 7.5, 60),
-		Center = v3(0, 8.25, 0),
+		-- Bbox totale incluant les ailes surélevées (sommet Y=13.20).
+		-- Pivot d'import distinct du centre bbox : Anchor_Deck à Y=8.25.
+		TargetSize = v3(84, 8.7, 60),
+		Center = v3(0, 8.85, 0),
 		YawDegrees = 0,
 		Pivot = v3(0, 8.25, 0),
 		Circular = false,
@@ -179,7 +322,8 @@ local MODULES: { ModuleSpec } = {
 		CastShadow = true,
 		CollidableChildren = {},
 		Notes = "Jupe 4.50→8.20, socle 8.20→10.00, dalle 10.00→12.00, nez en surplomb 0.6. "
-			.. "Ouverture frontale de 28 studs libre.",
+			.. "Ailes Sell/Shop 24×1.2×22 à Y=12.00→13.20 avec marches 2×0.6. "
+			.. "Pivot (0, 8.25, 0) ≠ centre bbox (0, 8.85, 0). Ouverture frontale 28 studs libre.",
 	},
 	{
 		Key = "SellStand",
@@ -484,6 +628,9 @@ local BY_MODEL_NAME: { [string]: ModuleSpec } = {}
 for _, spec in ipairs(MODULES) do
 	BY_KEY[spec.Key] = spec
 	BY_MODEL_NAME[spec.ModelName] = spec
+	if spec.LegacyModelName then
+		BY_MODEL_NAME[spec.LegacyModelName] = spec
+	end
 end
 
 function HubAssetContract.GetModules(): { ModuleSpec }
@@ -503,6 +650,191 @@ function HubAssetContract.GetVisualPath(): string
 		HubAssetContract.StudioDecorationRoot,
 		HubAssetContract.VisualFolder
 	)
+end
+
+function HubAssetContract.IsCompositeVariant(model: Instance?): boolean
+	if not model then
+		return false
+	end
+	return model:GetAttribute(HubAssetContract.Attributes.Variant)
+		== HubAssetContract.CompositeVariant
+end
+
+function HubAssetContract.GetEffectiveTargetSize(model: Instance?, spec: ModuleSpec): Vector3
+	if spec.Key == "Deck" and HubAssetContract.IsCompositeVariant(model) then
+		return HubAssetContract.CompositeDeck.TargetSize
+	end
+	return spec.TargetSize
+end
+
+-- Yaw monde horizontal dérivé du LookVector (ignore pitch).
+function HubAssetContract.FlatYawRadians(cf: CFrame): number
+	local look = cf.LookVector
+	local x, z = look.X, look.Z
+	if x * x + z * z < 1e-8 then
+		return math.atan2(-cf.RightVector.Z, cf.RightVector.X)
+	end
+	return math.atan2(-x, -z)
+end
+
+-- Force pitch/roll = 0 sur chaque BasePart, en conservant le yaw
+-- (ex. Visual Studio tourné de 180° sur Y pour l'ouverture frontale).
+-- Met à jour WorldPivot sans déplacer les Parts (pas de PivotTo ici).
+function HubAssetContract.FlattenImportedOrientation(model: Model)
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local part = descendant :: BasePart
+			local yaw = HubAssetContract.FlatYawRadians(part.CFrame)
+			part.CFrame = CFrame.new(part.CFrame.Position) * CFrame.Angles(0, yaw, 0)
+			part.Anchored = true
+		end
+	end
+	local ok, packed = pcall(function()
+		local cf, size = model:GetBoundingBox()
+		return { cf, size }
+	end)
+	if ok and type(packed) == "table" and typeof(packed[1]) == "CFrame" then
+		local bbCF = packed[1] :: CFrame
+		local yaw = HubAssetContract.FlatYawRadians(bbCF)
+		pcall(function()
+			model.WorldPivot = CFrame.new(bbCF.Position) * CFrame.Angles(0, yaw, 0)
+		end)
+	end
+end
+
+-- Pose un Model par sa bounding box réelle (pas le pivot Tripo) :
+-- centre XZ = (0, 0), bas Y = bottomY, pitch/roll = 0, yaw préservé
+-- (+ offset yawDegrees). Échelle uniforme vers targetSize.
+function HubAssetContract.PlaceModelByBoundingBox(
+	model: Model,
+	targetSize: Vector3,
+	bottomY: number,
+	yawDegrees: number
+)
+	local function readBoundingBox(): (CFrame?, Vector3?)
+		local ok, packed = pcall(function()
+			local cf, size = model:GetBoundingBox()
+			return { cf, size }
+		end)
+		if ok and type(packed) == "table" and typeof(packed[1]) == "CFrame" and typeof(packed[2]) == "Vector3" then
+			return packed[1], packed[2]
+		end
+		local extentsOk, extents = pcall(function()
+			return model:GetExtentsSize()
+		end)
+		if not extentsOk or typeof(extents) ~= "Vector3" then
+			return nil, nil
+		end
+		local pivotOk, pivot = pcall(function()
+			return model:GetPivot()
+		end)
+		return if pivotOk and pivot then pivot else CFrame.new(), extents
+	end
+
+	local function scaleToTarget(bbSize: Vector3)
+		local sx = targetSize.X / math.max(bbSize.X, 1e-6)
+		local sy = targetSize.Y / math.max(bbSize.Y, 1e-6)
+		local sz = targetSize.Z / math.max(bbSize.Z, 1e-6)
+		local scale = (sx * sy * sz) ^ (1 / 3)
+		if math.abs(scale - 1) > 1e-4 then
+			local scaleOk, currentScale = pcall(function()
+				return model:GetScale()
+			end)
+			if scaleOk and type(currentScale) == "number" then
+				pcall(function()
+					model:ScaleTo(currentScale * scale)
+				end)
+			end
+		end
+	end
+
+	-- 0) Aplatir d'abord les Parts (retire pitch/roll FBX du MeshPart Visual).
+	HubAssetContract.FlattenImportedOrientation(model)
+
+	local bbCF, bbSize = readBoundingBox()
+	if not bbCF or not bbSize then
+		return
+	end
+	scaleToTarget(bbSize)
+
+	-- 1) Re-aplatir après scale, puis positionner.
+	HubAssetContract.FlattenImportedOrientation(model)
+	bbCF, bbSize = readBoundingBox()
+	if not bbCF or not bbSize then
+		return
+	end
+
+	local pivotOk, pivot = pcall(function()
+		return model:GetPivot()
+	end)
+	if not pivotOk or not pivot then
+		return
+	end
+
+	local preservedYaw = HubAssetContract.FlatYawRadians(bbCF)
+	local desiredCenter = Vector3.new(0, bottomY + bbSize.Y * 0.5, 0)
+	local finalYaw = preservedYaw + math.rad(yawDegrees or 0)
+	local desiredCF = CFrame.new(desiredCenter) * CFrame.Angles(0, finalYaw, 0)
+	local levelBB = CFrame.new(bbCF.Position) * CFrame.Angles(0, preservedYaw, 0)
+	local placeTransform = desiredCF * levelBB:Inverse()
+	pcall(function()
+		model:PivotTo(placeTransform * pivot)
+	end)
+
+	-- 2) Garantie finale : aucune Part / pivot avec pitch ou roll.
+	HubAssetContract.FlattenImportedOrientation(model)
+	bbCF, bbSize = readBoundingBox()
+	if not bbCF or not bbSize then
+		return
+	end
+	pivotOk, pivot = pcall(function()
+		return model:GetPivot()
+	end)
+	if not pivotOk or not pivot then
+		return
+	end
+	desiredCenter = Vector3.new(0, bottomY + bbSize.Y * 0.5, 0)
+	local delta = desiredCenter - bbCF.Position
+	if delta.Magnitude > 1e-4 then
+		pcall(function()
+			model:PivotTo(CFrame.new(delta) * pivot)
+		end)
+		HubAssetContract.FlattenImportedOrientation(model)
+	end
+end
+
+function HubAssetContract.ApplyImportedRuntimeProps(model: Instance)
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local part = descendant :: BasePart
+			part.Anchored = true
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+		end
+	end
+	if model:IsA("BasePart") then
+		local part = model :: BasePart
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+	end
+end
+
+-- Source StudioDecoration : jamais un sol jouable (reste en place, invisible en Play).
+function HubAssetContract.NeutralizeStudioSource(model: Instance)
+	HubAssetContract.ApplyImportedRuntimeProps(model)
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local part = descendant :: BasePart
+			part.Transparency = 1
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			part.CastShadow = false
+		end
+	end
 end
 
 --------------------------------------------------------------------
@@ -634,10 +966,20 @@ function HubAssetContract.Validate(model: Instance?, expectedKey: string?): Resu
 	if model:GetAttribute(A.Marker) ~= true then
 		issue(issues, "missing_attribute", ("attribut %s = true manquant"):format(A.Marker))
 	end
+	local isComposite = HubAssetContract.IsCompositeVariant(model)
+	if isComposite and spec.Key ~= "Deck" then
+		issue(issues, "bad_variant",
+			("variante Composite réservée à HubDeckShell (module %s)"):format(spec.Key))
+	end
+
 	local attrKey = model:GetAttribute(A.Key)
-	if attrKey ~= spec.Key then
+	-- Composite : clé contrat, ModelName actuel, ou LegacyModelName (HubDeckShell).
+	local keyOk = attrKey == spec.Key or attrKey == spec.ModelName
+		or (spec.LegacyModelName ~= nil and attrKey == spec.LegacyModelName)
+	if not keyOk then
 		issue(issues, "bad_attribute",
-			("attribut %s attendu « %s », trouvé « %s »"):format(A.Key, spec.Key, tostring(attrKey)))
+			("attribut %s attendu « %s » / « %s » / legacy, trouvé « %s »")
+				:format(A.Key, spec.Key, spec.ModelName, tostring(attrKey)))
 	end
 	local version = model:GetAttribute(A.Version)
 	if type(version) ~= "number" or version < 1 then
@@ -650,103 +992,136 @@ function HubAssetContract.Validate(model: Instance?, expectedKey: string?): Resu
 			("attribut %s doit être un Vector3 (trouvé %s)"):format(A.AuthoredSize, typeof(authoredSize)))
 	end
 	local authoredYaw = model:GetAttribute(A.AuthoredYaw)
+	local expectedYaw = if isComposite
+		then HubAssetContract.CompositeDeck.YawDegrees
+		else spec.YawDegrees
 	if type(authoredYaw) ~= "number" then
 		issue(issues, "bad_attribute",
 			("attribut %s doit être un nombre (trouvé %s)"):format(A.AuthoredYaw, tostring(authoredYaw)))
-	elseif yawDelta(authoredYaw, spec.YawDegrees) > HubAssetContract.Tolerance.Yaw then
+	elseif yawDelta(authoredYaw, expectedYaw) > HubAssetContract.Tolerance.Yaw then
 		issue(issues, "bad_yaw",
 			("yaw %d° attendu, déclaré %s° (écart %.1f°)"):format(
-				spec.YawDegrees, tostring(authoredYaw), yawDelta(authoredYaw, spec.YawDegrees)))
+				expectedYaw, tostring(authoredYaw), yawDelta(authoredYaw, expectedYaw)))
 	end
 
 	-- 4) Bounding box dans la tolérance, exprimée dans le repère monde.
-	local expected = HubAssetContract.WorldExtents(spec.TargetSize, spec.YawDegrees)
+	local targetSize = HubAssetContract.GetEffectiveTargetSize(model, spec)
+	local expectedWorld = HubAssetContract.WorldExtents(targetSize, expectedYaw)
+	if typeof(authoredSize) == "Vector3" then
+		local tol = HubAssetContract.Tolerance.Size
+		if not (nearlyEqual(authoredSize.X, targetSize.X, tol)
+			and nearlyEqual(authoredSize.Y, targetSize.Y, tol)
+			and nearlyEqual(authoredSize.Z, targetSize.Z, tol)) then
+			issue(issues, "bad_attribute",
+				("attribut %s = %.2f x %.2f x %.2f, attendu %.2f x %.2f x %.2f")
+					:format(A.AuthoredSize, authoredSize.X, authoredSize.Y, authoredSize.Z,
+						targetSize.X, targetSize.Y, targetSize.Z))
+		end
+	end
 	local ok, extents = pcall(function()
 		return model:GetExtentsSize()
 	end)
 	if ok and typeof(extents) == "Vector3" then
 		local tol = HubAssetContract.Tolerance.Size
-		if not (nearlyEqual(extents.X, expected.X, tol)
-			and nearlyEqual(extents.Y, expected.Y, tol)
-			and nearlyEqual(extents.Z, expected.Z, tol)) then
+		if not (nearlyEqual(extents.X, expectedWorld.X, tol)
+			and nearlyEqual(extents.Y, expectedWorld.Y, tol)
+			and nearlyEqual(extents.Z, expectedWorld.Z, tol)) then
 			issue(issues, "bad_size",
 				("taille %.2f x %.2f x %.2f attendue (± %.2f), mesurée %.2f x %.2f x %.2f")
-					:format(expected.X, expected.Y, expected.Z, tol, extents.X, extents.Y, extents.Z))
+					:format(expectedWorld.X, expectedWorld.Y, expectedWorld.Z, tol,
+						extents.X, extents.Y, extents.Z))
 		end
 	else
 		issue(issues, "no_extents", ("impossible de mesurer %s"):format(spec.ModelName))
 	end
 
-	-- 5) Pivot aligné sur l'ancre.
-	local pivotOk, pivot = pcall(function()
-		return model:GetPivot()
-	end)
-	if pivotOk and pivot then
-		local p = pivot.Position
-		local delta = (p - spec.Pivot).Magnitude
-		if delta > HubAssetContract.Tolerance.Pivot then
-			issue(issues, "bad_pivot",
-				("pivot attendu (%.2f, %.2f, %.2f), trouvé (%.2f, %.2f, %.2f) — écart %.2f studs")
-					:format(spec.Pivot.X, spec.Pivot.Y, spec.Pivot.Z, p.X, p.Y, p.Z, delta))
+	-- 5) Pivot aligné sur l'ancre (ignoré pour Composite : pivot Tripo non fiable).
+	if not isComposite then
+		local pivotOk, pivot = pcall(function()
+			return model:GetPivot()
+		end)
+		if pivotOk and pivot then
+			local p = pivot.Position
+			local delta = (p - spec.Pivot).Magnitude
+			if delta > HubAssetContract.Tolerance.Pivot then
+				issue(issues, "bad_pivot",
+					("pivot attendu (%.2f, %.2f, %.2f), trouvé (%.2f, %.2f, %.2f) — écart %.2f studs")
+						:format(spec.Pivot.X, spec.Pivot.Y, spec.Pivot.Z, p.X, p.Y, p.Z, delta))
+			end
+		else
+			issue(issues, "no_pivot", ("impossible de lire le pivot de %s"):format(spec.ModelName))
 		end
-	else
-		issue(issues, "no_pivot", ("impossible de lire le pivot de %s"):format(spec.ModelName))
 	end
 
 	-- 6) Enfants requis.
-	for _, childName in ipairs(spec.RequiredChildren) do
-		if not model:FindFirstChild(childName) then
+	local visualChild: Instance? = nil
+	if isComposite then
+		local childName = HubAssetContract.CompositeDeck.RequiredChild
+		local childClass = HubAssetContract.CompositeDeck.RequiredChildClass
+		visualChild = model:FindFirstChild(childName)
+		if not visualChild then
 			issue(issues, "missing_child",
 				("enfant « %s » manquant dans %s"):format(childName, spec.ModelName))
+		elseif not visualChild:IsA(childClass) then
+			issue(issues, "bad_child",
+				("enfant « %s » doit être un %s (trouvé %s)")
+					:format(childName, childClass, visualChild.ClassName))
+		end
+	else
+		for _, childName in ipairs(spec.RequiredChildren) do
+			if not model:FindFirstChild(childName) then
+				issue(issues, "missing_child",
+					("enfant « %s » manquant dans %s"):format(childName, spec.ModelName))
+			end
 		end
 	end
 
-	-- 7) Surfaces GUI : plans nus, plats, aux bonnes cotes.
-	for _, face in ipairs(spec.RequiredFaces) do
-		local instance = model:FindFirstChild(face.Name, true)
-		if not instance then
-			issue(issues, "missing_face",
-				("surface « %s » manquante (plan %.1f x %.1f pour SurfaceGui)")
-					:format(face.Name, face.Width, face.Height))
-		elseif not instance:IsA("BasePart") then
-			issue(issues, "bad_face",
-				("surface « %s » doit être une BasePart (trouvé %s)"):format(face.Name, instance.ClassName))
-		else
-			local part = instance :: BasePart
-			local size = part.Size
-			local axes = { size.X, size.Y, size.Z }
-			table.sort(axes)
-			if axes[1] > HubAssetContract.Tolerance.FaceThickness then
+	-- 7) Surfaces GUI : plans nus, plats, aux bonnes cotes (sauf Composite fusionné).
+	if not isComposite then
+		for _, face in ipairs(spec.RequiredFaces) do
+			local instance = model:FindFirstChild(face.Name, true)
+			if not instance then
+				issue(issues, "missing_face",
+					("surface « %s » manquante (plan %.1f x %.1f pour SurfaceGui)")
+						:format(face.Name, face.Width, face.Height))
+			elseif not instance:IsA("BasePart") then
 				issue(issues, "bad_face",
-					("surface « %s » doit être plate (épaisseur ≤ %.2f, trouvé %.2f)")
-						:format(face.Name, HubAssetContract.Tolerance.FaceThickness, axes[1]))
-			end
-			local tol = HubAssetContract.Tolerance.FaceSize
-			local matched = (nearlyEqual(axes[2], math.min(face.Width, face.Height), tol)
-				and nearlyEqual(axes[3], math.max(face.Width, face.Height), tol))
-			if not matched then
-				issue(issues, "bad_face",
-					("surface « %s » attendue %.1f x %.1f (± %.2f), mesurée %.2f x %.2f")
-						:format(face.Name, face.Width, face.Height, tol, axes[2], axes[3]))
-			end
-			if part:FindFirstChildWhichIsA("SurfaceGui") then
-				issue(issues, "gui_in_asset",
-					("surface « %s » ne doit contenir aucun SurfaceGui : le code le monte")
-						:format(face.Name))
-			end
-			-- Position monde : détecte un module mal posé ou mal orienté.
-			local centerDelta = (part.Position - face.Center).Magnitude
-			if centerDelta > 1 then
-				issue(issues, "bad_face",
-					("surface « %s » attendue en (%.1f, %.1f, %.1f), trouvée à %.2f studs")
-						:format(face.Name, face.Center.X, face.Center.Y, face.Center.Z, centerDelta))
-			end
-			-- Normale monde : la face lisible doit regarder le joueur.
-			local normal = HubAssetContract.FaceNormalOf(part)
-			if normal and math.abs(normal:Dot(face.Normal)) < 0.99 then
-				issue(issues, "bad_face_normal",
-					("surface « %s » doit être normale à (%.0f, %.0f, %.0f)")
-						:format(face.Name, face.Normal.X, face.Normal.Y, face.Normal.Z))
+					("surface « %s » doit être une BasePart (trouvé %s)"):format(face.Name, instance.ClassName))
+			else
+				local part = instance :: BasePart
+				local size = part.Size
+				local axes = { size.X, size.Y, size.Z }
+				table.sort(axes)
+				if axes[1] > HubAssetContract.Tolerance.FaceThickness then
+					issue(issues, "bad_face",
+						("surface « %s » doit être plate (épaisseur ≤ %.2f, trouvé %.2f)")
+							:format(face.Name, HubAssetContract.Tolerance.FaceThickness, axes[1]))
+				end
+				local tol = HubAssetContract.Tolerance.FaceSize
+				local matched = (nearlyEqual(axes[2], math.min(face.Width, face.Height), tol)
+					and nearlyEqual(axes[3], math.max(face.Width, face.Height), tol))
+				if not matched then
+					issue(issues, "bad_face",
+						("surface « %s » attendue %.1f x %.1f (± %.2f), mesurée %.2f x %.2f")
+							:format(face.Name, face.Width, face.Height, tol, axes[2], axes[3]))
+				end
+				if part:FindFirstChildWhichIsA("SurfaceGui") then
+					issue(issues, "gui_in_asset",
+						("surface « %s » ne doit contenir aucun SurfaceGui : le code le monte")
+							:format(face.Name))
+				end
+				local centerDelta = (part.Position - face.Center).Magnitude
+				if centerDelta > 1 then
+					issue(issues, "bad_face",
+						("surface « %s » attendue en (%.1f, %.1f, %.1f), trouvée à %.2f studs")
+							:format(face.Name, face.Center.X, face.Center.Y, face.Center.Z, centerDelta))
+				end
+				local normal = HubAssetContract.FaceNormalOf(part)
+				if normal and math.abs(normal:Dot(face.Normal)) < 0.99 then
+					issue(issues, "bad_face_normal",
+						("surface « %s » doit être normale à (%.0f, %.0f, %.0f)")
+							:format(face.Name, face.Normal.X, face.Normal.Y, face.Normal.Z))
+				end
 			end
 		end
 	end
@@ -761,20 +1136,34 @@ function HubAssetContract.Validate(model: Instance?, expectedKey: string?): Resu
 		if descendant:IsA("Light") then
 			realLights += 1
 		end
+		if isComposite and descendant:GetAttribute(A.Marker) == true then
+			issue(issues, "nested_asset",
+				("asset imbriqué interdit sous Composite (%s)"):format(descendant.Name))
+		end
+		if isComposite and descendant.ClassName == "SurfaceAppearance" then
+			if not visualChild or not descendant:IsDescendantOf(visualChild) then
+				issue(issues, "bad_surface_appearance",
+					("SurfaceAppearance doit vivre sous Visual (%s)"):format(descendant.Name))
+			end
+		end
 		if descendant:IsA("BasePart") then
 			local part = descendant :: BasePart
 			if part.Anchored ~= true then
 				issue(issues, "not_anchored", ("%s doit être Anchored"):format(part.Name))
 			end
-			if part.CanCollide == true and not contains(spec.CollidableChildren, part.Name) then
+			if not isComposite
+				and part.CanCollide == true
+				and not contains(spec.CollidableChildren, part.Name) then
 				issue(issues, "undeclared_collision",
 					("%s a CanCollide = true sans être déclaré dans le contrat"):format(part.Name))
 			end
-			local material = part.Material
-			local materialName = if typeof(material) == "EnumItem" then material.Name else tostring(material)
-			if not HubAssetContract.AllowedMaterials[materialName] then
-				issue(issues, "bad_material",
-					("matériau %s non autorisé sur %s"):format(materialName, part.Name))
+			if not isComposite then
+				local material = part.Material
+				local materialName = if typeof(material) == "EnumItem" then material.Name else tostring(material)
+				if not HubAssetContract.AllowedMaterials[materialName] then
+					issue(issues, "bad_material",
+						("matériau %s non autorisé sur %s"):format(materialName, part.Name))
+				end
 			end
 		end
 	end
@@ -789,12 +1178,17 @@ function HubAssetContract.Validate(model: Instance?, expectedKey: string?): Resu
 
 	-- 9) Budget triangles, si le modeleur l'a renseigné.
 	local triangles = model:GetAttribute(A.TriangleCount)
+	local maxTriangles = if isComposite
+		then HubAssetContract.CompositeDeck.MaxTriangles
+		else spec.MaxTriangles
+	local meshCount = if isComposite then 1 else #spec.RequiredChildren
 	if type(triangles) == "number" then
-		if triangles > spec.MaxTriangles then
+		if triangles > maxTriangles then
 			issue(issues, "over_budget",
-				("%d triangles déclarés pour un budget de %d"):format(triangles, spec.MaxTriangles))
+				("%d triangles déclarés pour un budget de %d"):format(triangles, maxTriangles))
 		end
-		if triangles > HubAssetContract.Budget.MaxTrianglesPerMesh * #spec.RequiredChildren then
+		if not isComposite
+			and triangles > HubAssetContract.Budget.MaxTrianglesPerMesh * meshCount then
 			issue(issues, "over_budget",
 				("%d triangles dépassent la limite dure de %d par mesh"):format(
 					triangles, HubAssetContract.Budget.MaxTrianglesPerMesh))

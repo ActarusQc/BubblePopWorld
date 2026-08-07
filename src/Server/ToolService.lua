@@ -172,6 +172,10 @@ function ToolService.Give(player: Player, id: string)
 		local profile = DataService.Get(player)
 		if profile then profile.MythicsFound += 1 end
 	end
+
+	pcall(function()
+		require(script.Parent.TutorialService).OnToolAcquired(player, id)
+	end)
 end
 
 local function resolveCells(def, cx: number, cz: number, direction: Vector3, zoneId: string)
@@ -269,8 +273,15 @@ local function onActivate(player: Player, _toolName: any, targetPos: any)
 		return
 	end
 
+	-- Giant Bubble : contribution outils même sac plein / hors cellule.
+	local giantHit = false
+	pcall(function()
+		local MiniEventService = require(script.Parent.MiniEventService)
+		giantHit = MiniEventService.TryGiantHit(player, origin, id) == true
+	end)
+
 	local cx, cz, zoneId = BubbleService.WorldToCell(origin)
-	if def.Shape == "Single" and not BubbleService.IsAlive(cx, cz, zoneId) then
+	if def.Shape == "Single" and not BubbleService.IsAlive(cx, cz, zoneId) and not giantHit then
 		return
 	end
 
@@ -285,16 +296,22 @@ local function onActivate(player: Player, _toolName: any, targetPos: any)
 		table.insert(zoned, { c[1], c[2], zoneId })
 	end
 	local count = BubbleService.PopCells(player, zoned, def.Multiplier, zoneId)
-	if count <= 0 then return end
+	if count <= 0 and not giantHit then return end
 
 	pcall(function()
 		local GAS = require(script.Parent.GameAnalyticsService)
 		GAS.RecordToolUse(player, id)
 	end)
 
+	if count > 0 then
+		pcall(function()
+			require(script.Parent.TutorialService).OnToolMultiPop(player, id, count)
+		end)
+	end
+
 	cooldowns[player][id] = now + def.Cooldown
 
-	if def.Consumable ~= false and tool.Parent then
+	if def.Consumable ~= false and tool.Parent and (count > 0 or giantHit) then
 		tool:Destroy()
 	end
 end

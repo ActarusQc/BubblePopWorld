@@ -9,11 +9,14 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
 local L10n = require(Shared.LocalizationStrings)
 local L10nUtil = require(Shared.LocalizationUtil)
+local HudChrome = require(Shared.HudChrome)
 
 local player = Players.LocalPlayer
 local InventoryUI = {}
 
-local BG = Color3.fromRGB(18, 20, 28)
+local BG = Color3.fromRGB(12, 16, 28)
+local BG_BUTTON = Color3.fromRGB(14, 18, 30)
+local ACCENT = Color3.fromRGB(90, 220, 255)
 local ROW = Color3.fromRGB(30, 34, 44)
 local ROW_ON = Color3.fromRGB(42, 46, 58)
 
@@ -23,27 +26,130 @@ local function corner(parent: Instance, r: number?)
 	c.Parent = parent
 end
 
+local function stroke(parent: Instance, color: Color3, thickness: number?, transparency: number?)
+	local s = Instance.new("UIStroke")
+	s.Color = color
+	s.Thickness = thickness or 1.25
+	s.Transparency = transparency or 0.15
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = parent
+	return s
+end
+
+local function resolveActionColumn(): (Instance?, Instance?)
+	local playerGui = player:FindFirstChild("PlayerGui")
+	if not playerGui then
+		return nil, nil
+	end
+	local hud = playerGui:FindFirstChild(HudChrome.SCREEN_NAME)
+	if not hud then
+		return nil, nil
+	end
+	local column = hud:FindFirstChild(HudChrome.ACTION_COLUMN_NAME)
+	local slot = column and column:FindFirstChild("InventorySlot")
+	return column, slot
+end
+
 function InventoryUI.Start()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "BPW_Inventory"
 	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = false
 	gui.DisplayOrder = 20
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	local openBtn = Instance.new("TextButton")
-	openBtn.Name = "InventoryButton"
-	openBtn.Size = UDim2.new(0, 110, 0, 40)
-	openBtn.Position = UDim2.new(1, -126, 0, 16)
-	openBtn.BackgroundColor3 = Color3.fromRGB(40, 48, 64)
-	openBtn.TextColor3 = Color3.new(1, 1, 1)
-	openBtn.Font = Enum.Font.GothamBold
-	openBtn.TextSize = 14
+	openBtn.Name = HudChrome.INVENTORY_BUTTON_NAME
+	openBtn.LayoutOrder = 1
+	openBtn.Size = UDim2.fromOffset(HudChrome.ACTION_BUTTON_SIZE, HudChrome.ACTION_BUTTON_SIZE)
+	openBtn.BackgroundColor3 = BG_BUTTON
+	openBtn.BackgroundTransparency = 0.08
 	openBtn.BorderSizePixel = 0
-	openBtn.Parent = gui
-	L10nUtil.localize(openBtn, L10n.Inventory)
-	corner(openBtn, 10)
+	openBtn.Text = "" -- pas de libellé permanent « Inventory »
+	openBtn.AutoButtonColor = false
+	openBtn.Selectable = true
+	openBtn.Active = true
+	openBtn.ZIndex = 5
+	openBtn:SetAttribute("AccessibleName", L10n.Inventory)
+
+	local column, slot = resolveActionColumn()
+	if slot then
+		openBtn.Size = UDim2.fromScale(1, 1)
+		openBtn.Parent = slot
+	elseif column then
+		openBtn.Parent = column
+	else
+		-- Fallback si le HUD n'est pas encore monté.
+		openBtn.AnchorPoint = Vector2.new(1, 0)
+		openBtn.Position = UDim2.new(1, -HudChrome.ACTION_COLUMN_RIGHT, 0, HudChrome.ACTION_COLUMN_TOP)
+		openBtn.Parent = gui
+	end
+
+	corner(openBtn, 16)
+	local border = stroke(openBtn, ACCENT, 1.4, 0.12)
+
+	local icon = Instance.new("TextLabel")
+	icon.Name = "IconGlyph"
+	icon.BackgroundTransparency = 1
+	icon.Size = UDim2.fromScale(1, 1)
+	icon.Font = Enum.Font.GothamBold
+	icon.Text = HudChrome.ICON_INVENTORY
+	icon.TextColor3 = Color3.new(1, 1, 1)
+	icon.TextScaled = true
+	icon.ZIndex = openBtn.ZIndex + 1
+	icon.Parent = openBtn
+	L10nUtil.markNoLocalize(icon)
+	local iconConstraint = Instance.new("UITextSizeConstraint")
+	iconConstraint.MinTextSize = 18
+	iconConstraint.MaxTextSize = 32
+	iconConstraint.Parent = icon
+
+	local tip = Instance.new("TextLabel")
+	tip.Name = "Tooltip"
+	tip.Visible = false
+	tip.AnchorPoint = Vector2.new(1, 0.5)
+	tip.Position = UDim2.new(0, -8, 0.5, 0)
+	tip.Size = UDim2.fromOffset(0, 24)
+	tip.AutomaticSize = Enum.AutomaticSize.X
+	tip.BackgroundColor3 = BG
+	tip.BackgroundTransparency = 0.1
+	tip.BorderSizePixel = 0
+	tip.TextColor3 = Color3.new(1, 1, 1)
+	tip.Font = Enum.Font.GothamMedium
+	tip.TextSize = 12
+	tip.TextXAlignment = Enum.TextXAlignment.Center
+	tip.ZIndex = 20
+	tip.Parent = openBtn
+	L10nUtil.localize(tip, L10n.Inventory)
+	corner(tip, 6)
+	stroke(tip, ACCENT, 1, 0.35)
+	local tipPad = Instance.new("UIPadding")
+	tipPad.PaddingLeft = UDim.new(0, 8)
+	tipPad.PaddingRight = UDim.new(0, 8)
+	tipPad.Parent = tip
+
+	local function setHover(on: boolean)
+		border.Thickness = if on then 2.2 else 1.4
+		border.Transparency = if on then 0 else 0.12
+		tip.Visible = on
+		openBtn.BackgroundTransparency = if on then 0 else 0.08
+	end
+
+	openBtn.MouseEnter:Connect(function()
+		setHover(true)
+	end)
+	openBtn.MouseLeave:Connect(function()
+		setHover(false)
+	end)
+	openBtn.SelectionGained:Connect(function()
+		setHover(true)
+	end)
+	openBtn.SelectionLost:Connect(function()
+		setHover(false)
+	end)
 
 	local panel = Instance.new("Frame")
+	panel.Name = "InventoryPanel"
 	panel.Size = UDim2.new(0, 340, 0, 360)
 	panel.Position = UDim2.new(1, -356, 0, 64)
 	panel.BackgroundColor3 = BG
@@ -52,6 +158,7 @@ function InventoryUI.Start()
 	panel.Visible = false
 	panel.Parent = gui
 	corner(panel, 14)
+	stroke(panel, ACCENT, 1.2, 0.25)
 
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.new(1, -52, 0, 40)
@@ -200,7 +307,16 @@ function InventoryUI.Start()
 	end
 
 	openBtn.Activated:Connect(function()
-		setOpen(not panel.Visible)
+		local willOpen = not panel.Visible
+		setOpen(willOpen)
+		if willOpen then
+			pcall(function()
+				local CC = require(script.Parent.ChallengeController)
+				if type(CC) == "table" and type(CC.Close) == "function" then
+					CC.Close()
+				end
+			end)
+		end
 	end)
 
 	closeBtn.Activated:Connect(function()
@@ -208,8 +324,12 @@ function InventoryUI.Start()
 	end)
 
 	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then return end
-		if not panel.Visible then return end
+		if processed then
+			return
+		end
+		if not panel.Visible then
+			return
+		end
 		if input.KeyCode == Enum.KeyCode.ButtonB or input.KeyCode == Enum.KeyCode.Escape then
 			setOpen(false)
 		end

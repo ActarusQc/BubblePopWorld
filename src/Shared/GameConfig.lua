@@ -48,16 +48,16 @@ GameConfig.ShopItems = {
 	BackpackEmerald = {
 		Label = "Emerald Backpack",
 		Kind = "Backpack",
-		Capacity = 50,
-		Cost = 10000,
+		Capacity = 75,
+		Cost = 25000,
 		Style = "Emerald",
 		IconKey = "BackpackEmerald",
 	},
 	BackpackNeon = {
 		Label = "Neon Backpack",
 		Kind = "Backpack",
-		Capacity = 50,
-		Cost = 10000,
+		Capacity = 100,
+		Cost = 50000,
 		Style = "Neon",
 		IconKey = "BackpackNeon",
 	},
@@ -240,6 +240,200 @@ GameConfig.GameRoom = {
 	PathColor = Color3.fromRGB(42, 80, 125),
 }
 
+--------------------------------------------------------------------
+-- Hub central (Concept 2 — Équilibré)
+--------------------------------------------------------------------
+-- Plateforme octogonale posée au centre exact du plateau de bulles. Orientation de
+-- référence (identique à la maquette vue depuis l'avant du hub) :
+--   ouverture / descente vers les bulles = +Z   |  panneaux TOP 3 / RULES / boucle = -Z
+--   SELL = -X (gauche du joueur)                |  SHOP = +X (droite du joueur)
+-- Le joueur apparaît face à -Z : il lit la boucle, SELL à gauche, SHOP à droite,
+-- et la descente vers les bulles est juste derrière lui.
+--
+-- Toute la géométrie dérivée vit dans Shared/HubLayout.lua (module pur, testé).
+GameConfig.Hub = {
+	Enabled = true,
+	-- true : le lobby séparé, le passage physique et les pads sud ne sont plus
+	-- construits (le hub porte spawn, vente, boutique, classement, règles, transit).
+	ReplacesLobby = true,
+	-- Studio seulement : proxies de collision semi-transparents + audit Output.
+	DebugCollisionProxies = false,
+	-- Studio : teinte semi-transparente des volumes SELL / SHOP / TRANSIT.
+	DebugInteractionZones = false,
+	-- Studio seulement : ancrages leaderboard visibles (rouge / jaune / cyan).
+	-- Doit rester false en jeu — sinon HubDisplaysService pose Transparency 0.35 + DebugColor.
+	DebugLeaderboardAnchors = false,
+
+	-- Placement : "Center" (legacy, trou centrale) ou "RearOfGrid"
+	-- (Entrée sud → bulles → plateau Tripo au fond +Z, face au centre).
+	Placement = {
+		Mode = "RearOfGrid",
+		-- Dégagement marche → bulles (2–4), dans la grille — PAS d'extension hors salle.
+		ClearanceStuds = 3,
+		RearMarginStuds = 1.5,
+		-- Noms candidats du Model importé (Workspace / StudioDecoration / ServerStorage).
+		CandidateModelNames = {
+			"3d stage arena prop",
+			"3d Stage Arena Prop",
+			"TripoRearHubPlatform",
+			"HubDeckShell_New",
+			"HubDeckShell",
+			"HubDeckShell-Tripo-Level-v2",
+			"HubDeckShell-Tripo-Flattened",
+		},
+		OfficialModelName = "TripoRearHubPlatform",
+		AttributeRole = "RearHubPlatform",
+		Tag = "BPW_RearHubPlatform",
+	},
+
+	-- Deck octogonal : |X| <= HalfX, |Z| <= HalfZ, |X| + |Z| <= HalfX + HalfZ - Chamfer.
+	DeckHalfX = 42,
+	DeckHalfZ = 30,
+	DeckChamfer = 12,
+	DeckThickness = 2,
+	DeckTopY = 12,
+	-- Marge laissée autour de l'emprise avant la première bulle.
+	ReserveMargin = 2,
+	RailingHeight = 3.5,
+	RailingThickness = 1,
+
+	-- Médaillon de spawn (avant-centre du deck, comme la maquette).
+	Spawn = {
+		Offset = Vector3.new(0, 0, 8),
+		PadDiameter = 18,
+		PadHeight = 0.4,
+		-- Yaw 180 → LookVector +Z : face aux bulles ; gauche = +X = SELL, droite = -X = SHOP.
+		YawDegrees = 180,
+	},
+
+	-- Panneau principal POP → SELL → UPGRADE.
+	LoopPanel = {
+		Offset = Vector3.new(0, 0, -4),
+		Size = Vector3.new(30, 6.4, 0.8),
+		PlinthHeight = 1.5,
+		YawDegrees = 180,
+	},
+
+	-- Panneaux arrière (3 côte à côte) : TopCoins | WeeklyBest | Challenges.
+	-- BottomAboveDeck bas : lisible depuis la zone de bulles, hors du centre de jeu.
+	Boards = {
+		Size = Vector3.new(14, 11, 0.7),
+		OffsetX = 16,
+		OffsetZ = -24,
+		BottomAboveDeck = 1.2,
+		YawDegrees = 180,
+	},
+
+	-- Plateformes latérales dédiées (légèrement surélevées, bord néon coloré).
+	SidePlatform = {
+		Size = Vector3.new(24, 1.2, 22),
+		OffsetX = 30,
+		Rise = 1.2,
+	},
+
+	-- Vente : réutilise la vente automatique existante (présence dans HubSellZone).
+	-- Spawn hub yaw 180 (face +Z / bulles) : gauche joueur = +X = SELL vert.
+	Sell = {
+		YawDegrees = 270, -- +X : +Z local vers le centre (-X monde)
+		CounterSize = Vector3.new(15, 4.2, 5.4),
+		CanopySize = Vector3.new(17, 1, 8.5),
+		SignSize = Vector3.new(14, 3.4, 0.9),
+		ValueBoardSize = Vector3.new(7.6, 3.4, 0.5),
+		PadLocalOffset = Vector3.new(0, 0.3, 6.4),
+		PadSize = Vector3.new(11, 0.35, 9),
+		ZoneLocalOffset = Vector3.new(0, 3.6, 6.4),
+		ZoneSize = Vector3.new(12, 8, 11),
+	},
+
+	-- Boutique : stand OUVERT (jamais un bâtiment dans lequel on entre).
+	-- Width = axe local X, Depth = axe local Z (entrée = +Z local vers le centre).
+	-- Droite joueur (yaw 180) = -X = SHOP violet.
+	Shop = {
+		YawDegrees = 90,
+		Width = 22,
+		Depth = 16,
+		WallHeight = 9,
+		WallThickness = 1,
+		SideWallDepth = 10,
+		CounterHeight = 3.4,
+		SignSize = Vector3.new(14, 3.4, 0.9),
+		PromptMaxDistance = 13,
+		-- true : la coque du stand vient d'un modèle importé (voir Assets.ShopStand).
+		UseStudioVisual = false,
+	},
+
+	-- Bubble Transit : portail arrière (arche bleue FullHub).
+	-- Interaction : Part permanente Workspace.BubbleTransitInteractionAnchor (Studio / Rojo).
+	Transit = {
+		Offset = Vector3.new(0, 0, -22),
+		YawDegrees = 180,
+		AlcoveDiameter = 9,
+		AlcoveHeight = 0.6,
+	},
+
+	-- Descente frontale vers les bulles (+Z). Le palier prolonge la dernière marche
+	-- jusqu'au contact de la première rangée de bulles conservée : aucun vide à sauter.
+	-- 3 × 1.55 = 4.65 : la dernière marche arrive au sommet des dômes de bulles
+	-- (Grid.Origin.Y + BubbleSize.Y / 2 + 0.35 = 7.35), là où le joueur marche.
+	-- Le palier est ensuite prolongé jusqu'à la première bulle conservée.
+	Stairs = {
+		Width = 26,
+		StepCount = 3,
+		StepRise = 1.55,
+		StepDepth = 3.5,
+		LandingDepth = 5,
+	},
+
+	-- Classements hub Tripo : TOP 10 sur chaque panneau coloré.
+	Leaderboard = {
+		Rows = 10,
+	},
+
+	Colors = {
+		Deck = Color3.fromRGB(168, 176, 190),
+		DeckInlay = Color3.fromRGB(140, 150, 166),
+		Foundation = Color3.fromRGB(118, 126, 140),
+		FoundationDeep = Color3.fromRGB(88, 96, 110),
+		Trim = Color3.fromRGB(90, 190, 230),
+		Panel = Color3.fromRGB(236, 214, 168),
+		PanelDeep = Color3.fromRGB(42, 52, 78),
+		Sell = Color3.fromRGB(220, 80, 70),
+		Shop = Color3.fromRGB(55, 120, 210),
+		Loop = Color3.fromRGB(90, 190, 230),
+		Gold = Color3.fromRGB(240, 195, 70),
+		Amber = Color3.fromRGB(255, 170, 60),
+		Violet = Color3.fromRGB(130, 100, 210),
+		White = Color3.fromRGB(248, 250, 255),
+		Wood = Color3.fromRGB(160, 110, 70),
+		WoodDark = Color3.fromRGB(110, 72, 44),
+		Plant = Color3.fromRGB(70, 150, 80),
+		PlantDark = Color3.fromRGB(45, 110, 55),
+	},
+
+	-- Pipeline assets importés. Pour chaque module visuel :
+	--   UseImported = true + Workspace.<StudioDecorationRoot>.<VisualFolder>.<ModelName>
+	--   présent → le code ne génère plus la forme, seuls les repères fonctionnels
+	--   (SellZone, prompts, surfaces GUI, spawn) sont conservés.
+	Visual = {
+		StudioDecorationRoot = "StudioDecoration",
+		VisualFolder = "CentralHubVisual",
+	},
+	Assets = {
+		-- Deck Tripo importé : visuel mesh ; collisions proxy + modules fonctionnels en code.
+		Deck = { UseImported = true, ModelName = "TripoRearHubPlatform" },
+		DeckRim = { UseImported = false, ModelName = "HubDeckRim" },
+		SpawnMedallion = { UseImported = false, ModelName = "SpawnArea" },
+		LoopPanel = { UseImported = false, ModelName = "HubLoopPanel" },
+		SellStand = { UseImported = false, ModelName = "SellBuilding" },
+		ShopStand = { UseImported = false, ModelName = "ShopBuilding" },
+		TopBoard = { UseImported = false, ModelName = "TopCoinsBoard" },
+		RulesBoard = { UseImported = false, ModelName = "ChallengesBoard" },
+		TransitAlcove = { UseImported = false, ModelName = "HubTransitAlcove" },
+		-- Escaliers inclus dans le mesh Tripo ; collisions proxy code.
+		Stairs = { UseImported = true, ModelName = "FrontStairs" },
+	},
+}
+
 GameConfig.Bubble = {
 	RegenTime = 30,          -- secondes avant réapparition
 	PressDepth = 0.7,        -- enfoncement visuel quand on marche dessus
@@ -253,30 +447,122 @@ GameConfig.Bubble = {
 	-- MeshScale < 1 pour laisser un espace visible entre bulles (Spacing = 6)
 	MeshScale = Vector3.new(0.92, 0.98, 0.92),
 
-	-- Apparence bulle de savon (uniquement visuel)
+	-- Zone principale : Material NEON (émissif) → plus de shading diffuse caméra-dépendant.
+	-- SmoothPlastic échoue : faces ombrées/claires sur sphère changent avec l’angle de vue.
+	-- RGB volontairement plus bas pour rester pastel (Neon affiche plus lumineux).
 	Appearance = {
-		Material = Enum.Material.Glass,
-		BaseColor = Color3.fromRGB(145, 225, 255),
-		Transparency = 0.35,
-		Reflectance = 0.05,
+		Material = Enum.Material.Neon,
+		BaseColor = Color3.fromRGB(85, 165, 215),
+		Transparency = 0,
+		Reflectance = 0,
 		CastShadow = false,
 
 		TintVariants = {
-			Color3.fromRGB(135, 220, 255),
-			Color3.fromRGB(160, 235, 255),
-			Color3.fromRGB(175, 220, 255),
-			Color3.fromRGB(150, 245, 235),
+			Color3.fromRGB(85, 165, 215), -- bleu pastel stable (Neon)
+			Color3.fromRGB(90, 190, 145), -- menthe pastel stable
+			Color3.fromRGB(145, 120, 210), -- mauve pastel stable
+			Color3.fromRGB(220, 125, 100), -- pêche pastel stable
 		},
 
-		OutlineColor = Color3.fromRGB(70, 190, 230),
+		OutlineColor = Color3.fromRGB(85, 165, 215),
 		OutlineTransparency = 0.35,
-		-- false : 1600 Highlights = trop coûteux / limite Roblox
 		EnableHighlight = false,
-		-- false : évite +1600 Parts ; Glass suffit pour le reflet
 		EnableReflection = false,
 		ReflectionTransparency = 0.85,
 		ReflectionSize = Vector3.new(0.7, 0.45, 0.7),
 	},
+
+	-- Palette pastels zone principale (valeurs calibrées pour Neon, pas SmoothPlastic).
+	MainZoneNormalColors = {
+		Color3.fromRGB(85, 165, 215), -- bleu
+		Color3.fromRGB(90, 190, 145), -- menthe
+		Color3.fromRGB(145, 120, 210), -- mauve
+		Color3.fromRGB(220, 125, 100), -- pêche
+	},
+
+	-- Spéciales principales : vives mais contrôlées sous Neon (évite bloom blanc).
+	MainZoneSpecialColors = {
+		Rare = Color3.fromRGB(200, 45, 45), -- rouge
+		Golden = Color3.fromRGB(200, 155, 25), -- jaune
+		Diamond = Color3.fromRGB(20, 175, 195), -- cyan
+		Legendary = Color3.fromRGB(185, 35, 140), -- magenta
+	},
+
+	-- Spéciales Summer Zone : identité visuelle legacy (inchangée).
+	SummerZoneSpecialColors = {
+		Rare = Color3.fromRGB(255, 125, 25),
+		Golden = Color3.fromRGB(175, 190, 210),
+		Diamond = Color3.fromRGB(255, 200, 45),
+		Legendary = Color3.fromRGB(190, 55, 255),
+	},
+
+	ReservedColorMinDistance = 0.38,
+
+	-- Finition spéciale zone principale = Neon opaque stable.
+	SpecialStyles = {
+		Rare = {
+			Material = Enum.Material.Neon,
+			Transparency = 0,
+			Reflectance = 0,
+		},
+		Golden = {
+			Material = Enum.Material.Neon,
+			Transparency = 0,
+			Reflectance = 0,
+		},
+		Diamond = {
+			Material = Enum.Material.Neon,
+			Transparency = 0,
+			Reflectance = 0,
+		},
+		Legendary = {
+			Material = Enum.Material.Neon,
+			Transparency = 0,
+			Reflectance = 0,
+		},
+	},
+
+	-- Héritage Summer : finitions SmoothPlastic/Glass brilliantes (inchangées).
+	SummerSpecialStyles = {
+		Rare = {
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 0.18,
+			Reflectance = 0.22,
+		},
+		Golden = {
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 0.12,
+			Reflectance = 0.4,
+		},
+		Diamond = {
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 0.1,
+			Reflectance = 0.55,
+		},
+		Legendary = {
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 0.08,
+			Reflectance = 0.3,
+		},
+	},
+
+	-- Marqueurs désactivés en zone principale. Summer réutilise EnableBorderPulse si rang élevé.
+	SpecialPresentation = {
+		EnableMarkers = false, -- zone principale : jamais
+		EnableBorderPulse = true, -- Summer Diamond+ seulement
+		PulseMinRank = 3,
+		BorderScaleBase = 1.1,
+		BorderScalePerRank = 0.02,
+		BorderThicknessBase = 0.22,
+		BorderThicknessPerRank = 0.04,
+		BorderTransparencyBase = 0.3,
+		BorderTransparencyStep = 0.04,
+		SymbolScaleBase = 1.2,
+		SymbolScalePerRank = 0.1,
+	},
+
+	DiagnosticsEnabled = false,
+	StudioSpecialPreviewRow = false,
 
 	-- Rebond
 	BounceMultiplier = 1.45,        -- hauteur du rebond (x JumpPower du joueur)
@@ -287,13 +573,15 @@ GameConfig.Bubble = {
 }
 
 -- Teinte des bulles Normales par zone (salle principale = GameRoom / ClassicZone).
--- Rare / Golden / Diamond / Legendary restent sur BubbleTypes.List (config globale).
--- Common peut être un Color3 unique ou une liste de variantes (comme TintVariants).
+-- Rare / Golden / Diamond / Legendary : MainZoneSpecialColors / BubbleTypes (jamais ici).
+-- Common = Color3 unique ou liste ; GameRoom est filtré vs couleurs réservées spéciales.
 GameConfig.ZoneBubblePalettes = {
 	GameRoom = {
-		Common = GameConfig.Bubble.Appearance.TintVariants,
+		-- Quatre pastels (réf. GameConfig.Bubble.MainZoneNormalColors).
+		Common = GameConfig.Bubble.MainZoneNormalColors,
 	},
 	SummerZone = {
+		-- Inchangé : orange Summer uniquement.
 		Common = Color3.fromRGB(255, 145, 35),
 	},
 }
@@ -462,10 +750,11 @@ GameConfig.Chest = {
 	MaxInterval = 210,
 	Lifetime = 50,
 	Tiers = {
-		{ Id = "Common",    Label = "Common",    Weight = 60, Coins = {150, 400},     Color = Color3.fromRGB(190,190,190) },
-		{ Id = "Rare",      Label = "Rare",      Weight = 25, Coins = {600, 1500},    Color = Color3.fromRGB(70,150,255) },
-		{ Id = "Epic",      Label = "Epic",      Weight = 12, Coins = {2500, 6000},   Color = Color3.fromRGB(180,80,255) },
-		{ Id = "Legendary", Label = "Legendary", Weight = 3,  Coins = {12000, 30000}, Color = Color3.fromRGB(255,180,40), Announce = true },
+		-- Color = accent visuel (corps bois/métal géré par ChestAppearance). Coins/Weight inchangés.
+		{ Id = "Common",    Label = "Common",    Weight = 60, Coins = {150, 400},     Color = Color3.fromRGB(175, 120, 55) },
+		{ Id = "Rare",      Label = "Rare",      Weight = 25, Coins = {600, 1500},    Color = Color3.fromRGB(70, 150, 255) },
+		{ Id = "Epic",      Label = "Epic",      Weight = 12, Coins = {2500, 6000},   Color = Color3.fromRGB(180, 80, 255) },
+		{ Id = "Legendary", Label = "Legendary", Weight = 3,  Coins = {12000, 30000}, Color = Color3.fromRGB(255, 180, 40), Announce = true },
 	},
 }
 
@@ -487,8 +776,10 @@ GameConfig.Data = {
 	LeaderboardVersion = "v2",
 	-- Classement mondial Coins (OrderedDataStore dédié, indépendant des LB legacy).
 	GlobalCoinsLeaderboardStore = "GlobalCoinsLeaderboard_v1",
+	GlobalLevelsLeaderboardStore = "GlobalHighestLevels_v1",
 	LeaderboardWriteThrottle = 45, -- secondes entre écritures OrderedDataStore / joueur
 	LeaderboardRefreshInterval = 60, -- secondes entre rafraîchissements du panneau
+	DailyBubbleLeaderboardPrefix = "DailyBubblePops_v1_",
 	-- Délai mini entre deux sauvegardes déclenchées par une vente : la progression
 	-- est persistée vite sans épuiser le budget d'écriture DataStore.
 	SaveAfterSellThrottle = 30,
@@ -538,6 +829,34 @@ local function assertOutsideGrid(worldPos: Vector3, label: string)
 	if worldPos.X > b.MinX - margin and worldPos.X < b.MaxX + margin
 		and worldPos.Z > b.MinZ - margin and worldPos.Z < b.MaxZ + margin then
 		warn("[BPW] layout overlap risk:", label, worldPos)
+	end
+end
+
+-- Le hub vit volontairement DANS la grille : ses avertissements d'emprise sont
+-- portés par HubLayout / HubLayoutTests, pas par assertOutsideGrid.
+if GameConfig.Hub.Enabled then
+	local H = GameConfig.Hub
+	local gridBounds = GameConfig.GetGridBounds()
+	if H.DeckHalfX + H.ReserveMargin >= (gridBounds.MaxX - gridBounds.MinX) / 2
+		or H.DeckHalfZ + H.ReserveMargin >= (gridBounds.MaxZ - gridBounds.MinZ) / 2 then
+		warn("[BPW] Hub : le deck couvre presque toute la planche Classic.")
+	end
+	if H.DeckTopY <= GameConfig.Grid.Origin.Y + GameConfig.Grid.BubbleSize.Y / 2 then
+		warn("[BPW] Hub : DeckTopY doit rester au-dessus du sommet des bulles.")
+	end
+	if H.DeckChamfer * 2 >= math.min(H.DeckHalfX, H.DeckHalfZ) * 2 then
+		warn("[BPW] Hub : DeckChamfer trop grand, l'octogone dégénère.")
+	end
+	-- La descente doit poser le joueur sur le dessus des bulles : c'est la surface
+	-- praticable de la planche (le PlayFloor est sous la couche de dômes).
+	local bubbleWalkY = GameConfig.Grid.Origin.Y + GameConfig.Grid.BubbleSize.Y / 2 + 0.35
+	local stairsBottom = H.DeckTopY - H.Stairs.StepCount * H.Stairs.StepRise
+	if math.abs(stairsBottom - bubbleWalkY) > 0.4 then
+		warn(("[BPW] Hub : la descente s'arrête à Y=%.2f, dessus des bulles à Y=%.2f.")
+			:format(stairsBottom, bubbleWalkY))
+	end
+	if H.Stairs.StepRise > 2 then
+		warn("[BPW] Hub : marche trop haute, le personnage ne montera pas.")
 	end
 end
 

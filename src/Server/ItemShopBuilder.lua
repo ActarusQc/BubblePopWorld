@@ -16,6 +16,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
+local HubLayout = require(Shared.HubLayout)
 local L10n = require(Shared.LocalizationStrings)
 -- Le décor reste protégé. Seule exception : Shell.EnsureVisualModelPivot()
 -- déplace le modèle entier lorsque le pivot de configuration change.
@@ -227,7 +228,7 @@ local function createPromptAnchor(
 	model: Model,
 	baseCF: CFrame,
 	spec: CategorySpec,
-	shopConfig: typeof(Config.Lobby.ItemShop)
+	promptMaxDistance: number
 ): Part
 	local anchor = makePart({
 		Name = "PromptAnchor_" .. spec.Id,
@@ -249,7 +250,7 @@ local function createPromptAnchor(
 	prompt.ActionText = l10nText(spec.PromptBrowseKey)
 	prompt.ObjectText = l10nText(spec.ObjectTextKey)
 	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = shopConfig.PromptMaxDistance or 13
+	prompt.MaxActivationDistance = promptMaxDistance
 	prompt.RequiresLineOfSight = false
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
@@ -511,28 +512,50 @@ end
 
 local ItemShopBuilder = {}
 
+-- Le hub central porte son propre stand ouvert : la boutique n'est plus un bâtiment
+-- du lobby mais un kiosque posé sur la plateforme droite du hub.
+local function useHubAnchor(): boolean
+	return Config.Hub.Enabled == true and Config.Hub.ReplacesLobby == true
+end
+
 -- guideMode = true : construction Studio (Edit) des seuls repères, rendus visibles.
 local function buildShopModel(position: Vector3?, guideMode: boolean): Model
 	local parent = resolveParent()
 	destroyExisting(parent)
 
+	local hubMode = position == nil and useHubAnchor()
 	local shopConfig = Config.Lobby.ItemShop
-	local origin = position or Config.Lobby.ItemShopPosition
-	local baseCF = CFrame.new(origin) * CFrame.Angles(0, math.rad(shopConfig.YawDegrees), 0)
+	local origin: Vector3
+	local baseCF: CFrame
+	if hubMode then
+		origin = HubLayout.GetShopOrigin()
+		baseCF = HubLayout.GetShopBaseCFrame()
+	else
+		origin = position or Config.Lobby.ItemShopPosition
+		baseCF = CFrame.new(origin) * CFrame.Angles(0, math.rad(shopConfig.YawDegrees), 0)
+	end
 
-	if position == nil then
+	if position == nil and not hubMode then
 		Shell.EnsureVisualModelPivot()
 	end
 
-	local width = shopConfig.Width or 32
-	local depth = shopConfig.Depth or 26
-	local doorWidth = shopConfig.DoorWidth or 13
-	local thickness = shopConfig.WallThickness or 1
+	local hubShop = Config.Hub.Shop
+	local width = if hubMode then hubShop.Width else (shopConfig.Width or 32)
+	local depth = if hubMode then hubShop.Depth else (shopConfig.Depth or 26)
+	local doorWidth = if hubMode then 6 else (shopConfig.DoorWidth or 13)
+	local thickness = if hubMode then hubShop.WallThickness else (shopConfig.WallThickness or 1)
 
-	local mode = if guideMode
-		then "FunctionalOnly"
-		else Shell.ResolveEffectiveMode(shopConfig.UseStudioVisual, Shell.IsVisualPresent())
-	if not guideMode and Shell.IsLegacyDecorRequested(shopConfig.UseStudioVisual) then
+	local mode
+	if guideMode then
+		mode = "FunctionalOnly"
+	elseif hubMode then
+		-- La coque du kiosque vient de CentralHubBuilder (ou d'un asset importé) :
+		-- aucun bâtiment de secours ne doit apparaître sur le hub.
+		mode = if hubShop.UseStudioVisual then "StudioVisual" else "FunctionalOnly"
+	else
+		mode = Shell.ResolveEffectiveMode(shopConfig.UseStudioVisual, Shell.IsVisualPresent())
+	end
+	if not guideMode and not hubMode and Shell.IsLegacyDecorRequested(shopConfig.UseStudioVisual) then
 		warn(
 			"[ItemShopBuilder] UseStudioVisual=false mais la décoration procédurale a été retirée. "
 				.. "Comportement Studio-first appliqué."
@@ -542,15 +565,24 @@ local function buildShopModel(position: Vector3?, guideMode: boolean): Model
 	local model = Instance.new("Model")
 	model.Name = MODEL_NAME
 
-	validateLayout(baseCF, shopConfig)
+	if not hubMode then
+		validateLayout(baseCF, shopConfig)
+	end
 	computeWallCenters(width, depth, thickness)
+
+	local promptDistance = if hubMode
+		then hubShop.PromptMaxDistance
+		else (shopConfig.PromptMaxDistance or 13)
 
 	local pivotAnchor = createPivotAnchor(model, baseCF)
 	createEntranceMarker(model, baseCF, depth, doorWidth)
 	for _, spec in ipairs(CATEGORIES) do
 		createFunctionalDisplay(model, baseCF, spec)
-		createPromptAnchor(model, baseCF, spec, shopConfig)
 		createCameraPoint(model, baseCF, spec)
+		-- Hub FullHub : un seul HubShopPrompt dans CentralHubBuilder (aile violette).
+		if not hubMode then
+			createPromptAnchor(model, baseCF, spec, promptDistance)
+		end
 	end
 
 	if Shell.ShouldBuildFallbackShell(mode) then
@@ -565,11 +597,26 @@ local function buildShopModel(position: Vector3?, guideMode: boolean): Model
 	model.PrimaryPart = pivotAnchor
 	model:SetAttribute("BPW_ItemShop", true)
 	model:SetAttribute("BPW_BuildMode", mode)
+	model:SetAttribute("BPW_HubKiosk", hubMode)
 	model.Parent = parent
 
+	-- Filet : le hub ne doit jamais exposer l'ancien bâtiment walk-in.
+	if hubMode then
+		local strayShell = model:FindFirstChild("FallbackShell")
+		if strayShell then
+			strayShell:Destroy()
+		end
+		local leftover = Shell.ListStrayShopVisualPaths()
+		if #leftover > 0 then
+			warn(("[ItemShopBuilder] Hub : ItemShopVisual encore visible (%s) — park ZoneService incomplet.")
+				:format(table.concat(leftover, ", ")))
+		end
+	end
+
 	print(string.format(
-		"[ItemShopBuilder] mode=%s origin=%s parts=%d (aucune décoration générée)",
+		"[ItemShopBuilder] mode=%s anchor=%s origin=%s parts=%d (aucune décoration générée)",
 		mode,
+		if hubMode then "CentralHub" else "Lobby",
 		tostring(origin),
 		#model:GetDescendants()
 	))

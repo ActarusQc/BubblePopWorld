@@ -1,151 +1,120 @@
 --!strict
--- Configuration du décor d'horizon (montagnes / collines / arbres / atmosphère).
+-- Configuration du décor d'horizon (océan / îlots / palmiers — pas de montagnes).
 -- Valeurs tuning uniquement — aucune logique de gameplay.
 
 local EnvironmentBackdropConfig = {}
 
 -- Centre approximatif du plateau jouable (lobby + salle de bulles).
 EnvironmentBackdropConfig.WorldCenter = Vector3.new(0, 0, -90)
-EnvironmentBackdropConfig.GroundY = -10
-EnvironmentBackdropConfig.Seed = 20260727
+EnvironmentBackdropConfig.SeaLevelY = -14
+EnvironmentBackdropConfig.Seed = 20260803
 
 -- Marge (studs) autour de l’emprise Summer Zone : aucun décor d’horizon ne doit
--- chevaucher cette zone (montagnes vertes Foothills / collines GroundBand / etc.).
--- L’horizon lointain hors emprise reste généré normalement.
+-- chevaucher cette zone (îlots / palmiers / etc.).
 EnvironmentBackdropConfig.SummerExclusionPad = 12
 
-EnvironmentBackdropConfig.Foothills = {
-	RadiusMin = 220,
-	RadiusMax = 320,
-	Count = 18,
-	HeightMin = 35,
-	HeightMax = 75,
-	WidthMin = 48,
-	WidthMax = 95,
-	DepthMin = 28,
-	DepthMax = 55,
-	-- Filet seed 20260727 (exclusion géométrique = source de vérité).
-	SkipIndices = { 1, 2, 3 },
+-- Bande d'eau lointaine (anneau de plates-formes).
+EnvironmentBackdropConfig.Ocean = {
+	RadiusMin = 280,
+	RadiusMax = 620,
+	RingCount = 3,
+	SegmentsPerRing = 16,
+	Thickness = 6,
 	Colors = {
-		Color3.fromRGB(42, 78, 72),
-		Color3.fromRGB(38, 70, 78),
-		Color3.fromRGB(48, 86, 70),
-		Color3.fromRGB(36, 64, 68),
+		Color3.fromRGB(95, 175, 220),
+		Color3.fromRGB(80, 160, 210),
+		Color3.fromRGB(110, 185, 225),
 	},
 }
 
-EnvironmentBackdropConfig.MainMountains = {
-	RadiusMin = 330,
-	RadiusMax = 480,
-	Count = 20,
-	HeightMin = 90,
-	HeightMax = 180,
-	WidthMin = 70,
-	WidthMax = 140,
-	DepthMin = 40,
-	DepthMax = 80,
-	SkipIndices = { 1, 2, 3 },
+-- Petits îlots stylisés (sable + plateau).
+EnvironmentBackdropConfig.Islands = {
+	Count = 4,
+	RadiusMin = 340,
+	RadiusMax = 520,
+	SizeMin = 28,
+	SizeMax = 48,
+	HeightMin = 4,
+	HeightMax = 9,
+	SandColors = {
+		Color3.fromRGB(232, 210, 160),
+		Color3.fromRGB(240, 220, 175),
+		Color3.fromRGB(220, 200, 150),
+	},
+	GrassColors = {
+		Color3.fromRGB(95, 190, 120),
+		Color3.fromRGB(80, 175, 110),
+		Color3.fromRGB(110, 200, 130),
+	},
+}
+
+EnvironmentBackdropConfig.Palms = {
+	PerIslandMin = 1,
+	PerIslandMax = 3,
+	TrunkColor = Color3.fromRGB(120, 85, 55),
+	FrondColors = {
+		Color3.fromRGB(55, 160, 90),
+		Color3.fromRGB(45, 145, 80),
+		Color3.fromRGB(70, 170, 100),
+	},
+}
+
+-- Nuages plats, très clairs, loin au-dessus.
+EnvironmentBackdropConfig.Clouds = {
+	Count = 12,
+	RadiusMin = 300,
+	RadiusMax = 580,
+	AltitudeMin = 90,
+	AltitudeMax = 160,
 	Colors = {
-		Color3.fromRGB(58, 72, 92),
-		Color3.fromRGB(48, 60, 78),
-		Color3.fromRGB(66, 78, 96),
-		Color3.fromRGB(72, 82, 98),
-		Color3.fromRGB(52, 64, 82),
+		Color3.fromRGB(245, 250, 255),
+		Color3.fromRGB(235, 245, 255),
+		Color3.fromRGB(250, 252, 255),
 	},
 }
 
-EnvironmentBackdropConfig.FarPeaks = {
-	RadiusMin = 480,
-	RadiusMax = 650,
-	Count = 16,
-	HeightMin = 140,
-	HeightMax = 240,
-	WidthMin = 90,
-	WidthMax = 170,
-	DepthMin = 45,
-	DepthMax = 90,
-	SnowCapChance = 0.42,
-	SkipIndices = { 2 },
+-- Bulles décoratives flottantes lointaines (lisibilité zone de jeu prioritaire).
+EnvironmentBackdropConfig.DecorBubbles = {
+	Count = 6,
+	RadiusMin = 360,
+	RadiusMax = 560,
+	AltitudeMin = 25,
+	AltitudeMax = 70,
+	SizeMin = 10,
+	SizeMax = 22,
 	Colors = {
-		Color3.fromRGB(78, 92, 112),
-		Color3.fromRGB(88, 100, 118),
-		Color3.fromRGB(70, 84, 104),
-		Color3.fromRGB(94, 106, 122),
-	},
-	SnowColor = Color3.fromRGB(230, 236, 242),
-}
-
-EnvironmentBackdropConfig.GroundBand = {
-	RadiusMin = 150,
-	RadiusMax = 300,
-	SegmentCount = 14,
-	Thickness = 8,
-	WidthMin = 70,
-	WidthMax = 120,
-	HillCount = 12,
-	HillHeightMin = 8,
-	HillHeightMax = 22,
-	RockCount = 16,
-	-- Indices seed 20260727 qui chevauchent Summer (filet + exclusion géométrique).
-	SkipSegmentIndices = { 1, 2, 3 },
-	SkipHillIndices = { 1, 2 },
-	SkipRockIndices = { 1, 2, 3 },
-	Colors = {
-		Color3.fromRGB(34, 72, 68),
-		Color3.fromRGB(40, 80, 72),
-		Color3.fromRGB(32, 64, 70),
-		Color3.fromRGB(46, 78, 64),
-	},
-	BaseColors = {
-		Color3.fromRGB(30, 58, 64),
-		Color3.fromRGB(28, 52, 60),
-		Color3.fromRGB(36, 62, 58),
-	},
-	RockColors = {
-		Color3.fromRGB(55, 68, 78),
-		Color3.fromRGB(48, 58, 70),
-		Color3.fromRGB(62, 74, 84),
+		Color3.fromRGB(170, 225, 255),
+		Color3.fromRGB(190, 235, 210),
+		Color3.fromRGB(220, 200, 255),
+		Color3.fromRGB(255, 210, 190),
 	},
 }
 
-EnvironmentBackdropConfig.Trees = {
-	ClusterCount = 10,
-	TreesPerClusterMin = 2,
-	TreesPerClusterMax = 5,
-	RadiusMin = 180,
-	RadiusMax = 280,
-	SkipClusterIndices = { 1, 2 },
-	TrunkColor = Color3.fromRGB(62, 44, 32),
-	FoliageColors = {
-		Color3.fromRGB(28, 78, 52),
-		Color3.fromRGB(24, 70, 48),
-		Color3.fromRGB(34, 86, 58),
-		Color3.fromRGB(22, 64, 50),
-	},
-}
-
--- Atmosphère douce : profondeur sans laver le lobby / les kiosques.
+-- Atmosphère claire et légère (moins de contraste vue claire/sombre sur le plateau).
 EnvironmentBackdropConfig.Atmosphere = {
-	Density = 0.22,
-	Offset = 0.16,
-	Haze = 1.35,
-	Glare = 0.08,
-	Color = Color3.fromRGB(175, 198, 220),
-	Decay = Color3.fromRGB(120, 145, 175),
-	FogStart = 380,
-	FogEnd = 2200,
+	Density = 0.14,
+	Offset = 0.12,
+	Haze = 0.85,
+	Glare = 0.04,
+	Color = Color3.fromRGB(195, 220, 240),
+	Decay = Color3.fromRGB(160, 195, 220),
+	FogStart = 420,
+	FogEnd = 2400,
 }
 
 EnvironmentBackdropConfig.Lighting = {
-	-- Ajustements légers uniquement (identité visuelle conservée).
-	Brightness = 2.0,
-	Ambient = Color3.fromRGB(70, 78, 95),
-	OutdoorAmbientBlend = 0.35, -- mélange worldDef.Sky → bleu-gris horizon
-	OutdoorAmbientTint = Color3.fromRGB(150, 185, 215),
-	EnvironmentDiffuseScale = 0.48,
-	EnvironmentSpecularScale = 0.22,
-	ColorShift_Top = Color3.fromRGB(215, 230, 245),
-	ColorShift_Bottom = Color3.fromRGB(140, 170, 195),
+	-- Éclairage plat pour stabiliser le shading des SpecialMesh Sphères (bulles).
+	-- Ambient bas + ColorShiftTop/Bottom distincts + Specular Scale = faces trop foncées
+	-- selon l'angle joueur/soleil (même CastShadow false sur les décors / bulles).
+	Brightness = 1.85,
+	Ambient = Color3.fromRGB(155, 170, 190),
+	OutdoorAmbientBlend = 0.45,
+	OutdoorAmbientTint = Color3.fromRGB(190, 215, 235),
+	EnvironmentDiffuseScale = 0.9,
+	EnvironmentSpecularScale = 0, -- 0 = plus de highlights miroir directionnels sur le monde
+	-- Identiques → pas de teinte haut/bas qui flippe avec l'orientation face.
+	ColorShift_Top = Color3.fromRGB(255, 255, 255),
+	ColorShift_Bottom = Color3.fromRGB(255, 255, 255),
 }
 
 return EnvironmentBackdropConfig

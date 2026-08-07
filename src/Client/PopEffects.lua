@@ -1,5 +1,5 @@
 --!strict
--- Rendu des POP : son, particules, texte flottant. 100% local.
+-- Rendu des POP : son, particules, feedback court au pop des spéciales. 100% local.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local BubbleTypes = require(Shared.BubbleTypes)
+local BubbleAppearance = require(Shared.BubbleAppearance)
 local Remotes = require(Shared.Remotes)
 local L10nUtil = require(Shared.LocalizationUtil)
 local GridUtil = require(script.Parent.GridUtil)
@@ -16,7 +17,6 @@ local GridUtil = require(script.Parent.GridUtil)
 local player = Players.LocalPlayer
 local PopEffects = {}
 
--- ⚠️ Remplace ces IDs par tes propres sons dans Roblox Studio.
 local POP_SOUND_ID = "rbxassetid://6042053626"
 local RARE_SOUND_ID = "rbxassetid://6026984224"
 
@@ -55,19 +55,20 @@ local function burst(position: Vector3, color: Color3, big: boolean)
 
 	local p = Instance.new("ParticleEmitter")
 	p.Color = ColorSequence.new(color)
-	p.Size = NumberSequence.new(if big then 1.6 else 0.7)
-	p.Lifetime = NumberRange.new(0.25, 0.5)
-	p.Speed = NumberRange.new(if big then 22 else 11)
+	p.Size = NumberSequence.new(if big then 1.35 else 0.65)
+	p.Lifetime = NumberRange.new(0.22, 0.45)
+	p.Speed = NumberRange.new(if big then 18 else 10)
 	p.SpreadAngle = Vector2.new(180, 180)
 	p.Rate = 0
-	p.LightEmission = 0.7
+	p.LightEmission = 0.65
 	p.Parent = emitterPart
-	p:Emit(if big then 45 else 14)
+	p:Emit(if big then 28 else 12)
 
-	Debris:AddItem(emitterPart, 1.2)
+	Debris:AddItem(emitterPart, 1.0)
 end
 
-local function floatingText(position: Vector3, text: string, color: Color3)
+-- Feedback éphémère au POP d'une spéciale uniquement (vraie valeur de sac).
+local function specialPopFeedback(position: Vector3, text: string, color: Color3)
 	local anchor = Instance.new("Part")
 	anchor.Anchored = true
 	anchor.CanCollide = false
@@ -77,23 +78,34 @@ local function floatingText(position: Vector3, text: string, color: Color3)
 	anchor.Parent = workspace
 
 	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromScale(8, 2)
+	gui.Name = "SpecialPopFeedback"
+	gui.Size = UDim2.fromOffset(72, 28)
+	gui.StudsOffset = Vector3.new(0, 1.2, 0)
 	gui.AlwaysOnTop = true
+	gui.MaxDistance = 70
 	gui.Parent = anchor
 
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.TextColor3 = color
-	label.TextStrokeTransparency = 0
-	label.TextScaled = true
-	label.Font = Enum.Font.GothamBlack
+	label.TextStrokeTransparency = 0.25
+	label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	label.TextSize = 22
+	label.Font = Enum.Font.GothamBold
 	label.Parent = gui
 	L10nUtil.dynamic(label, text)
 
-	TweenService:Create(anchor, TweenInfo.new(1), { CFrame = CFrame.new(position + Vector3.new(0, 8, 0)) }):Play()
-	TweenService:Create(label, TweenInfo.new(1), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
-	Debris:AddItem(anchor, 1.2)
+	TweenService:Create(
+		anchor,
+		TweenInfo.new(0.85, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ CFrame = CFrame.new(position + Vector3.new(0, 3.2, 0)) }
+	):Play()
+	TweenService:Create(label, TweenInfo.new(0.85), {
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+	Debris:AddItem(anchor, 0.95)
 end
 
 function PopEffects.Start()
@@ -109,19 +121,21 @@ function PopEffects.Start()
 		local played = 0
 		for _, entry in ipairs(batch) do
 			local x, z, rarity, zoneId = entry[1], entry[2], entry[3], entry[4]
-			local pos = GridUtil.CellToWorld(x, z, if type(zoneId) == "string" then zoneId else "ClassicZone")
+			local zone = if type(zoneId) == "string" then zoneId else "ClassicZone"
+			local pos = GridUtil.CellToWorld(x, z, zone)
 
-			-- On n'affiche que ce qui est proche du joueur : perf + lisibilité.
 			if origin and (pos - origin).Magnitude > 140 then continue end
 
 			local def = BubbleTypes.ById[rarity] or BubbleTypes.List[1]
-			local special = rarity ~= "Normal"
+			local special = BubbleAppearance.IsSpecialRarity(rarity)
 
 			burst(pos, def.Color, special)
 
 			if special then
-				local storageValue = if type(def.StorageValue) == "number" then math.max(1, math.floor(def.StorageValue)) else 1
-				floatingText(pos, "+" .. storageValue, def.Color)
+				local text = BubbleAppearance.FormatPopRewardText(rarity, zone)
+				if text then
+					specialPopFeedback(pos, text, def.Color)
+				end
 			end
 
 			if played < 4 then

@@ -1404,6 +1404,116 @@ function GameAnalyticsService.DebugEmitCustom(player: Player, name: string, valu
 	_logCustom(player, name, value, nil)
 end
 
+-- Mini-événements (broadcast serveur ou par joueur).
+local function emitMiniEvent(player: Player?, name: string, value: number?, fields: any?)
+	if player then
+		if not sessions[player] then
+			return
+		end
+		if AnalyticsConfig.IsCustomEventAllowed(name) then
+			_logCustom(player, name, value, fields)
+		end
+		return
+	end
+	for p, _ in pairs(sessions) do
+		if AnalyticsConfig.IsCustomEventAllowed(name) then
+			_logCustom(p, name, value, fields)
+		end
+		break -- un seul envoi session-représentatif suffit pour les events globaux
+	end
+end
+
+function GameAnalyticsService.OnMiniEventCountdownStarted(_player: Player?, ctx: any?)
+	local eventType = if type(ctx) == "table" then tostring(ctx.eventType or "") else ""
+	emitMiniEvent(nil, "MiniEventCountdownStarted", 1, nil)
+	if AnalyticsConfig.DebugEnabled then
+		print("[Analytics] MiniEventCountdownStarted", eventType)
+	end
+end
+
+function GameAnalyticsService.OnMiniEventStarted(_player: Player?, ctx: any?)
+	emitMiniEvent(nil, "MiniEventStarted", if type(ctx) == "table" then tonumber(ctx.duration) else 1, nil)
+end
+
+function GameAnalyticsService.OnMiniEventParticipationStarted(player: Player, ctx: any?)
+	emitMiniEvent(player, "MiniEventParticipationStarted", 1, nil)
+end
+
+function GameAnalyticsService.OnMiniEventProgress(player: Player, ctx: any?)
+	local value = if type(ctx) == "table" then tonumber(ctx.value) or 1 else 1
+	emitMiniEvent(player, "MiniEventProgress", value, nil)
+end
+
+function GameAnalyticsService.OnMiniEventCompleted(_player: Player?, ctx: any?)
+	emitMiniEvent(nil, "MiniEventCompleted", 1, nil)
+end
+
+function GameAnalyticsService.OnMiniEventFailed(_player: Player?, ctx: any?)
+	emitMiniEvent(nil, "MiniEventFailed", 1, nil)
+end
+
+function GameAnalyticsService.OnMiniEventRewardGranted(player: Player, ctx: any?)
+	local value = if type(ctx) == "table" then tonumber(ctx.rewardValue) or 0 else 0
+	emitMiniEvent(player, "MiniEventRewardGranted", value, nil)
+end
+
+-- Challenges (custom events allowlist AnalyticsConfig)
+local function emitChallenge(player: Player?, name: string, value: number?, _ctx: any?)
+	if player then
+		if not sessions[player] then
+			return
+		end
+		if AnalyticsConfig.IsCustomEventAllowed(name) then
+			_logCustom(player, name, value, nil)
+		end
+		return
+	end
+end
+
+function GameAnalyticsService.OnChallengeAssigned(player: Player?, ctx: any?)
+	local value = if type(ctx) == "table" then tonumber(ctx.target) or 1 else 1
+	emitChallenge(player, "ChallengeAssigned", value, ctx)
+end
+
+function GameAnalyticsService.OnChallengeProgressMilestone(player: Player?, ctx: any?)
+	local value = if type(ctx) == "table" then tonumber(ctx.milestone) or 1 else 1
+	emitChallenge(player, "ChallengeProgressMilestone", value, ctx)
+end
+
+function GameAnalyticsService.OnChallengeCompleted(player: Player?, ctx: any?)
+	emitChallenge(player, "ChallengeCompleted", 1, ctx)
+end
+
+function GameAnalyticsService.OnChallengeRewardClaimed(player: Player?, ctx: any?)
+	local value = if type(ctx) == "table" then tonumber(ctx.rewardAmount) or 0 else 0
+	emitChallenge(player, "ChallengeRewardClaimed", value, ctx)
+end
+
+function GameAnalyticsService.OnWeeklyChallengeCompleted(player: Player?, ctx: any?)
+	emitChallenge(player, "WeeklyChallengeCompleted", 1, ctx)
+end
+
+function GameAnalyticsService.OnFeaturedEventParticipated(player: Player?, ctx: any?)
+	emitChallenge(player, "FeaturedEventParticipated", 1, ctx)
+end
+
+function GameAnalyticsService.OnDailyLeaderboardScoreUpdated(player: Player?, ctx: any?)
+	local value = if type(ctx) == "table" then tonumber(ctx.score) or 0 else 0
+	emitChallenge(player, "DailyLeaderboardScoreUpdated", value, ctx)
+end
+
+function GameAnalyticsService.OnDailyLeaderboardTop10Entered(player: Player?, ctx: any?)
+	emitChallenge(player, "DailyLeaderboardTop10Entered", 1, ctx)
+end
+
+function GameAnalyticsService.OnChallengesPanelOpened(player: Player?, ctx: any?)
+	emitChallenge(player, "ChallengesPanelOpened", 1, ctx)
+end
+
+function GameAnalyticsService.OnChallengePinned(player: Player?, ctx: any?)
+	emitChallenge(player, "ChallengePinned", 1, ctx)
+end
+
 function GameAnalyticsService.FlushSessionDeltasForTests(player: Player)
 	flushDeltas(player)
 end

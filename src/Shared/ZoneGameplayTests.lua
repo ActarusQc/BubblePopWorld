@@ -6,6 +6,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared.GameConfig)
 local OnboardingConfig = require(Shared.OnboardingConfig)
 local BubbleTypes = require(Shared.BubbleTypes)
+local BubbleAppearance = require(Shared.BubbleAppearance)
 local ToolDefs = require(Shared.ToolDefs)
 
 local ZoneGameplayTests = {}
@@ -55,13 +56,23 @@ function ZoneGameplayTests.Run(): boolean
 	if summerCommon then
 		check(colorEq(summerCommon[1], Color3.fromRGB(255, 145, 35)), "Summer Normal = orange 255,145,35")
 	end
-	if roomCommon and summerCommon then
-		check(not colorEq(roomCommon[1], summerCommon[1]), "Normal GameRoom ≠ Normal Summer")
-	end
 
-	-- Teintes actuelles GameRoom (= TintVariants cyan/savon, pas gris).
-	local tints = GameConfig.Bubble.Appearance.TintVariants
-	check(roomCommon ~= nil and colorEq(roomCommon[1], tints[1]), "GameRoom.Common = TintVariants[1]")
+	BubbleAppearance.ClearPaletteCache()
+	local filteredRoom = BubbleAppearance.GetNormalPalette("GameRoom")
+	check(#filteredRoom == 4, "palette GameRoom = 4 pastels")
+	check(BubbleAppearance.ColorsAreDistinct(filteredRoom), "GameRoom couleurs distinctes")
+	local expectedPastel = {
+		Color3.fromRGB(85, 165, 215),
+		Color3.fromRGB(90, 190, 145),
+		Color3.fromRGB(145, 120, 210),
+		Color3.fromRGB(220, 125, 100),
+	}
+	for i, c in ipairs(expectedPastel) do
+		check(colorEq(filteredRoom[i], c), "GameRoom pastel[" .. i .. "]")
+	end
+	if summerCommon then
+		check(not colorEq(filteredRoom[1], summerCommon[1]), "Normal GameRoom ≠ Normal Summer")
+	end
 
 	local rare = BubbleTypes.ById.Rare
 	local golden = BubbleTypes.ById.Golden
@@ -69,11 +80,26 @@ function ZoneGameplayTests.Run(): boolean
 	local legendary = BubbleTypes.ById.Legendary
 	check(rare ~= nil and golden ~= nil and diamond ~= nil and legendary ~= nil, "raretés BubbleTypes")
 	if rare and golden and diamond and legendary then
-		check(colorEq(rare.Color, Color3.fromRGB(90, 170, 255)), "Rare inchangé")
-		check(colorEq(golden.Color, Color3.fromRGB(255, 200, 70)), "Golden inchangé")
-		check(colorEq(diamond.Color, Color3.fromRGB(100, 240, 230)), "Diamond inchangé")
-		check(colorEq(legendary.Color, Color3.fromRGB(255, 110, 210)), "Legendary inchangé")
+		check(colorEq(rare.Color, Color3.fromRGB(200, 45, 45)), "Rare rouge Neon")
+		check(colorEq(golden.Color, Color3.fromRGB(200, 155, 25)), "Golden jaune Neon")
+		check(colorEq(diamond.Color, Color3.fromRGB(20, 175, 195)), "Diamond cyan Neon")
+		check(colorEq(legendary.Color, Color3.fromRGB(185, 35, 140)), "Legendary magenta Neon")
+		for _, normalColor in ipairs(filteredRoom) do
+			check(not colorEq(normalColor, rare.Color), "normale ≠ Rare")
+			check(not colorEq(normalColor, golden.Color), "normale ≠ Golden")
+			check(not colorEq(normalColor, diamond.Color), "normale ≠ Diamond")
+			check(not colorEq(normalColor, legendary.Color), "normale ≠ Legendary")
+		end
 	end
+
+	local normalStyle = BubbleAppearance.Resolve("GameRoom", "Normal", 1)
+	check(normalStyle.Material == Enum.Material.Neon, "GameRoom Normal Material Neon")
+	check(normalStyle.Reflectance == 0, "GameRoom Normal Reflectance 0")
+	check(normalStyle.Transparency == 0, "GameRoom Normal Transparency 0")
+	check(normalStyle.CastShadow == false, "GameRoom Normal CastShadow false")
+	local rareStyle = BubbleAppearance.Resolve("GameRoom", "Rare", 1)
+	check(rareStyle.Material == Enum.Material.Neon, "GameRoom Rare Material Neon")
+	check(rareStyle.Reflectance == 0, "GameRoom Rare Reflectance 0")
 
 	local pools = ToolDefs.ZoneItemPools
 	check(pools ~= nil and pools.GameRoom ~= nil and pools.SummerZone ~= nil, "ZoneItemPools")

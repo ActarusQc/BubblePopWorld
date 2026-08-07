@@ -4,6 +4,7 @@
 
 local ZoneDefs = require(script.Parent.ZoneDefs)
 local GameConfig = require(script.Parent.GameConfig)
+local HubLayout = require(script.Parent.HubLayout)
 
 export type DestinationDef = {
 	Id: string,
@@ -58,9 +59,13 @@ TravelConfig.CapsuleDimensions = TravelConfig.PadDimensions
 -- Destinations
 --------------------------------------------------------------------
 TravelConfig.Destinations = {
+	-- Id conservé ("Lobby") : marqueurs, remotes et sauvegardes existants en dépendent.
+	-- Seul l'affichage suit le hub central quand il remplace le lobby.
 	Lobby = {
 		Id = "Lobby",
-		DisplayName = "Lobby",
+		DisplayName = if GameConfig.Hub.Enabled and GameConfig.Hub.ReplacesLobby
+			then "Central Hub"
+			else "Lobby",
 		Description = "Sell your bubbles and buy upgrades",
 		RequiredLevel = 1,
 		AreaName = "Lobby",
@@ -144,6 +149,88 @@ function TravelConfig.GetPlacementByTransitId(transitId: string): CapsulePlaceme
 	return nil
 end
 
+--------------------------------------------------------------------
+-- Terminaux canoniques (session / prompt / validation partagent ces ids)
+-- ZoneId ≠ TerminalId (ex. zone Lobby ≠ terminal LobbyTransit).
+--------------------------------------------------------------------
+export type TerminalDef = {
+	CanonicalId: string,
+	ZoneId: string,
+	-- Alias d’entrée uniquement s’ils apparaissent réellement en prod / legacy.
+	Aliases: { string },
+	IsHubLobby: boolean?,
+}
+
+-- Identifiants réels du projet (pas d’alias inventés type CentralHubTransit).
+TravelConfig.Terminals = {
+	LobbyTransit = {
+		CanonicalId = "LobbyTransit",
+		ZoneId = "Lobby",
+		Aliases = {
+			"BubbleTransit_LobbyTransit", -- nom de modèle HubFunction
+		},
+		IsHubLobby = true,
+	},
+	SummerZoneTransit = {
+		CanonicalId = "SummerZoneTransit",
+		ZoneId = "SummerZone",
+		Aliases = {
+			"BubbleTransit_SummerZoneTransit",
+		},
+		IsHubLobby = false,
+	},
+} :: { [string]: TerminalDef }
+
+local _aliasToCanonical: { [string]: string }? = nil
+
+local function buildAliasMap(): { [string]: string }
+	if _aliasToCanonical then
+		return _aliasToCanonical
+	end
+	local map: { [string]: string } = {}
+	for canonId, def in pairs(TravelConfig.Terminals) do
+		map[canonId] = def.CanonicalId
+		for _, alias in ipairs(def.Aliases) do
+			map[alias] = def.CanonicalId
+		end
+	end
+	_aliasToCanonical = map
+	return map
+end
+
+-- Normalise un id client / session / modèle → id canonique, ou nil si inconnu.
+function TravelConfig.NormalizeTransitId(transitId: string): string?
+	if type(transitId) ~= "string" or transitId == "" then
+		return nil
+	end
+	local map = buildAliasMap()
+	local mapped = map[transitId]
+	if mapped then
+		return mapped
+	end
+	-- Placement TransitId exact (source de vérité CapsulePlacements).
+	if TravelConfig.GetPlacementByTransitId(transitId) then
+		return transitId
+	end
+	return nil
+end
+
+function TravelConfig.GetTerminalDef(transitId: string): TerminalDef?
+	local canon = TravelConfig.NormalizeTransitId(transitId)
+	if not canon then
+		return nil
+	end
+	return TravelConfig.Terminals[canon]
+end
+
+function TravelConfig.IsHubLobbyTransitId(transitId: string): boolean
+	local def = TravelConfig.GetTerminalDef(transitId)
+	return def ~= nil and def.IsHubLobby == true
+end
+
+-- Ancre hub permanente (chemin Workspace, pas GameZones).
+TravelConfig.HUB_INTERACTION_ANCHOR_NAME = "BubbleTransitInteractionAnchor"
+
 export type DestinationCardDef = {
 	Id: string,
 	DisplayName: string,
@@ -211,6 +298,12 @@ end
 
 function TravelConfig.ResolveWorldCFrame(placement: CapsulePlacement): CFrame
 	local pos = placement.Position
+	-- Hub central : la pastille « Lobby » vit sur le socle arrière-droit du hub.
+	if placement.RelativeToLobbySpawnPlatform
+		and GameConfig.Hub.Enabled
+		and GameConfig.Hub.ReplacesLobby then
+		return HubLayout.GetTransitCFrame() * CFrame.new(placement.Position)
+	end
 	if placement.RelativeToSummerBridge then
 		local layout = ZoneDefs.GetSummerBridgeLayout()
 		pos = Vector3.new(layout.MidX, layout.Y, layout.ArchZ) + placement.Position

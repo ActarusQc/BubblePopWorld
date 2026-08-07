@@ -2331,4 +2331,190 @@ function ItemShopVisualShell.RealignVisualModel(): boolean
 	return true
 end
 
+--------------------------------------------------------------------
+-- Rangement hub : ancienne boutique Studio hors Workspace (jamais dans le ciel)
+--------------------------------------------------------------------
+ItemShopVisualShell.ParkedFolderName = "BPW_ParkedLobbyDecor"
+ItemShopVisualShell.ParkedFromAttribute = "BPW_ParkedFrom"
+-- Au-dessus de ça, une géométrie de boutique restante est anormale (hub deck ~ Y 18).
+ItemShopVisualShell.StrayShopMaxWorldY = 80
+
+function ItemShopVisualShell.IsProtectedHubDeckShell(instance: Instance): boolean
+	-- Exclusion : HubDeckShell_New (et legacy HubDeckShell) sous CentralHubVisual.
+	local function isDeckName(name: string): boolean
+		return name == "HubDeckShell_New" or name == "HubDeckShell" or name == "HubDeck"
+	end
+	if isDeckName(instance.Name) then
+		return true
+	end
+	local parent = instance.Parent
+	while parent do
+		if isDeckName(parent.Name) then
+			return true
+		end
+		parent = parent.Parent
+	end
+	return false
+end
+
+function ItemShopVisualShell.IsParkableLobbyShopVisual(instance: Instance): boolean
+	if ItemShopVisualShell.IsProtectedHubDeckShell(instance) then
+		return false
+	end
+	if instance:GetAttribute("BPW_HubAsset") == true then
+		return false
+	end
+	if instance:GetAttribute("BPW_ItemShopVisual") == true then
+		return true
+	end
+	if instance.Name == ItemShopVisualShell.GetVisualModelName() then
+		return true
+	end
+	return false
+end
+
+local function parkedAncestor(instance: Instance): boolean
+	local parent = instance.Parent
+	while parent do
+		if parent.Name == ItemShopVisualShell.ParkedFolderName then
+			return true
+		end
+		parent = parent.Parent
+	end
+	return false
+end
+
+function ItemShopVisualShell.CollectParkableLobbyShopVisuals(): { Instance }
+	local found: { Instance } = {}
+	local seen: { [Instance]: boolean } = {}
+
+	local function consider(inst: Instance?)
+		if not inst or seen[inst] then
+			return
+		end
+		if parkedAncestor(inst) then
+			return
+		end
+		if not ItemShopVisualShell.IsParkableLobbyShopVisual(inst) then
+			return
+		end
+		seen[inst] = true
+		table.insert(found, inst)
+	end
+
+	for _, child in ipairs(Workspace:GetChildren()) do
+		consider(child)
+		if child.Name == ItemShopVisualShell.GetStudioDecorationRootName() then
+			for _, descendant in ipairs(child:GetDescendants()) do
+				if descendant:IsA("Model") or descendant:IsA("Folder") then
+					consider(descendant)
+				end
+			end
+		end
+		if child.Name == "BubblePopWorld" then
+			local lobby = child:FindFirstChild("Lobby")
+			if lobby then
+				for _, descendant in ipairs(lobby:GetDescendants()) do
+					if descendant:IsA("Model") then
+						consider(descendant)
+					end
+				end
+			end
+		end
+	end
+
+	return found
+end
+
+function ItemShopVisualShell.ParkLobbyShopVisuals(parkedFolder: Instance): number
+	local moved = 0
+	local studioRootName = ItemShopVisualShell.GetStudioDecorationRootName()
+	local studioRoot = Workspace:FindFirstChild(studioRootName)
+	local world = Workspace:FindFirstChild("BubblePopWorld")
+	local lobby = if world then world:FindFirstChild("Lobby") else nil
+
+	for _, inst in ipairs(ItemShopVisualShell.CollectParkableLobbyShopVisuals()) do
+		local from = "Workspace"
+		if studioRoot and (inst == studioRoot or inst:IsDescendantOf(studioRoot)) then
+			from = studioRootName
+		elseif lobby and (inst == lobby or inst:IsDescendantOf(lobby)) then
+			from = "Lobby"
+		end
+		inst:SetAttribute(ItemShopVisualShell.ParkedFromAttribute, from)
+		inst.Parent = parkedFolder
+		moved += 1
+	end
+	return moved
+end
+
+function ItemShopVisualShell.RestoreParkedLobbyShopVisuals(
+	parkedFolder: Instance?,
+	lobby: Instance?,
+	studioDecoration: Instance?
+): number
+	if not parkedFolder then
+		return 0
+	end
+	local restored = 0
+	local attr = ItemShopVisualShell.ParkedFromAttribute
+	local visualName = ItemShopVisualShell.GetVisualModelName()
+	for _, child in ipairs(parkedFolder:GetChildren()) do
+		local from = child:GetAttribute(attr)
+		local dest: Instance? = nil
+		if child.Name == visualName or child:GetAttribute("BPW_ItemShopVisual") == true then
+			dest = studioDecoration
+		elseif from == "Lobby" then
+			dest = lobby
+		elseif from == ItemShopVisualShell.GetStudioDecorationRootName() then
+			dest = studioDecoration
+		elseif lobby then
+			dest = lobby
+		else
+			dest = studioDecoration
+		end
+		if dest then
+			child.Parent = dest
+			child:SetAttribute(attr, nil)
+			restored += 1
+		end
+	end
+	return restored
+end
+
+-- Chemins encore présents dans Workspace (anomalie si hub actif).
+function ItemShopVisualShell.ListStrayShopVisualPaths(): { string }
+	local paths: { string } = {}
+	for _, inst in ipairs(ItemShopVisualShell.CollectParkableLobbyShopVisuals()) do
+		local path = inst.Name
+		pcall(function()
+			path = inst:GetFullName()
+		end)
+		table.insert(paths, path)
+	end
+	return paths
+end
+
+-- true si une pièce de boutique parkable dépasse StrayShopMaxWorldY.
+function ItemShopVisualShell.HasAbnormallyHighShopGeometry(): boolean
+	local maxY = ItemShopVisualShell.StrayShopMaxWorldY
+	local function partY(part: BasePart): number
+		local cf = part.CFrame
+		if typeof(cf) == "CFrame" then
+			return cf.Position.Y
+		end
+		return part.Position.Y
+	end
+	for _, inst in ipairs(ItemShopVisualShell.CollectParkableLobbyShopVisuals()) do
+		for _, d in ipairs(inst:GetDescendants()) do
+			if d:IsA("BasePart") and partY(d :: BasePart) > maxY then
+				return true
+			end
+		end
+		if inst:IsA("BasePart") and partY(inst :: BasePart) > maxY then
+			return true
+		end
+	end
+	return false
+end
+
 return ItemShopVisualShell

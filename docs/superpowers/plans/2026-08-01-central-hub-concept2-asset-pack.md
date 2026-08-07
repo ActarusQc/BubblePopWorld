@@ -38,7 +38,7 @@ surface de marche sur les bulles à `Y = 7.35`.
 
 | Module | Bounding box | Centre monde | Pivot d'import | Yaw | Ancre |
 |---|---|---|---|---|---|
-| `HubDeckShell` | `84 × 7.5 × 60` | `(0, 8.25, 0)` | `(0, 8.25, 0)` | `0°` | `Anchor_Deck` |
+| `HubDeckShell` | `84 × 8.7 × 60` | `(0, 8.85, 0)` | `(0, 8.25, 0)` | `0°` | `Anchor_Deck` |
 | `HubFrontStairs` | `26 × 4.65 × 20.8` | `(0, 9.675, 40.9)` | `(0, 12.00, 30.5)` | `0°` | `Anchor_Stairs`, `Anchor_StairsLanding` |
 | `HubRailingsAndPosts` | `84 × 4.2 × 60` (coque) | `(0, 14.10, 0)` | `(0, 12.00, 0)` | `0°` | périmètre du deck |
 | `HubSellStandShell` | `18 × 14 × 22` | `(-33.0, 20.20, 0)` | `(-30.0, 13.20, 0)` | `90°` | `Anchor_SellStand` |
@@ -168,11 +168,12 @@ Commit : `feat(hub): hub asset import contract and guard tests`
 ## Phase 2 — `HubDeckShell` (priorité 1)
 
 - **P2.1 Fiche de modélisation.** Octogone `84 × 60`, chanfreins de `12` de jambe
-  (arêtes de `16.97` à `±45°`, centres `(±36, ·, ±24)`), hauteur totale `7.5`
-  (`Y 4.50 → 12.00`). Quatre strates obligatoires : jupe `4.50 → 8.20` évasée vers le bas
-  (aucun vide latéral, aucun effet de flottement), socle `8.20 → 10.00` rentré de `2.5`,
-  dalle `10.00 → 12.00`, nez de dalle en surplomb de `0.6` avec gorge d'ombre de `0.25`.
-  Congé vertical de rayon `≥ 0.5` sur les 8 arêtes verticales.
+  (arêtes de `16.97` à `±45°`, centres `(±36, ·, ±24)`), hauteur totale `8.7`
+  (`Y 4.50 → 13.20`, ailes comprises). Deck central à `Y = 12.00`. Quatre strates
+  obligatoires : jupe `4.50 → 8.20` évasée vers le bas (aucun vide latéral, aucun effet
+  de flottement), socle `8.20 → 10.00` rentré de `2.5`, dalle `10.00 → 12.00`, nez de
+  dalle en surplomb de `0.6` avec gorge d'ombre de `0.25`. Congé vertical de rayon
+  `≥ 0.5` sur les 8 arêtes verticales.
 - **P2.2 Décomposition en MeshParts.** `Base` (jupe + socle + dalle, `6 000`),
   `Moulding` (nez, gorges, moulures, `4 000`), `Wings` (2 ailes, `2 000`),
   `NeonTrim` (liserés cyan, `1 000`). Total `13 000`, aucun mesh au-dessus de `10 000`.
@@ -185,7 +186,10 @@ Commit : `feat(hub): hub asset import contract and guard tests`
 - **P2.5 Fondation.** Jupe pleine descendant à `Y = 4.50`, avec contreforts sous les
   chanfreins ; le surplomb de 7 studs du prototype doit être comblé visuellement.
 - **P2.6 Ailes Sell et Shop.** Plateaux `24 × 1.2 × 22` centrés `(±30, 12.60, 0)`,
-  dessus `Y = 13.20`, raccordés à la dalle par une jupe et une moulure **continues**.
+  dessus `Y = 13.20` (non affleurants), raccordés à la dalle par une jupe/moulure
+  **continues** et **2 marches de `0.6`** (largeur utile `≥ 6`), intégrées au mesh
+  `Wings` ou `Moulding`. Pivot d'import `(0, 8.25, 0)` distinct du centre bbox
+  `(0, 8.85, 0)`.
 - **P2.7 Zones à laisser libres.** Ouverture frontale `28` de large à `Z = +30` ;
   disque `⌀18` en `(0, ·, 8)` ; empreinte `11 × 9` en `(-23.6, ·, 0)` ;
   empreinte `9 × 9` en `(30, ·, 3.5)` ; disque `⌀9` en `(34, ·, -19)`.
@@ -503,16 +507,18 @@ Consignes communes à ajouter à la fin de chaque prompt :
 ### Prompt — `HubDeckShell`
 
 ```text
-Stylized Roblox-style octagonal hub platform, dark graphite, 84 x 7.5 x 60 studs
+Stylized Roblox-style octagonal hub platform, dark graphite, 84 x 8.7 x 60 studs
 (width x height x depth). Regular octagon footprint: 60-stud flat front and back edges,
 36-stud flat side edges, four 45-degree chamfered corners about 17 studs long.
 Four stacked strata, clearly readable from the front: a flared dark slate skirt at the
 bottom (2.5 studs tall), a recessed painted-metal plinth (1.8 studs, inset 2.5 studs),
-a matte composite top slab (2 studs), and an overhanging deck nose with a 0.25-stud shadow
-groove. Vertical edges softened with a 0.5-stud fillet. Two integrated side wings, each
-24 x 1.2 x 22 studs, blended into the main slab with continuous skirt and moulding
-(never separate floating pads). Slightly raised circular center, 26-stud diameter,
-0.25 stud higher.
+a matte composite top slab (2 studs at Y=12.00), and an overhanging deck nose with a
+0.25-stud shadow groove. Vertical edges softened with a 0.5-stud fillet. Two raised
+integrated side wing podiums, each 24 x 1.2 x 22 studs centered at (±30, 12.60, 0) with
+top at Y=13.20, blended into the main slab with continuous skirt, moulding, and two
+thick chamfered steps of 0.6 stud rise each (usable width ≥ 6) — never flush with the
+central deck, never separate floating pads. Slightly raised circular center, 26-stud
+diameter, 0.25 stud higher.
 Materials: dark slate skirt (#23262E), matte painted metal plinth (#31353F), matte
 composite slab (#3A3F4B), brushed metal nose (#4A505E), thin cyan emissive trim (#4FD8FF)
 inset in the groove, 0.3 stud thick, running all around except a 28-stud gap centered on
@@ -521,8 +527,9 @@ Must stay open: 28-stud front gap, an 18-stud circle 8 studs in front of center,
 11 x 9 rectangle on the left wing, a 9 x 9 square on the right wing, a 9-stud circle at the
 back right corner.
 Do not generate: stairs, railings, kiosks, signs, panels, lights, props, any white or
-near-white surface, any large cyan slab, any floating platform look.
-Pivot: bounding box center. 4 separate meshes named Base, Moulding, Wings, NeonTrim.
+near-white surface, any large cyan slab, any floating platform look, any flush wings.
+Pivot: import pivot at (0, 8.25, 0), distinct from bbox center (0, 8.85, 0).
+4 separate meshes named Base, Moulding, Wings, NeonTrim.
 Triangle budget: 13000 total, 10000 max per mesh.
 ```
 
@@ -821,6 +828,7 @@ dépôt selon décision au point d'arrêt de la phase 2.
 | 2026-08-01 | 0 | exécutée, commit en attente | P0.1 à P0.4, P0.6, P0.7 faites ; P0.2 et P0.5 bloquées sur des images à fournir |
 | 2026-08-01 | 0 | **terminée** | 8 images présentes et validées, plugin testé en Edit et en Test (F5), écarts documentés, Phase 1 non commencée |
 | 2026-08-01 | 1 | **terminée** | contrat d'import + garde-fous : 288 tests OK, aucun script de production modifié, Phase 2 non commencée |
+| 2026-08-01 | 2 | **arrêt visuel** | passage artistique Deck : studio clair, strates/ailes/marches/neon, 7656 tris, planche comparison ; en attente d’approbation ; aucun commit, aucun import, Sell non commencé |
 
 ### P0.1 — État du dépôt de référence (2026-08-01)
 
@@ -974,3 +982,21 @@ confirmée en Studio sur le premier asset importé avant de détailler les faces
 - changements préexistants (11 fichiers, hub central / summer-decor / onboarding)
   toujours non stagés et intacts ;
 - **Phase 2 non commencée** (pas de Blender, pas de `HubDeckShell`, pas d'asset 3D).
+
+### État Phase 2 — arrêt visuel (2026-08-01)
+
+- `HEAD` de départ : `c50e252eee10be53353462dee55862b1297a64a1` (Phase 1) ;
+- Blender : `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe` (5.2.0 LTS) ;
+- scripts : `tools/blender/build_hub_deck_shell.py`, `tools/blender/hub_asset_prep.py` ;
+- artefacts : `.blend`, `.fbx`, atlas `HubStructureAtlas_*` 1024², fiche d'import,
+  4 rendus Blender `2026-08-01-phase2-blender-{front,side,top,perspective}.png` ;
+- **correction ailes (rejet affleurement)** : bbox Roblox `84 × 8.7 × 60`,
+  centre monde `(0, 8.85, 0)`, pivot `(0, 8.25, 0)` (décentré), emprise locale
+  `Z -3.75 → +4.95` / monde `Y 4.50 → 13.20` ; deck central `Y=12.00` ;
+  ailes `24×1.2×22` à `(±30, 12.60, 0)`, dessus `Y=13.20` ; marches `2×0.6`,
+  largeur `≥ 6` ;
+- triangles : Base 1232, Moulding 1968, Wings 864, NeonTrim 972, **total 5036** ;
+- tests : `run_hub_asset_tests` 293 OK, `run_central_hub_tests` 129 OK ;
+- le compromis des ailes affleurantes est **rejeté** ;
+- **aucun commit**, **aucun import Roblox**, **UseImported non activé**,
+  **Sell / Phase 3 non commencés**, scripts de production intacts.

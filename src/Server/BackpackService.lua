@@ -274,27 +274,31 @@ end
 
 -- Doit être appelé sous le verrou (voir Sell). Renvoie (sold, earned) en succès,
 -- ou (nil, nil, code) en échec ; code ∈ { "empty", "no_profile", "credit_failed" }.
-local function doSell(player: Player): (number?, number?, string?)
+local function doSell(player: Player): (number?, number?, string?, number?, number?)
 	local d = DataService.Get(player)
 	if not d then
-		return nil, nil, "no_profile"
+		return nil, nil, "no_profile", nil, nil
 	end
 	if d.CurrentBubbles <= 0 or d.PendingSellValue <= 0 then
-		return nil, nil, "empty"
+		return nil, nil, "empty", nil, nil
 	end
 
 	local sold = d.CurrentBubbles
-	local earned = d.PendingSellValue
+	local capacity = math.max(0, math.floor(tonumber(d.BackpackCapacity) or 0))
+	local bagValue = d.PendingSellValue
+	local sellBonus = math.max(0, math.floor(tonumber(d.PendingSellBonus) or 0))
+	local earned = bagValue + sellBonus
 
 	local credited, endingBalance = DataService.AddCoins(player, earned, "BubbleSale")
 	if not credited then
-		return nil, nil, "credit_failed"
+		return nil, nil, "credit_failed", nil, nil
 	end
 
 	-- Vider le sac immédiatement en mémoire : aucun état intermédiaire observable hors verrou.
 	-- Un second déclenchement du kiosque retombera donc sur "empty" : pas de double crédit.
 	d.CurrentBubbles = 0
 	d.PendingSellValue = 0
+	d.PendingSellBonus = 0
 	bumpGen(player)
 	d.__dirty = true
 
@@ -313,13 +317,13 @@ local function doSell(player: Player): (number?, number?, string?)
 		end)
 	end
 
-	return sold, earned, nil
+	return sold, earned, nil, bagValue, capacity
 end
 
 -- Vend tout le sac du joueur sous le même verrou que AddBubbles/RollbackAdd (pas de drapeau
 -- IsSelling séparé qui pourrait courir avec un pop concurrent). Aucune requête DataStore ici.
 function BackpackService.Sell(player: Player): (number?, number?, string?)
-	local locked, sold, earned, err = runLocked(player, function()
+	local locked, sold, earned, err, bagValue, capacity = runLocked(player, function()
 		return doSell(player)
 	end)
 
@@ -330,6 +334,22 @@ function BackpackService.Sell(player: Player): (number?, number?, string?)
 
 	if sold and earned then
 		DataService.Push(player)
+
+		pcall(function()
+			require(script.Parent.OnboardingService).Refresh(player)
+		end)
+
+		pcall(function()
+			require(script.Parent.ChallengeService).OnBackpackSold(player, {
+				sold = sold,
+				bagValue = math.max(0, math.floor(tonumber(bagValue) or 0)),
+				capacity = math.max(0, math.floor(tonumber(capacity) or 0)),
+			})
+		end)
+
+		pcall(function()
+			require(script.Parent.TutorialService).OnBackpackSold(player, sold, earned)
+		end)
 
 		-- Persiste la progression peu après la vente, sans une écriture par transaction.
 		local now = os.clock()

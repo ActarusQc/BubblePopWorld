@@ -22,6 +22,25 @@ function LeaderboardUtil.Comma(n: number): string
 	return (out:gsub("^,", ""))
 end
 
+-- Grands nombres lisibles : 1.2K, 3.4M, 5.6B, 7.8T
+function LeaderboardUtil.FormatCompact(n: number): string
+	local value = math.floor(math.max(0, tonumber(n) or 0))
+	if value < 1000 then
+		return tostring(value)
+	end
+	local suffixes = { "K", "M", "B", "T" }
+	local unit = 0
+	local scaled = value
+	while scaled >= 1000 and unit < #suffixes do
+		scaled /= 1000
+		unit += 1
+	end
+	local rounded = math.floor(scaled * 10 + 0.5) / 10
+	local text = string.format("%.1f", rounded)
+	text = (text:gsub("%.0$", ""))
+	return text .. suffixes[unit]
+end
+
 function LeaderboardUtil.ParseUserIdKey(key: any): number?
 	local userId = tonumber(key)
 	if type(userId) ~= "number" or userId ~= userId or userId <= 0 then

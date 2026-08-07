@@ -6,6 +6,8 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local TravelConfig = require(Shared.TravelConfig)
+local TravelLogic = require(Shared.TravelLogic)
+local GameConfig = require(Shared.GameConfig)
 
 local BubbleTransitBuilder = {}
 
@@ -344,6 +346,53 @@ local function clearLegacyArrivalFolder(root: Folder)
 	arrivals:Destroy()
 end
 
+local function hubReplacesLobby(): boolean
+	return GameConfig.Hub.Enabled == true and GameConfig.Hub.ReplacesLobby == true
+end
+
+local function findHubLobbyTerminal(): Model?
+	local world = Workspace:FindFirstChild("BubblePopWorld")
+	local hub = world and world:FindFirstChild("CentralHub")
+	local functional = hub and hub:FindFirstChild("HubFunction")
+	if not functional then
+		return nil
+	end
+	local terminal = functional:FindFirstChild("BubbleTransit_LobbyTransit")
+	if terminal and terminal:IsA("Model") then
+		return terminal
+	end
+	return nil
+end
+
+-- Point d’arrivée Lobby canonique (hub) : enfant direct CentralHub uniquement.
+-- Pas de FindFirstChild récursif ; pas d’ancre BubbleTransitInteractionAnchor.
+local function findCanonicalHubSpawnLocation(): BasePart?
+	local world = Workspace:FindFirstChild("BubblePopWorld")
+	local hub = world and world:FindFirstChild("CentralHub")
+	if not hub then
+		return nil
+	end
+	local spawn = hub:FindFirstChild("HubSpawnLocation")
+	if not spawn or not spawn:IsA("BasePart") then
+		return nil
+	end
+	if not TravelLogic.AcceptsCanonicalHubSpawn(true, spawn.Name, hub.Name) then
+		return nil
+	end
+	return spawn
+end
+
+local function purgeLobbyTerminalFromTravelRoot(root: Folder)
+	for _, child in ipairs(root:GetChildren()) do
+		if child.Name == "BubbleTransit_LobbyTransit"
+			or child:GetAttribute("TransitId") == "LobbyTransit"
+			or child:GetAttribute("PlacementKey") == "Lobby"
+		then
+			child:Destroy()
+		end
+	end
+end
+
 function BubbleTransitBuilder.EnsureTerminals(): Folder
 	local gameZones = Workspace:FindFirstChild("GameZones")
 	if not (gameZones and gameZones:IsA("Folder")) then
@@ -355,7 +404,15 @@ function BubbleTransitBuilder.EnsureTerminals(): Folder
 	local root = ensureFolder(gameZones, "TravelTerminals")
 	clearLegacyArrivalFolder(root)
 
+	if hubReplacesLobby() then
+		-- Portail 3D du hub : pas de pastille visuelle Lobby dans les bulles.
+		purgeLobbyTerminalFromTravelRoot(root)
+	end
+
 	for key, placement in pairs(TravelConfig.CapsulePlacements) do
+		if hubReplacesLobby() and key == "Lobby" then
+			continue
+		end
 		buildPadModel(root, key, placement)
 	end
 
@@ -363,20 +420,13 @@ function BubbleTransitBuilder.EnsureTerminals(): Folder
 end
 
 function BubbleTransitBuilder.FindTerminalByTransitId(transitId: string): Model?
-	local gameZones = Workspace:FindFirstChild("GameZones")
-	local root = gameZones and gameZones:FindFirstChild("TravelTerminals")
-	if not root then
-		return nil
-	end
-	for _, child in ipairs(root:GetChildren()) do
-		if child:IsA("Model") and child:GetAttribute("TransitId") == transitId then
-			return child
+	local canon = TravelConfig.NormalizeTransitId(transitId) or transitId
+	if TravelConfig.IsHubLobbyTransitId(canon) then
+		local hubTerminal = findHubLobbyTerminal()
+		if hubTerminal then
+			return hubTerminal
 		end
 	end
-	return nil
-end
-
-function BubbleTransitBuilder.FindArrivalMarker(markerName: string): BasePart?
 	local gameZones = Workspace:FindFirstChild("GameZones")
 	local root = gameZones and gameZones:FindFirstChild("TravelTerminals")
 	if not root then
@@ -384,12 +434,65 @@ function BubbleTransitBuilder.FindArrivalMarker(markerName: string): BasePart?
 	end
 	for _, child in ipairs(root:GetChildren()) do
 		if child:IsA("Model") then
-			local named = child:FindFirstChild(markerName)
+			local childId = child:GetAttribute("TransitId")
+			if type(childId) == "string" then
+				local childCanon = TravelConfig.NormalizeTransitId(childId) or childId
+				if childCanon == canon or childId == transitId then
+					return child
+				end
+			end
+		end
+	end
+	return nil
+end
+
+function BubbleTransitBuilder.FindArrivalMarker(markerName: string, destinationId: string?): BasePart?
+	local destId = if type(destinationId) == "string" then destinationId else ""
+	-- Inférer Lobby depuis l’ancien nom de marqueur si l’appelant n’a pas passé DestinationId.
+	if destId == "" and (markerName == "LobbyTravelArrival" or markerName == "HubSpawnLocation") then
+		destId = "Lobby"
+	end
+
+	local policy = TravelLogic.ResolveArrivalMarkerPolicy(
+		destId,
+		markerName,
+		GameConfig.Hub.Enabled == true,
+		GameConfig.Hub.ReplacesLobby == true
+	)
+
+	if policy.Kind == "HubSpawnLocation" then
+		-- Fail closed : pas de fallback récursif / ancien LobbyTravelArrival / ancre portail.
+		return findCanonicalHubSpawnLocation()
+	end
+
+	local lookupName = policy.LookupName
+	local hubTerminal = findHubLobbyTerminal()
+	if hubTerminal then
+		local named = hubTerminal:FindFirstChild(lookupName)
+		if named and named:IsA("BasePart") then
+			return named
+		end
+		local alias = hubTerminal:FindFirstChild("TravelArrival")
+		if alias and alias:IsA("BasePart") then
+			local attrName = hubTerminal:GetAttribute("ArrivalMarkerName")
+			if attrName == lookupName then
+				return alias
+			end
+		end
+	end
+	local gameZones = Workspace:FindFirstChild("GameZones")
+	local root = gameZones and gameZones:FindFirstChild("TravelTerminals")
+	if not root then
+		return nil
+	end
+	for _, child in ipairs(root:GetChildren()) do
+		if child:IsA("Model") then
+			local named = child:FindFirstChild(lookupName)
 			if named and named:IsA("BasePart") then
 				return named
 			end
 			local attrName = child:GetAttribute("ArrivalMarkerName")
-			if attrName == markerName then
+			if attrName == lookupName then
 				local alias = child:FindFirstChild("TravelArrival")
 				if alias and alias:IsA("BasePart") then
 					return alias
@@ -397,19 +500,85 @@ function BubbleTransitBuilder.FindArrivalMarker(markerName: string): BasePart?
 			end
 		end
 	end
-	local found = Workspace:FindFirstChild(markerName, true)
-	if found and found:IsA("BasePart") then
-		return found
+	if policy.AllowRecursiveFallback then
+		local found = Workspace:FindFirstChild(lookupName, true)
+		if found and found:IsA("BasePart") then
+			return found
+		end
+	end
+	return nil
+end
+
+local function findWorkspaceHubAnchor(): BasePart?
+	local name = TravelConfig.HUB_INTERACTION_ANCHOR_NAME
+	local workspaceAnchor = Workspace:FindFirstChild(name)
+	if workspaceAnchor and workspaceAnchor:IsA("BasePart") then
+		return workspaceAnchor
 	end
 	return nil
 end
 
 function BubbleTransitBuilder.GetTrigger(terminal: Model): BasePart?
+	-- Ancre Workspace permanente : UNIQUEMENT pour le terminal Lobby/hub.
+	-- Ne jamais l’utiliser pour SummerZone ou d’autres pastilles (sinon TOO_FAR).
+	local transitId = terminal:GetAttribute("TransitId")
+	local placementKey = terminal:GetAttribute("PlacementKey")
+	local isLobbyTerminal = (type(transitId) == "string" and TravelConfig.IsHubLobbyTransitId(transitId))
+		or placementKey == "Lobby"
+		or terminal.Name == "BubbleTransit_LobbyTransit"
+	if isLobbyTerminal then
+		local workspaceAnchor = findWorkspaceHubAnchor()
+		if workspaceAnchor then
+			return workspaceAnchor
+		end
+		local parent = terminal.Parent
+		if parent then
+			local link = parent:FindFirstChild("BubbleTransitInteractionAnchorLink")
+			if link and link:IsA("ObjectValue") and link.Value and link.Value:IsA("BasePart") then
+				return link.Value
+			end
+		end
+	end
+
 	local trigger = terminal:FindFirstChild("TransitTrigger")
+		or terminal:FindFirstChild("BubbleTransitTrigger")
+		or terminal:FindFirstChild("BubbleTransitPortalZone")
+		or terminal:FindFirstChild("BubbleTransitInteraction")
+		or terminal:FindFirstChild("HubBubbleTransitTrigger")
 	if trigger and trigger:IsA("BasePart") then
 		return trigger
 	end
 	return nil
+end
+
+--- Point d’interaction monde pour un TransitId (registre serveur — id canonique).
+function BubbleTransitBuilder.GetInteractionAnchorForTransitId(transitId: string): BasePart?
+	local canon = TravelConfig.NormalizeTransitId(transitId) or transitId
+	-- Hub : toujours Workspace.BubbleTransitInteractionAnchor (jamais GameZones / FullHub).
+	if TravelConfig.IsHubLobbyTransitId(canon) then
+		local hubAnchor = findWorkspaceHubAnchor()
+		if hubAnchor then
+			return hubAnchor
+		end
+	end
+	local terminal = BubbleTransitBuilder.FindTerminalByTransitId(canon)
+	if not terminal then
+		return nil
+	end
+	return BubbleTransitBuilder.GetTrigger(terminal)
+end
+
+function BubbleTransitBuilder.GetTriggerPath(trigger: Instance?): string
+	if not trigger then
+		return "nil"
+	end
+	local ok, full = pcall(function()
+		return trigger:GetFullName()
+	end)
+	if ok and type(full) == "string" then
+		return full
+	end
+	return trigger.Name
 end
 
 return BubbleTransitBuilder

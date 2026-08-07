@@ -1,0 +1,51 @@
+HubDeckShell build report (artistic pass — neon + materials)
+bbox_roblox_xyz  = 84.0000 8.7000 60.0000
+bbox_center_blender = (0.0, 0.0, 0.6043)
+pivot_local = (0, 0, 0)
+world_center_roblox = (0, 8.85, 0)
+world_pivot_roblox = (0, 8.25, 0)
+min = (-42.0, -30.0, -3.7457)
+max = (42.0, 30.0, 4.9543)
+neon_cause_fixed = diagonal corner boxes extruded past footprint + bevel expansion
+neon_fix = post-fit groove ribbons, no step neon, no bevel on NeonTrim
+lighting = Key650 Fill280 Rim650 Top250 Sun0.30 World0.55 AgX MediumHighContrast exp=0
+cameras = front48mm@(0,-128,38) side48mm@(112,-12,30) topORTHO102@(0,-28,120) persp52mm@(62,-82,46)
+Neon components: 9
+Loose endpoints: 0
+Out-of-footprint vertices: 0
+Maximum vertical edge delta: 0.1400
+Maximum groove distance: 0.1300
+Material assignment:
+  Mesh Base
+    Material slots: ['MAT_Deck_Slate', 'MAT_Deck_Metal', 'MAT_Deck_Composite', 'MAT_Deck_Moulding']
+    MAT_Deck_Slate: 163 faces (28.7%)
+    MAT_Deck_Moulding: 159 faces (28.0%)
+    MAT_Deck_Composite: 147 faces (25.9%)
+    MAT_Deck_Metal: 98 faces (17.3%)
+  Mesh Moulding
+    Material slots: ['MAT_Deck_Moulding']
+    MAT_Deck_Moulding: 1128 faces (100.0%)
+  Mesh Wings
+    Material slots: ['MAT_Deck_Composite', 'MAT_Deck_Moulding']
+    MAT_Deck_Moulding: 990 faces (66.5%)
+    MAT_Deck_Composite: 498 faces (33.5%)
+  Mesh NeonTrim
+    Material slots: ['MAT_Deck_NeonCyan']
+    MAT_Deck_NeonCyan: 54 faces (100.0%)
+Background median luminance: 0.6188
+Deck visible median luminance: 0.3704
+Darkest structural percentile 5: 0.2894
+Neon cyan saturation: 0.7982 (samples=326)
+tris_Base = 1476
+tris_Moulding = 2480
+tris_Wings = 3216
+tris_NeonTrim = 108
+tris_total = 7280
+blend = E:\roblox\BubblePopWorld\assets\hub-concept2\blender\HubDeckShell.blend
+fbx = E:\roblox\BubblePopWorld\assets\hub-concept2\export\HubDeckShell.fbx
+render_front = E:\roblox\BubblePopWorld\docs\superpowers\specs\renders\2026-08-01-phase2-blender-front.png
+render_side = E:\roblox\BubblePopWorld\docs\superpowers\specs\renders\2026-08-01-phase2-blender-side.png
+render_top = E:\roblox\BubblePopWorld\docs\superpowers\specs\renders\2026-08-01-phase2-blender-top.png
+render_perspective = E:\roblox\BubblePopWorld\docs\superpowers\specs\renders\2026-08-01-phase2-blender-perspective.png
+render_comparison = E:\roblox\BubblePopWorld\docs\superpowers\specs\renders\2026-08-01-phase2-comparison.png
+VALIDATION = OK

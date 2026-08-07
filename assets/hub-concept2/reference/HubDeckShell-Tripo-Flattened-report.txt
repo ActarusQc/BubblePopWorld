@@ -1,0 +1,158 @@
+HubDeckShell Tripo Flattened — geometry report
+============================================================
+source_fbx = E:\roblox\BubblePopWorld\assets\hub-concept2\source\tripo_convert_392af453-5e65-4e90-9996-df4eb7bcef8d.fbx
+source_fbm = E:\roblox\BubblePopWorld\assets\hub-concept2\source\tripo_convert_392af453-5e65-4e90-9996-df4eb7bcef8d.fbm
+out_blend = E:\roblox\BubblePopWorld\assets\hub-concept2\blender\HubDeckShell-Tripo-Flattened.blend
+out_fbx = E:\roblox\BubblePopWorld\assets\hub-concept2\export\HubDeckShell-Tripo-Flattened.fbx
+source_sha16 = f00feae396566f03
+
+STRUCTURE
+objects = 1
+meshes = 1
+structure_note = single fused mesh
+materials_before = ['tripo_mat_392af453']
+materials_after = ['tripo_mat_392af453']
+images = ['sci-fi_circular_platform_3d_model_basecolor', 'sci-fi_circular_platform_3d_model_metallic', 'sci-fi_circular_platform_3d_model_normal', 'sci-fi_circular_platform_3d_model_roughness']
+triangles_before = 65342
+triangles_after = 65342
+
+AXIS / ORIENTATION
+dominant_up_before = [-0.0008392473100684583, -0.27301520109176636, 0.9620093703269958]
+rotation_applied_deg = 15.84384119289771
+opening_direction = +Y Blender after flatten (= Roblox +Z with existing Studio yaw 180°)
+
+SLOPE DIAGNOSTIC
+slope_before_rot = {'slope_deg': 18.187510572950906, 'front_median_z': 0.23449961841106415, 'back_median_z': 0.1439148634672165, 'front_back_delta': 0.09058475494384766, 'n': 12186}
+slope_after_rot = {'slope_deg': 2.6853426998707497, 'front_median_z': 0.18280179798603058, 'back_median_z': 0.17362889647483826, 'front_back_delta': 0.009172901511192322, 'n': 12045}
+slope_after_flatten = {'slope_deg': 2.2380534546525483, 'front_median_z': 0.17704299092292786, 'back_median_z': 0.1723604053258896, 'front_back_delta': 0.004682585597038269, 'n': 12575}
+
+BBOX
+bbox_before = {'min': [-0.4898682236671448, -0.3642578423023224, 1.4254092128851426e-08], 'max': [0.4898682236671448, 0.3639831840991974, 0.3179015815258026], 'size': [0.9797364473342896, 0.7282410264015198, 0.3179015815258026]}
+bbox_after = {'min': [-0.48987847566604614, -0.39033374190330505, 0.05870440974831581], 'max': [0.48986193537712097, 0.3806856870651245, 0.2739189863204956], 'size': [0.9797403812408447, 0.771019458770752, 0.2152145802974701]}
+
+TARGETS
+targets = {'main_deck': 0.17236040751106615, 'wings': 0.20227035660978293, 'medallion': 0.17879693924207463, 'wing_left_before': 0.20264697259652895, 'wing_right_before': 0.20189374062303692}
+stair_targets_left = [0.1770429893170949, 0.19086356600342133]
+stair_targets_right = [0.1770429893170949, 0.19086356600342133]
+region_face_counts = {'other_up': 2781, 'wing_left': 1220, 'stairs_left': 1040, 'main_deck': 2252, 'medallion': 77, 'stairs_right': 979, 'wing_right': 1235}
+
+Main deck min/max/variation (before faces):
+{
+  "min": 0.16484254598617554,
+  "max": 0.20317134261131287,
+  "variation": 0.03832879662513733,
+  "count": 2252,
+  "median": 0.17206832766532898
+}
+Left wing min/max/variation (before):
+{
+  "min": 0.17827163636684418,
+  "max": 0.25318509340286255,
+  "variation": 0.07491345703601837,
+  "count": 1220,
+  "median": 0.19892596453428268
+}
+Right wing min/max/variation (before):
+{
+  "min": 0.17812804877758026,
+  "max": 0.25232166051864624,
+  "variation": 0.07419361174106598,
+  "count": 1235,
+  "median": 0.19897691905498505
+}
+Left/right wing height difference (before) = 0.0007532319734920301
+
+AFTER (up-faces near targets):
+{
+  "main_deck": {
+    "min": 0.12683120369911194,
+    "max": 0.22235001623630524,
+    "variation": 0.0955188125371933,
+    "count": 6757,
+    "median": 0.1723604053258896
+  },
+  "wing_left": {
+    "min": 0.1529717594385147,
+    "max": 0.24879874289035797,
+    "variation": 0.09582698345184326,
+    "count": 1920,
+    "median": 0.20227035880088806
+  },
+  "wing_right": {
+    "min": 0.15246663987636566,
+    "max": 0.24044010043144226,
+    "variation": 0.0879734605550766,
+    "count": 1946,
+    "median": 0.20227035880088806
+  }
+}
+AFTER (flattened verts):
+{
+  "main_deck": {
+    "min": 0.1723604053258896,
+    "max": 0.1723604053258896,
+    "variation": 0.0,
+    "count": 2885,
+    "median": 0.1723604053258896
+  },
+  "wing_left": {
+    "min": 0.20227035880088806,
+    "max": 0.20227035880088806,
+    "variation": 0.0,
+    "count": 1227,
+    "median": 0.20227035880088806
+  },
+  "wing_right": {
+    "min": 0.20227035880088806,
+    "max": 0.20227035880088806,
+    "variation": 0.0,
+    "count": 1253,
+    "median": 0.20227035880088806
+  },
+  "wing_height_diff": 0.0
+}
+Each stair tread min/max/variation:
+{
+  "left_tread_1": {
+    "min": 0.1371823102235794,
+    "max": 0.21664296090602875,
+    "variation": 0.07946065068244934,
+    "count": 1361,
+    "median": 0.17704299092292786
+  },
+  "left_tread_2": {
+    "min": 0.15086469054222107,
+    "max": 0.2301025092601776,
+    "variation": 0.07923781871795654,
+    "count": 1326,
+    "median": 0.17704299092292786
+  },
+  "right_tread_1": {
+    "min": 0.13716931641101837,
+    "max": 0.2152932584285736,
+    "variation": 0.07812394201755524,
+    "count": 1397,
+    "median": 0.17704299092292786
+  },
+  "right_tread_2": {
+    "min": 0.1511254757642746,
+    "max": 0.23060719668865204,
+    "variation": 0.07948172092437744,
+    "count": 1350,
+    "median": 0.17704299092292786
+  }
+}
+Bottom foundation plane variation:
+{
+  "min": 0.05870440974831581,
+  "max": 0.06945650279521942,
+  "variation": 0.01075209304690361,
+  "count": 89,
+  "median": 0.06427377462387085
+}
+Vertical post deviation max/median deg = 29.157682214077724 / 10.054093344387761
+moved_post_verts = 10468
+
+BLOCKING
+PASS
+VALIDATION = PASS

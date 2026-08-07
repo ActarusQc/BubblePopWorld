@@ -1,7 +1,7 @@
 --!strict
--- Génère un décor 360° de vallée montagneuse autour du plateau jouable.
+-- Génère un décor 360° d'horizon océan / îlots / nuages (pas de montagnes).
 -- Idempotent : remplace uniquement Workspace.GeneratedWorld.EnvironmentBackdrop.
--- Décoratif uniquement (pas de collision, pas de scripts runtime).
+-- Décoratif uniquement (pas de collision, CastShadow = false).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -14,7 +14,6 @@ local EnvironmentBackdropBuilder = {}
 local GENERATED_FOLDER = "GeneratedWorld"
 local MODEL_NAME = "EnvironmentBackdrop"
 
--- Empêche la création de décors d’horizon qui chevauchent la Summer Zone.
 local function overlapsSummerZone(x: number, z: number, halfExtentX: number, halfExtentZ: number): boolean
 	local sb = ZoneDefs.GetZoneBounds("SummerZone")
 	if not sb then
@@ -26,16 +25,6 @@ local function overlapsSummerZone(x: number, z: number, halfExtentX: number, hal
 	local minZ = sb.MinZ - pad
 	local maxZ = sb.MaxZ + pad
 	return not (x + halfExtentX < minX or x - halfExtentX > maxX or z + halfExtentZ < minZ or z - halfExtentZ > maxZ)
-end
-
-local function indexSet(indices: { number }?): { [number]: boolean }
-	local set: { [number]: boolean } = {}
-	if indices then
-		for _, idx in ipairs(indices) do
-			set[idx] = true
-		end
-	end
-	return set
 end
 
 local function createRng(seed: number): () -> number
@@ -63,33 +52,37 @@ local function decorateBase(part: BasePart)
 	part.CanCollide = false
 	part.CanTouch = false
 	part.CanQuery = false
-	part.CastShadow = false
+	part.CastShadow = false -- jamais d'ombre de décor sur le plateau de jeu
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.Material = Enum.Material.SmoothPlastic
+	part.Reflectance = 0
 end
 
-local function makeBlock(parent: Instance, name: string, size: Vector3, cf: CFrame, color: Color3): Part
+local function makeBlock(parent: Instance, name: string, size: Vector3, cf: CFrame, color: Color3, transparency: number?): Part
 	local part = Instance.new("Part")
 	part.Name = name
 	part.Size = size
 	part.CFrame = cf
 	part.Color = color
 	part.Shape = Enum.PartType.Block
+	part.Transparency = transparency or 0
 	decorateBase(part)
 	part.Parent = parent
 	return part
 end
 
-local function makeWedge(parent: Instance, name: string, size: Vector3, cf: CFrame, color: Color3): WedgePart
-	local wedge = Instance.new("WedgePart")
-	wedge.Name = name
-	wedge.Size = size
-	wedge.CFrame = cf
-	wedge.Color = color
-	decorateBase(wedge)
-	wedge.Parent = parent
-	return wedge
+local function makeBall(parent: Instance, name: string, diameter: number, cf: CFrame, color: Color3, transparency: number?): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Shape = Enum.PartType.Ball
+	part.Size = Vector3.new(diameter, diameter, diameter)
+	part.CFrame = cf
+	part.Color = color
+	part.Transparency = transparency or 0.15
+	decorateBase(part)
+	part.Parent = parent
+	return part
 end
 
 local function makeCylinder(parent: Instance, name: string, size: Vector3, cf: CFrame, color: Color3): Part
@@ -133,216 +126,48 @@ local function ringPlacement(
 	radiusMax: number
 ): (number, number)
 	local baseAngle = ((index - 1) / count) * math.pi * 2
-	local jitter = (rng() - 0.5) * ((math.pi * 2) / count) * 0.55
+	local jitter = (rng() - 0.5) * ((math.pi * 2) / count) * 0.45
 	local angle = baseAngle + jitter
 	local radius = lerp(radiusMin, radiusMax, rng())
 	return angle, radius
 end
 
-local function buildMountain(
-	folder: Folder,
-	namePrefix: string,
-	center: Vector3,
-	groundY: number,
-	angle: number,
-	radius: number,
-	height: number,
-	width: number,
-	depth: number,
-	color: Color3,
-	yawJitter: number,
-	snowColor: Color3?,
-	withSnow: boolean
-)
-	local x = center.X + math.cos(angle) * radius
-	local z = center.Z + math.sin(angle) * radius
-	local yaw = angle + math.pi / 2 + yawJitter
-	local baseCF = CFrame.new(x, groundY + height * 0.22, z) * CFrame.Angles(0, yaw, 0)
-
-	makeBlock(
-		folder,
-		namePrefix .. "_Base",
-		Vector3.new(width * 0.95, height * 0.45, depth * 0.9),
-		baseCF,
-		color
-	)
-
-	local peakHeight = height * 0.7
-	local peakCF = CFrame.new(x, groundY + height * 0.45 + peakHeight / 2, z)
-		* CFrame.Angles(0, yaw + 0.12, 0)
-	makeWedge(
-		folder,
-		namePrefix .. "_PeakA",
-		Vector3.new(depth * 0.85, peakHeight, width * 0.72),
-		peakCF,
-		color
-	)
-
-	local peakBHeight = height * lerp(0.35, 0.55, math.abs(math.sin(angle * 3)))
-	local sideOffset = CFrame.new(x, groundY + height * 0.38 + peakBHeight / 2, z)
-		* CFrame.Angles(0, yaw - 0.55, 0)
-		* CFrame.new(width * 0.18, 0, 0)
-	makeWedge(
-		folder,
-		namePrefix .. "_PeakB",
-		Vector3.new(depth * 0.55, peakBHeight, width * 0.42),
-		sideOffset,
-		color
-	)
-
-	if withSnow and snowColor then
-		local snowH = height * 0.18
-		local snowCF = CFrame.new(x, groundY + height * 0.82 + snowH / 2, z)
-			* CFrame.Angles(0, yaw + 0.08, 0)
-		makeWedge(
-			folder,
-			namePrefix .. "_Snow",
-			Vector3.new(depth * 0.42, snowH, width * 0.38),
-			snowCF,
-			snowColor
-		)
-	end
-end
-
-local function buildMountainLayer(
-	parent: Folder,
-	layerName: string,
-	rng: () -> number,
-	center: Vector3,
-	groundY: number,
-	layer: {
-		RadiusMin: number,
-		RadiusMax: number,
-		Count: number,
-		HeightMin: number,
-		HeightMax: number,
-		WidthMin: number,
-		WidthMax: number,
-		DepthMin: number,
-		DepthMax: number,
-		Colors: { Color3 },
-		SnowCapChance: number?,
-		SnowColor: Color3?,
-		SkipIndices: { number }?,
-	}
-)
+local function buildOcean(parent: Folder, rng: () -> number, center: Vector3, seaY: number)
+	local cfg = Config.Ocean
 	local folder = Instance.new("Folder")
-	folder.Name = layerName
+	folder.Name = "Ocean"
 	folder.Parent = parent
 
-	local skip = indexSet(layer.SkipIndices)
-
-	for i = 1, layer.Count do
-		local angle, radius = ringPlacement(rng, i, layer.Count, layer.RadiusMin, layer.RadiusMax)
-		local height = lerp(layer.HeightMin, layer.HeightMax, rng())
-		local width = lerp(layer.WidthMin, layer.WidthMax, rng())
-		local depth = lerp(layer.DepthMin, layer.DepthMax, rng())
-		local color = pickColor(rng, layer.Colors)
-		local yawJitter = (rng() - 0.5) * 0.7
-		local snowChance = layer.SnowCapChance or 0
-		local withSnow = snowChance > 0 and rng() < snowChance
-		local x = center.X + math.cos(angle) * radius
-		local z = center.Z + math.sin(angle) * radius
-		local blocked = skip[i] or overlapsSummerZone(x, z, width * 0.5, depth * 0.5)
-		-- Consomme le RNG même si skip → le reste de l'horizon reste identique.
-		if not blocked then
-			buildMountain(
-				folder,
-				string.format("%s_%02d", layerName, i),
-				center,
-				groundY,
-				angle,
-				radius,
-				height,
-				width,
-				depth,
-				color,
-				yawJitter,
-				layer.SnowColor,
-				withSnow
-			)
+	for ring = 1, cfg.RingCount do
+		local tRing = if cfg.RingCount <= 1 then 0 else (ring - 1) / (cfg.RingCount - 1)
+		local radius = lerp(cfg.RadiusMin, cfg.RadiusMax, tRing)
+		local segs = cfg.SegmentsPerRing
+		local arcLen = (math.pi * 2 * radius) / segs * 1.08
+		local width = (cfg.RadiusMax - cfg.RadiusMin) / cfg.RingCount * 1.35
+		for i = 1, segs do
+			local angle = ((i - 1) / segs) * math.pi * 2 + (rng() - 0.5) * 0.04
+			local x = center.X + math.cos(angle) * radius
+			local z = center.Z + math.sin(angle) * radius
+			local yaw = angle + math.pi / 2
+			local color = pickColor(rng, cfg.Colors)
+			if not overlapsSummerZone(x, z, width * 0.5, arcLen * 0.5) then
+				makeBlock(
+					folder,
+					string.format("Sea_R%d_%02d", ring, i),
+					Vector3.new(width, cfg.Thickness, arcLen),
+					CFrame.new(x, seaY, z) * CFrame.Angles(0, yaw, 0),
+					color,
+					0.08
+				)
+			end
 		end
 	end
 end
 
-local function buildGroundBand(parent: Folder, rng: () -> number, center: Vector3, groundY: number)
-	local cfg = Config.GroundBand
-	local folder = Instance.new("Folder")
-	folder.Name = "GroundBand"
-	folder.Parent = parent
-
-	local skipSeg = indexSet((cfg :: any).SkipSegmentIndices)
-	local skipHill = indexSet((cfg :: any).SkipHillIndices)
-	local skipRock = indexSet((cfg :: any).SkipRockIndices)
-
-	for i = 1, cfg.SegmentCount do
-		local angle, radius = ringPlacement(rng, i, cfg.SegmentCount, cfg.RadiusMin, cfg.RadiusMax)
-		local width = lerp(cfg.WidthMin, cfg.WidthMax, rng())
-		local length = lerp(55, 95, rng())
-		local x = center.X + math.cos(angle) * radius
-		local z = center.Z + math.sin(angle) * radius
-		local yaw = angle + math.pi / 2 + (rng() - 0.5) * 0.35
-		local color = pickColor(rng, cfg.BaseColors)
-		if not skipSeg[i] and not overlapsSummerZone(x, z, width * 0.5, length * 0.5) then
-			makeBlock(
-				folder,
-				string.format("Ground_%02d", i),
-				Vector3.new(width, cfg.Thickness, length),
-				CFrame.new(x, groundY + cfg.Thickness * 0.35, z) * CFrame.Angles(0, yaw, 0),
-				color
-			)
-		end
-	end
-
-	for i = 1, cfg.HillCount do
-		local angle, radius = ringPlacement(rng, i, cfg.HillCount, cfg.RadiusMin + 20, cfg.RadiusMax - 10)
-		local h = lerp(cfg.HillHeightMin, cfg.HillHeightMax, rng())
-		local w = lerp(28, 55, rng())
-		local d = lerp(22, 40, rng())
-		local x = center.X + math.cos(angle) * radius
-		local z = center.Z + math.sin(angle) * radius
-		local yaw = angle + math.pi / 2 + (rng() - 0.5) * 0.5
-		local color = pickColor(rng, cfg.Colors)
-		if not skipHill[i] and not overlapsSummerZone(x, z, w * 0.5, d * 0.5) then
-			makeWedge(
-				folder,
-				string.format("Hill_%02d", i),
-				Vector3.new(d, h, w),
-				CFrame.new(x, groundY + h * 0.5, z) * CFrame.Angles(0, yaw, 0),
-				color
-			)
-		end
-	end
-
-	for i = 1, cfg.RockCount do
-		local angle, radius = ringPlacement(rng, i, cfg.RockCount, cfg.RadiusMin + 10, cfg.RadiusMax + 30)
-		local size = lerp(4, 12, rng())
-		local x = center.X + math.cos(angle) * radius
-		local z = center.Z + math.sin(angle) * radius
-		local sx = size * lerp(0.8, 1.4, rng())
-		local sy = size * lerp(0.5, 1.1, rng())
-		local sz = size * lerp(0.7, 1.3, rng())
-		local rx = rng() * 0.4
-		local ry = rng() * math.pi * 2
-		local rz = rng() * 0.35
-		local color = pickColor(rng, cfg.RockColors)
-		if not skipRock[i] and not overlapsSummerZone(x, z, sx * 0.5, sz * 0.5) then
-			makeBlock(
-				folder,
-				string.format("Rock_%02d", i),
-				Vector3.new(sx, sy, sz),
-				CFrame.new(x, groundY + size * 0.35, z) * CFrame.Angles(rx, ry, rz),
-				color
-			)
-		end
-	end
-end
-
-local function buildTree(parent: Folder, name: string, position: Vector3, scale: number, rng: () -> number)
-	local cfg = Config.Trees
-	local trunkH = 4.5 * scale
-	local trunkR = 0.55 * scale
-	-- Cylinder axis = X ; on oriente vers Y.
+local function buildPalm(parent: Folder, name: string, position: Vector3, scale: number, rng: () -> number)
+	local cfg = Config.Palms
+	local trunkH = 7 * scale
+	local trunkR = 0.45 * scale
 	makeCylinder(
 		parent,
 		name .. "_Trunk",
@@ -351,62 +176,145 @@ local function buildTree(parent: Folder, name: string, position: Vector3, scale:
 		cfg.TrunkColor
 	)
 
-	local foliageColor = pickColor(rng, cfg.FoliageColors)
-	local baseY = position.Y + trunkH * 0.55
-	for layer = 1, 3 do
-		local t = (layer - 1) / 2
-		local diameter = lerp(5.2, 2.2, t) * scale
-		local height = lerp(3.2, 2.4, t) * scale
-		local y = baseY + layer * (2.1 * scale) - height * 0.25
-		makeCylinder(
+	local frondColor = pickColor(rng, cfg.FrondColors)
+	local top = position + Vector3.new(0, trunkH * 0.92, 0)
+	for i = 1, 5 do
+		local a = ((i - 1) / 5) * math.pi * 2 + rng() * 0.2
+		local len = lerp(4.5, 6.5, rng()) * scale
+		local tilt = math.rad(lerp(25, 55, rng()))
+		local cf = CFrame.new(top)
+			* CFrame.Angles(0, a, 0)
+			* CFrame.Angles(tilt, 0, 0)
+			* CFrame.new(0, 0, -len * 0.45)
+		makeBlock(
 			parent,
-			string.format("%s_Foliage%d", name, layer),
-			Vector3.new(height, diameter, diameter),
-			CFrame.new(position.X, y, position.Z) * CFrame.Angles(0, 0, math.rad(90)),
-			foliageColor
+			string.format("%s_Frond%d", name, i),
+			Vector3.new(0.35 * scale, 0.25 * scale, len),
+			cf,
+			frondColor,
+			0
 		)
 	end
 end
 
-local function buildTrees(parent: Folder, rng: () -> number, center: Vector3, groundY: number)
-	local cfg = Config.Trees
+local function buildIslands(parent: Folder, rng: () -> number, center: Vector3, seaY: number)
+	local cfg = Config.Islands
 	local folder = Instance.new("Folder")
-	folder.Name = "TreeClusters"
+	folder.Name = "Islands"
 	folder.Parent = parent
 
-	local skipCluster = indexSet((cfg :: any).SkipClusterIndices)
+	for i = 1, cfg.Count do
+		local angle, radius = ringPlacement(rng, i, cfg.Count, cfg.RadiusMin, cfg.RadiusMax)
+		local size = lerp(cfg.SizeMin, cfg.SizeMax, rng())
+		local height = lerp(cfg.HeightMin, cfg.HeightMax, rng())
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+		local yaw = angle + math.pi / 2 + (rng() - 0.5) * 0.4
+		local sand = pickColor(rng, cfg.SandColors)
+		local grass = pickColor(rng, cfg.GrassColors)
 
-	for c = 1, cfg.ClusterCount do
-		local angle, radius = ringPlacement(rng, c, cfg.ClusterCount, cfg.RadiusMin, cfg.RadiusMax)
-		local clusterX = center.X + math.cos(angle) * radius
-		local clusterZ = center.Z + math.sin(angle) * radius
-		local treeCount = math.floor(lerp(cfg.TreesPerClusterMin, cfg.TreesPerClusterMax + 0.999, rng()))
-		local blocked = skipCluster[c] or overlapsSummerZone(clusterX, clusterZ, 14, 14)
+		if not overlapsSummerZone(x, z, size * 0.55, size * 0.55) then
+			local islandFolder = Instance.new("Folder")
+			islandFolder.Name = string.format("Island_%02d", i)
+			islandFolder.Parent = folder
 
-		local clusterFolder: Folder? = nil
-		if not blocked then
-			local cf = Instance.new("Folder")
-			cf.Name = string.format("Cluster_%02d", c)
-			cf.Parent = folder
-			clusterFolder = cf
-		end
+			makeBlock(
+				islandFolder,
+				"Sand",
+				Vector3.new(size, height, size * lerp(0.75, 1.1, rng())),
+				CFrame.new(x, seaY + height * 0.55, z) * CFrame.Angles(0, yaw, 0),
+				sand,
+				0
+			)
+			makeBlock(
+				islandFolder,
+				"Cap",
+				Vector3.new(size * 0.72, height * 0.45, size * 0.68),
+				CFrame.new(x, seaY + height * 1.05, z) * CFrame.Angles(0, yaw + 0.15, 0),
+				grass,
+				0
+			)
 
-		for t = 1, treeCount do
-			local ox = (rng() - 0.5) * 18
-			local oz = (rng() - 0.5) * 18
-			local scale = lerp(0.85, 1.45, rng())
-			-- Consomme le RNG foliage même si skip (horizon stable).
-			if clusterFolder then
-				buildTree(
-					clusterFolder,
-					string.format("Tree_%d", t),
-					Vector3.new(clusterX + ox, groundY, clusterZ + oz),
+			local palmCount = math.floor(lerp(Config.Palms.PerIslandMin, Config.Palms.PerIslandMax + 0.999, rng()))
+			for p = 1, palmCount do
+				local ox = (rng() - 0.5) * size * 0.35
+				local oz = (rng() - 0.5) * size * 0.35
+				local scale = lerp(0.85, 1.25, rng())
+				buildPalm(
+					islandFolder,
+					string.format("Palm_%d", p),
+					Vector3.new(x + ox, seaY + height * 0.95, z + oz),
 					scale,
 					rng
 				)
-			else
-				pickColor(rng, cfg.FoliageColors)
 			end
+		else
+			-- Consommer le RNG palm pour garder un horizon reproductible
+			local palmCount = math.floor(lerp(Config.Palms.PerIslandMin, Config.Palms.PerIslandMax + 0.999, rng()))
+			for _ = 1, palmCount do
+				local _ = rng()
+				local _ = rng()
+				local _ = rng()
+				pickColor(rng, Config.Palms.FrondColors)
+				for _f = 1, 5 do
+					local _ = rng()
+					local _ = rng()
+				end
+			end
+		end
+	end
+end
+
+local function buildClouds(parent: Folder, rng: () -> number, center: Vector3)
+	local cfg = Config.Clouds
+	local folder = Instance.new("Folder")
+	folder.Name = "Clouds"
+	folder.Parent = parent
+
+	for i = 1, cfg.Count do
+		local angle, radius = ringPlacement(rng, i, cfg.Count, cfg.RadiusMin, cfg.RadiusMax)
+		local y = lerp(cfg.AltitudeMin, cfg.AltitudeMax, rng())
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+		local sx = lerp(28, 55, rng())
+		local sy = lerp(4, 8, rng())
+		local sz = lerp(16, 36, rng())
+		local color = pickColor(rng, cfg.Colors)
+		if not overlapsSummerZone(x, z, sx * 0.5, sz * 0.5) then
+			makeBlock(
+				folder,
+				string.format("Cloud_%02d", i),
+				Vector3.new(sx, sy, sz),
+				CFrame.new(x, y, z) * CFrame.Angles(0, angle, 0),
+				color,
+				0.2
+			)
+		end
+	end
+end
+
+local function buildDecorBubbles(parent: Folder, rng: () -> number, center: Vector3)
+	local cfg = Config.DecorBubbles
+	local folder = Instance.new("Folder")
+	folder.Name = "DecorBubbles"
+	folder.Parent = parent
+
+	for i = 1, cfg.Count do
+		local angle, radius = ringPlacement(rng, i, cfg.Count, cfg.RadiusMin, cfg.RadiusMax)
+		local y = lerp(cfg.AltitudeMin, cfg.AltitudeMax, rng())
+		local diameter = lerp(cfg.SizeMin, cfg.SizeMax, rng())
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+		local color = pickColor(rng, cfg.Colors)
+		if not overlapsSummerZone(x, z, diameter * 0.5, diameter * 0.5) then
+			makeBall(
+				folder,
+				string.format("DecorBubble_%02d", i),
+				diameter,
+				CFrame.new(x, y, z),
+				color,
+				0.35
+			)
 		end
 	end
 end
@@ -424,7 +332,7 @@ end
 function EnvironmentBackdropBuilder.Build(): Model
 	local rng = createRng(Config.Seed)
 	local center = Config.WorldCenter
-	local groundY = Config.GroundY
+	local seaY = Config.SeaLevelY or Config.GroundY or -14
 
 	local generated = ensureGeneratedFolder()
 	clearPreviousBackdrop(generated)
@@ -433,16 +341,16 @@ function EnvironmentBackdropBuilder.Build(): Model
 	model.Name = MODEL_NAME
 	model:SetAttribute("GeneratedByCode", true)
 	model:SetAttribute("EnvironmentBackdropSeed", Config.Seed)
+	model:SetAttribute("BackdropTheme", "OceanHorizon")
 
 	pcall(function()
 		(model :: any).ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	end)
 
-	buildGroundBand(model, rng, center, groundY)
-	buildMountainLayer(model, "Foothills", rng, center, groundY, Config.Foothills)
-	buildMountainLayer(model, "MainMountains", rng, center, groundY, Config.MainMountains)
-	buildMountainLayer(model, "FarPeaks", rng, center, groundY, Config.FarPeaks)
-	buildTrees(model, rng, center, groundY)
+	buildOcean(model, rng, center, seaY)
+	buildIslands(model, rng, center, seaY)
+	buildClouds(model, rng, center)
+	buildDecorBubbles(model, rng, center)
 
 	model.Parent = generated
 	model:SetAttribute("PartCount", countBaseParts(model))

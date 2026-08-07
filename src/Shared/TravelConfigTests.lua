@@ -89,6 +89,25 @@ function TravelConfigTests.Run(): boolean
 	local byId = TravelConfig.GetPlacementByTransitId("LobbyTransit")
 	check(byId ~= nil and byId.CurrentArea == "Lobby", "placement LobbyTransit résolvable sans modèle Workspace")
 
+	-- Ids canoniques + aliases réels uniquement
+	check(TravelConfig.NormalizeTransitId("LobbyTransit") == "LobbyTransit", "LobbyTransit canonique")
+	check(
+		TravelConfig.NormalizeTransitId("BubbleTransit_LobbyTransit") == "LobbyTransit",
+		"alias modèle hub → LobbyTransit"
+	)
+	check(TravelConfig.NormalizeTransitId("SummerZoneTransit") == "SummerZoneTransit", "SummerZoneTransit canonique")
+	check(
+		TravelConfig.NormalizeTransitId("BubbleTransit_SummerZoneTransit") == "SummerZoneTransit",
+		"alias modèle Summer → SummerZoneTransit"
+	)
+	check(TravelConfig.NormalizeTransitId("CentralHubTransit") == nil, "pas d’alias inventé CentralHubTransit")
+	check(TravelConfig.IsHubLobbyTransitId("LobbyTransit") == true, "hub lobby id")
+	check(TravelConfig.IsHubLobbyTransitId("SummerZoneTransit") == false, "summer ≠ hub lobby")
+	check(TravelConfig.HUB_INTERACTION_ANCHOR_NAME == "BubbleTransitInteractionAnchor", "ancre hub nom")
+	local hubDef = TravelConfig.GetTerminalDef("LobbyTransit")
+	check(hubDef ~= nil and hubDef.ZoneId == "Lobby", "zone Lobby ≠ terminal LobbyTransit")
+	check(hubDef ~= nil and hubDef.CanonicalId == "LobbyTransit", "canonical hub")
+
 	-- Layout mur du fond : classement à gauche (-X) du pad, HOW TO PLAY reste à +X.
 	local GameConfigForLayout = require(Shared.GameConfig)
 	local lobbyRoot = GameConfigForLayout.Lobby.RootOffset
@@ -117,25 +136,44 @@ function TravelConfigTests.Run(): boolean
 	local GameConfig = require(Shared.GameConfig)
 	local lobbyCF = TravelConfig.ResolveWorldCFrame(lobbyPad)
 	local L = GameConfig.Lobby
-	local spawnPos = L.RootOffset + L.SpawnOffset
-	local P = TravelConfig.LobbySpawnPlatform
-	local entrancePos = L.EntrancePosition
-	local howToPlayZ = L.RootOffset.Z - (L.FloorSize.Z / 2 - 6.8) -- aligné BOARD_WALL_INSET ZoneService
-	local floorSouthZ = L.RootOffset.Z - L.FloorSize.Z * 0.5
-	local padR = TravelConfig.PadDimensions.PadDiameter * 0.5
-	local edgeDist = (lobbyCF.Position.Z - padR) - floorSouthZ
-	check(P.UseBackWallEnd ~= false, "Lobby pad ciblé BackWallEnd (pas StairsEnd)")
-	check(math.abs(lobbyCF.Position.X - L.RootOffset.X) < 0.05, "Lobby pad centré largeur plateforme")
-	check(lobbyCF.Position.Z < spawnPos.Z, "Lobby pad au sud du spawn (BackWallEnd)")
-	check(lobbyCF.Position.Z < entrancePos.Z, "Lobby pad plus au sud que les marches Bubble Room")
-	check(math.abs(lobbyCF.Position.Z - howToPlayZ) < 8, "Lobby pad près de HOW TO PLAY")
-	check(edgeDist >= 3 and edgeDist <= 5.05, "Lobby pad 3–5 studs du bord fond")
-	local spawnDist = (Vector3.new(lobbyCF.Position.X, 0, lobbyCF.Position.Z) - Vector3.new(spawnPos.X, 0, spawnPos.Z)).Magnitude
-	check(spawnDist >= 20, "distance spawn→transit suffisante (pas de trigger à l'apparition)")
-	local distToEntrance = (Vector3.new(lobbyCF.Position.X, 0, lobbyCF.Position.Z) - Vector3.new(entrancePos.X, 0, entrancePos.Z)).Magnitude
-	check(distToEntrance > spawnDist, "plus loin des marches que du spawn")
+	local hubReplacesLobby = GameConfig.Hub.Enabled and GameConfig.Hub.ReplacesLobby
+
+	if hubReplacesLobby then
+		-- Portail arrière du hub 3D (centre, -Z).
+		local HubLayout = require(Shared.HubLayout)
+		local hubPos = HubLayout.GetTransitPosition()
+		local spawnPos = HubLayout.Spawn.Center
+		local maxDist = HubLayout.GetBubbleTransitMaxActivationDistance()
+		check((lobbyCF.Position - hubPos).Magnitude < 0.05, "arrivée transit au portail arrière")
+		check(math.abs(lobbyCF.Position.X - spawnPos.X) < 0.05, "transit centré en X")
+		check(lobbyCF.Position.Z < spawnPos.Z, "transit à l'arrière du spawn")
+		check(maxDist == 5.5, "MaxActivationDistance 5.5")
+		local spawnDist = (Vector3.new(lobbyCF.Position.X, 0, lobbyCF.Position.Z)
+			- Vector3.new(spawnPos.X, 0, spawnPos.Z)).Magnitude
+		check(spawnDist >= 20, "distance spawn→transit suffisante (pas de trigger à l'apparition)")
+		check(TravelConfig.Destinations.Lobby.DisplayName == "Central Hub",
+			"destination affichée « Central Hub »")
+	else
+		local spawnPos = L.RootOffset + L.SpawnOffset
+		local P = TravelConfig.LobbySpawnPlatform
+		local entrancePos = L.EntrancePosition
+		local howToPlayZ = L.RootOffset.Z - (L.FloorSize.Z / 2 - 6.8) -- aligné BOARD_WALL_INSET ZoneService
+		local floorSouthZ = L.RootOffset.Z - L.FloorSize.Z * 0.5
+		local padR = TravelConfig.PadDimensions.PadDiameter * 0.5
+		local edgeDist = (lobbyCF.Position.Z - padR) - floorSouthZ
+		check(P.UseBackWallEnd ~= false, "Lobby pad ciblé BackWallEnd (pas StairsEnd)")
+		check(math.abs(lobbyCF.Position.X - L.RootOffset.X) < 0.05, "Lobby pad centré largeur plateforme")
+		check(lobbyCF.Position.Z < spawnPos.Z, "Lobby pad au sud du spawn (BackWallEnd)")
+		check(lobbyCF.Position.Z < entrancePos.Z, "Lobby pad plus au sud que les marches Bubble Room")
+		check(math.abs(lobbyCF.Position.Z - howToPlayZ) < 8, "Lobby pad près de HOW TO PLAY")
+		check(edgeDist >= 3 and edgeDist <= 5.05, "Lobby pad 3–5 studs du bord fond")
+		local spawnDist = (Vector3.new(lobbyCF.Position.X, 0, lobbyCF.Position.Z) - Vector3.new(spawnPos.X, 0, spawnPos.Z)).Magnitude
+		check(spawnDist >= 20, "distance spawn→transit suffisante (pas de trigger à l'apparition)")
+		local distToEntrance = (Vector3.new(lobbyCF.Position.X, 0, lobbyCF.Position.Z) - Vector3.new(entrancePos.X, 0, entrancePos.Z)).Magnitude
+		check(distToEntrance > spawnDist, "plus loin des marches que du spawn")
+	end
 	local lobbyLook = lobbyCF.LookVector
-	check(lobbyLook.Z > 0.9 and math.abs(lobbyLook.X) < 0.15, "Lobby pad face le spawn (+Z)")
+	check(lobbyLook.Z > 0.9 and math.abs(lobbyLook.X) < 0.15, "pastille transit face au hub / spawn (+Z)")
 
 	local bridgeCF = TravelConfig.ResolveWorldCFrame(summerPad)
 	local layout = ZoneDefs.GetSummerBridgeLayout()

@@ -178,20 +178,53 @@ function ShopUI.Start()
 
 	local categoryTitle = Instance.new("TextLabel")
 	categoryTitle.Name = "CategoryTitle"
-	categoryTitle.Size = UDim2.new(0.5, 0, 1, 0)
+	categoryTitle.Size = UDim2.new(0.28, 0, 1, 0)
 	categoryTitle.BackgroundTransparency = 1
 	categoryTitle.Font = Enum.Font.GothamBlack
-	categoryTitle.TextSize = 20
+	categoryTitle.TextSize = 18
 	categoryTitle.TextXAlignment = Enum.TextXAlignment.Left
 	categoryTitle.TextColor3 = WHITE
 	categoryTitle.Text = ""
 	categoryTitle.ZIndex = 3
 	categoryTitle.Parent = header
 
+	local categoryTabs = Instance.new("Frame")
+	categoryTabs.Name = "CategoryTabs"
+	categoryTabs.Size = UDim2.new(0.42, 0, 1, 0)
+	categoryTabs.Position = UDim2.new(0.28, 4, 0, 0)
+	categoryTabs.BackgroundTransparency = 1
+	categoryTabs.ZIndex = 3
+	categoryTabs.Parent = header
+	local tabsLayout = Instance.new("UIListLayout")
+	tabsLayout.FillDirection = Enum.FillDirection.Horizontal
+	tabsLayout.Padding = UDim.new(0, 4)
+	tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	tabsLayout.Parent = categoryTabs
+
+	local categoryTabButtons: { [CategoryId]: TextButton } = {}
+	for i, catId in ipairs(CATEGORY_IDS) do
+		local tab = Instance.new("TextButton")
+		tab.Name = "Tab_" .. catId
+		tab.Size = UDim2.new(0.33, -4, 1, 0)
+		tab.BackgroundColor3 = Color3.fromRGB(40, 50, 70)
+		tab.TextColor3 = WHITE
+		tab.Font = Enum.Font.GothamBold
+		tab.TextSize = 12
+		tab.BorderSizePixel = 0
+		tab.AutoButtonColor = true
+		tab.Selectable = true
+		tab.LayoutOrder = i
+		tab.ZIndex = 4
+		tab.Parent = categoryTabs
+		corner(tab, 8)
+		L10nUtil.localize(tab, localized(CATEGORY_LABEL_KEY[catId]))
+		categoryTabButtons[catId] = tab
+	end
+
 	local positionLabel = Instance.new("TextLabel")
 	positionLabel.Name = "Position"
-	positionLabel.Size = UDim2.new(0.2, 0, 1, 0)
-	positionLabel.Position = UDim2.new(0.5, 0, 0, 0)
+	positionLabel.Size = UDim2.new(0.12, 0, 1, 0)
+	positionLabel.Position = UDim2.new(0.70, 0, 0, 0)
 	positionLabel.BackgroundTransparency = 1
 	positionLabel.Font = Enum.Font.GothamMedium
 	positionLabel.TextSize = 14
@@ -203,8 +236,8 @@ function ShopUI.Start()
 
 	local coinsLabel = Instance.new("TextLabel")
 	coinsLabel.Name = "Coins"
-	coinsLabel.Size = UDim2.new(0.3, -44, 1, 0)
-	coinsLabel.Position = UDim2.new(0.7, 0, 0, 0)
+	coinsLabel.Size = UDim2.new(0.18, -44, 1, 0)
+	coinsLabel.Position = UDim2.new(0.82, 0, 0, 0)
 	coinsLabel.BackgroundTransparency = 1
 	coinsLabel.Font = Enum.Font.GothamBold
 	coinsLabel.TextSize = 16
@@ -689,6 +722,12 @@ function ShopUI.Start()
 
 		local categoryKey = if browse.category then CATEGORY_LABEL_KEY[browse.category] else nil
 		L10nUtil.localize(categoryTitle, localized(categoryKey))
+		for catId, tab in pairs(categoryTabButtons) do
+			local active = catId == browse.category
+			tab.BackgroundColor3 = if active
+				then Color3.fromRGB(70, 140, 220)
+				else Color3.fromRGB(40, 50, 70)
+		end
 		L10nUtil.dynamic(positionLabel, if count > 0 then string.format("%d / %d", browse.index, count) else "")
 		L10nUtil.dynamic(coinsLabel, comma(browse.coins) .. " " .. L10n.CoinsUnit)
 
@@ -925,11 +964,20 @@ function ShopUI.Start()
 			end)
 		)
 
-		-- 3) Mémoriser Enabled original de CHAQUE prompt ItemShop avant de tout désactiver.
+		-- 3) Mémoriser Enabled original de CHAQUE prompt boutique avant de tout désactiver.
 		table.clear(browse.promptEnabled)
-		for _, descendant in ipairs(itemShop:GetDescendants()) do
-			if descendant:IsA("ProximityPrompt") then
-				browse.promptEnabled[descendant] = descendant.Enabled
+		local promptRoots: { Instance } = { itemShop }
+		local world = Workspace:FindFirstChild("BubblePopWorld")
+		local hub = world and world:FindFirstChild("CentralHub")
+		local functional = hub and hub:FindFirstChild("HubFunction")
+		if functional then
+			table.insert(promptRoots, functional)
+		end
+		for _, root in ipairs(promptRoots) do
+			for _, descendant in ipairs(root:GetDescendants()) do
+				if descendant:IsA("ProximityPrompt") then
+					browse.promptEnabled[descendant] = descendant.Enabled
+				end
 			end
 		end
 
@@ -944,7 +992,7 @@ function ShopUI.Start()
 			end)
 		end
 
-		-- 5) Désactiver localement tous les prompts ItemShop (jamais côté serveur).
+		-- 5) Désactiver localement tous les prompts boutique (jamais côté serveur).
 		for prompt in pairs(browse.promptEnabled) do
 			prompt.Enabled = false
 		end
@@ -1020,8 +1068,65 @@ function ShopUI.Start()
 	end
 
 	--------------------------------------------------------------------
-	-- Navigation / action
+	-- Navigation / action / catégories
 	--------------------------------------------------------------------
+
+	local function tweenCameraToCategory(category: CategoryId)
+		local itemShop = findItemShop()
+		if not itemShop then
+			return
+		end
+		local cameraPoint = itemShop:FindFirstChild("CameraPoint_" .. category)
+		local display = itemShop:FindFirstChild("Display_" .. category)
+		local camera = Workspace.CurrentCamera
+		if not (camera and cameraPoint and cameraPoint:IsA("BasePart")) then
+			return
+		end
+		local lookAtPos = cameraPoint.Position + cameraPoint.CFrame.LookVector * 5
+		if display then
+			local displayModel = display :: Instance
+			if displayModel:IsA("Model") then
+				local primary = displayModel.PrimaryPart
+				lookAtPos = if primary then primary.Position else displayModel:GetPivot().Position
+			elseif displayModel:IsA("BasePart") then
+				lookAtPos = displayModel.Position
+			end
+		end
+		local targetCFrame = CFrame.lookAt(cameraPoint.Position, lookAtPos)
+		if browse.cameraTween then
+			browse.cameraTween:Cancel()
+		end
+		local tween = TweenService:Create(
+			camera,
+			TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ CFrame = targetCFrame }
+		)
+		browse.cameraTween = tween
+		tween:Play()
+	end
+
+	local function switchCategory(category: CategoryId)
+		if not browse.active or browse.category == category then
+			return
+		end
+		local ok, data = pcall(function()
+			return Remotes.Func("GetShopData"):InvokeServer()
+		end)
+		if not ok or type(data) ~= "table" then
+			warn("[ShopUI] switchCategory GetShopData failed")
+			return
+		end
+		local categories = data.Categories
+		local rows: { ShopRow } = if type(categories) == "table" and type(categories[category]) == "table"
+			then categories[category]
+			else {}
+		browse.category = category
+		browse.items = rows
+		browse.index = 1
+		browse.coins = if type(data.Coins) == "number" then data.Coins else browse.coins
+		tweenCameraToCategory(category)
+		refreshPresentation()
+	end
 
 	local function navigate(direction: number)
 		if not browse.active then
@@ -1104,6 +1209,12 @@ function ShopUI.Start()
 			exitBrowse()
 		end
 	end)
+
+	for catId, tab in pairs(categoryTabButtons) do
+		tab.Activated:Connect(function()
+			switchCategory(catId)
+		end)
+	end
 
 	leftBtn.Activated:Connect(function()
 		navigate(-1)

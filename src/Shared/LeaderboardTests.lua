@@ -25,6 +25,12 @@ function LeaderboardTests.Run(): boolean
 	check(LeaderboardUtil.Comma(0) == "0", "comma zero")
 	check(LeaderboardUtil.Comma(999) == "999", "comma under 1000")
 
+	check(LeaderboardUtil.FormatCompact(999) == "999", "compact under 1K")
+	check(LeaderboardUtil.FormatCompact(1200) == "1.2K", "compact 1.2K")
+	check(LeaderboardUtil.FormatCompact(3400000) == "3.4M", "compact 3.4M")
+	check(LeaderboardUtil.FormatCompact(5600000000) == "5.6B", "compact 5.6B")
+	check(LeaderboardUtil.FormatCompact(7800000000000) == "7.8T", "compact 7.8T")
+
 	check(LeaderboardUtil.ParseUserIdKey("12345") == 12345, "parse userid string")
 	check(LeaderboardUtil.ParseUserIdKey(99) == 99, "parse userid number")
 	check(LeaderboardUtil.ParseUserIdKey("0") == nil, "parse userid 0 invalid")
