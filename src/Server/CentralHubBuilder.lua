@@ -1466,14 +1466,6 @@ function CentralHubBuilder.Build(worldRoot: Instance): Folder
 	buildHubShopPrompt(functional)
 	ensureSpawn(functional)
 
-	if hasTripo then
-		buildShopBuilding(modules)
-		buildSellBuilding(modules)
-	elseif not useRear then
-		buildShopBuilding(modules)
-		buildSellBuilding(modules)
-	end
-
 	if not mainHubFloor and useRear then
 		mainHubFloor = CentralHubBuilder.GetMainHubFloor()
 	end
