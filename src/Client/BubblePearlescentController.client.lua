@@ -1,8 +1,9 @@
 --!strict
 -- Finition locale « Pearlescent Toy » pour les bulles.
--- Une seule Part visuelle supplémentaire est utilisée par bulle proche du joueur.
--- Le coeur est Neon, sans lumière réelle ni collision : le rendu reste stable
--- quand la caméra tourne et n'altère jamais la logique serveur des bulles.
+-- Deux petites couches visuelles seulement sur les bulles proches :
+--   1) un large dôme nacré translucide qui laisse la bordure colorée visible;
+--   2) un petit reflet fixe qui donne l'aspect jouet/glossy.
+-- Aucune vraie lumière, aucun Glass, aucune collision et aucune logique gameplay.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -15,8 +16,10 @@ if Style.Enabled ~= true then
 end
 
 type Decoration = {
-	core: Part,
-	mesh: SpecialMesh,
+	shell: Part,
+	shellMesh: SpecialMesh,
+	glint: Part,
+	glintMesh: SpecialMesh,
 }
 
 type Candidate = {
@@ -38,7 +41,7 @@ visualFolder.Parent = workspace
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local maxDistance = if isMobile then Style.MobileMaxDistance else Style.DesktopMaxDistance
-local maxActiveCores = if isMobile then Style.MobileMaxActiveCores else Style.DesktopMaxActiveCores
+local maxActiveBubbles = if isMobile then Style.MobileMaxActiveBubbles else Style.DesktopMaxActiveBubbles
 
 local tracked: { [BasePart]: boolean } = {}
 local decorated: { [BasePart]: Decoration } = {}
@@ -65,8 +68,13 @@ local function destroyDecoration(part: BasePart)
 	local state = decorated[part]
 	decorated[part] = nil
 	wantedDistance[part] = nil
-	if state and state.core.Parent then
-		state.core:Destroy()
+	if state then
+		if state.shell.Parent then
+			state.shell:Destroy()
+		end
+		if state.glint.Parent then
+			state.glint:Destroy()
+		end
 	end
 end
 
@@ -87,91 +95,125 @@ local function baseMeshScale(part: BasePart): Vector3
 	return Vector3.new(0.92, 0.98, 0.92)
 end
 
-local function updateCoreGeometry(part: BasePart, state: Decoration)
-	state.core.Size = part.Size
+local function makeVisualPart(name: string, source: BasePart, offset: Vector3): (Part, SpecialMesh)
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Archivable = false
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.CastShadow = false
+	p.Massless = true
+	p.Reflectance = 0
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Size = source.Size
+	p.CFrame = source.CFrame * CFrame.new(offset)
+	p.Transparency = 1
+	p.Parent = visualFolder
+
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = p
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = source
+	weld.Part1 = p
+	weld.Parent = p
+	p.Anchored = false
+
+	return p, mesh
+end
+
+local function shellOffset(part: BasePart): Vector3
+	return Vector3.new(0, Style.ShellYOffset, 0)
+end
+
+local function glintOffset(part: BasePart): Vector3
+	local f = Style.GlintOffsetFraction
+	return Vector3.new(part.Size.X * f.X, part.Size.Y * f.Y, part.Size.Z * f.Z)
+end
+
+local function updateGeometry(part: BasePart, state: Decoration)
 	local baseScale = baseMeshScale(part)
-	state.mesh.Scale = Vector3.new(
-		baseScale.X * Style.CoreScaleXZ,
-		baseScale.Y * Style.CoreScaleY,
-		baseScale.Z * Style.CoreScaleXZ
+
+	state.shell.Size = part.Size
+	state.shellMesh.Scale = Vector3.new(
+		baseScale.X * Style.ShellScaleXZ,
+		baseScale.Y * Style.ShellScaleY,
+		baseScale.Z * Style.ShellScaleXZ
+	)
+
+	state.glint.Size = part.Size
+	local gs = Style.GlintScale
+	state.glintMesh.Scale = Vector3.new(
+		baseScale.X * gs.X,
+		baseScale.Y * gs.Y,
+		baseScale.Z * gs.Z
 	)
 end
 
 local function ensureDecoration(part: BasePart): Decoration?
 	local existing = decorated[part]
-	if existing and existing.core.Parent then
+	if existing and existing.shell.Parent and existing.glint.Parent then
 		return existing
 	end
-
 	if not part.Parent then
 		return nil
 	end
 
-	local core = Instance.new("Part")
-	core.Name = Style.CoreName
-	core.Archivable = false
-	core.Anchored = true
-	core.CanCollide = false
-	core.CanTouch = false
-	core.CanQuery = false
-	core.CastShadow = false
-	core.Massless = true
-	core.Material = Style.CoreMaterial
-	core.Reflectance = 0
-	core.TopSurface = Enum.SurfaceType.Smooth
-	core.BottomSurface = Enum.SurfaceType.Smooth
-	core.Size = part.Size
-	core.CFrame = part.CFrame * CFrame.new(0, Style.CoreYOffset, 0)
-	core.Transparency = 1
-	core.Parent = visualFolder
-
-	local mesh = Instance.new("SpecialMesh")
-	mesh.Name = "PearlCoreMesh"
-	mesh.MeshType = Enum.MeshType.Sphere
-	mesh.Parent = core
-
-	local weld = Instance.new("WeldConstraint")
-	weld.Name = "PearlCoreWeld"
-	weld.Part0 = part
-	weld.Part1 = core
-	weld.Parent = core
-
-	core.Anchored = false
+	local shell, shellMesh = makeVisualPart(Style.ShellName, part, shellOffset(part))
+	local glint, glintMesh = makeVisualPart(Style.GlintName, part, glintOffset(part))
 
 	local state: Decoration = {
-		core = core,
-		mesh = mesh,
+		shell = shell,
+		shellMesh = shellMesh,
+		glint = glint,
+		glintMesh = glintMesh,
 	}
 	decorated[part] = state
-	updateCoreGeometry(part, state)
+	updateGeometry(part, state)
 	return state
+end
+
+local function hideDecoration(state: Decoration)
+	state.shell.Transparency = 1
+	state.glint.Transparency = 1
 end
 
 local function updateDecoration(part: BasePart, distance: number)
 	local state = decorated[part]
-	if not state or not state.core.Parent or not part.Parent then
+	if not state or not state.shell.Parent or not state.glint.Parent or not part.Parent then
 		return
 	end
 
 	local zoneIdAny = part:GetAttribute("ZoneId")
 	if type(zoneIdAny) ~= "string" or not Style.IsZoneEnabled(zoneIdAny) then
-		state.core.Transparency = 1
+		hideDecoration(state)
 		return
 	end
 
 	local alive = part:GetAttribute("Alive") == true and part.Transparency < 0.99
 	if not alive then
-		state.core.Transparency = 1
+		hideDecoration(state)
 		return
 	end
 
 	local isSpecial = part:GetAttribute("IsSpecial") == true
-	state.core.Material = Style.CoreMaterial
-	state.core.Color = Style.ResolveCoreColor(part.Color, isSpecial)
-	state.core.Reflectance = 0
-	state.core.CastShadow = false
-	state.core.Transparency = Style.ResolveTransparency(distance, maxDistance)
-	updateCoreGeometry(part, state)
+	state.shell.Material = Style.ShellMaterial
+	state.shell.Color = Style.ResolveShellColor(part.Color, isSpecial)
+	state.shell.Reflectance = 0
+	state.shell.CastShadow = false
+	state.shell.Transparency = Style.ResolveTransparency(distance, maxDistance)
+
+	state.glint.Material = Style.GlintMaterial
+	state.glint.Color = Style.GlintColor
+	state.glint.Reflectance = 0
+	state.glint.CastShadow = false
+	state.glint.Transparency = Style.ResolveGlintTransparency(distance, maxDistance)
+
+	updateGeometry(part, state)
 end
 
 local function refreshLod()
@@ -207,7 +249,7 @@ local function refreshLod()
 	end)
 
 	local nextWanted: { [BasePart]: number } = {}
-	local count = math.min(#candidates, maxActiveCores)
+	local count = math.min(#candidates, maxActiveBubbles)
 	for i = 1, count do
 		local candidate = candidates[i]
 		nextWanted[candidate.part] = candidate.distance
@@ -247,8 +289,8 @@ gameZones.DescendantRemoving:Connect(unregister)
 refreshLod()
 refreshVisuals()
 
-print(("[BubblePearlescent] enabled | mobile=%s | max=%d | distance=%d")
-	:format(tostring(isMobile), maxActiveCores, maxDistance))
+print(("[BubblePearlescent] v2 enabled | mobile=%s | max=%d | distance=%d")
+	:format(tostring(isMobile), maxActiveBubbles, maxDistance))
 
 task.spawn(function()
 	while visualFolder.Parent do
