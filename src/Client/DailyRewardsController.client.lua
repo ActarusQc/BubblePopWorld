@@ -17,16 +17,18 @@ local requestRemote = Remotes.Event("DailyRewardsRequestState")
 local claimRemote = Remotes.Event("DailyRewardsClaim")
 local panelOpenedRemote = Remotes.Event("DailyRewardsPanelOpened")
 
-local BG = Color3.fromRGB(17, 22, 38)
-local PANEL = Color3.fromRGB(27, 35, 58)
-local CARD = Color3.fromRGB(38, 48, 76)
-local CARD_PAST = Color3.fromRGB(31, 67, 65)
-local CARD_CURRENT = Color3.fromRGB(55, 79, 128)
-local ACCENT = Color3.fromRGB(105, 218, 255)
-local GOLD = Color3.fromRGB(255, 211, 91)
-local GREEN = Color3.fromRGB(115, 235, 165)
-local MUTED = Color3.fromRGB(160, 174, 202)
-local WHITE = Color3.fromRGB(245, 248, 255)
+local BG = Color3.fromRGB(14, 16, 31)
+local PANEL = Color3.fromRGB(31, 29, 62)
+local CARD = Color3.fromRGB(34, 38, 68)
+local CARD_PAST = Color3.fromRGB(27, 66, 63)
+local CARD_CURRENT = Color3.fromRGB(55, 42, 96)
+local ACCENT = Color3.fromRGB(142, 111, 255)
+local ACCENT_LIGHT = Color3.fromRGB(210, 192, 255)
+local GOLD = Color3.fromRGB(255, 209, 92)
+local GOLD_LIGHT = Color3.fromRGB(255, 239, 178)
+local GREEN = Color3.fromRGB(100, 231, 169)
+local MUTED = Color3.fromRGB(166, 169, 199)
+local WHITE = Color3.fromRGB(249, 248, 255)
 
 local latestState: any? = nil
 local cards: { [number]: { frame: Frame, stroke: UIStroke, reward: TextLabel, status: TextLabel } } = {}
@@ -44,31 +46,38 @@ gui.Parent = playerGui
 local openButton = Instance.new("TextButton")
 openButton.Name = "DailyRewardsButton"
 openButton.AnchorPoint = Vector2.new(0.5, 0)
-openButton.Position = UDim2.new(0.5, 0, 0, 12)
-openButton.Size = UDim2.fromOffset(132, 42)
-openButton.BackgroundColor3 = PANEL
+openButton.Position = UDim2.new(0.5, 0, 0, 14)
+openButton.Size = UDim2.fromOffset(156, 48)
+openButton.BackgroundColor3 = ACCENT
 openButton.AutoButtonColor = true
-openButton.Text = "DAILY REWARDS"
+openButton.Text = "DAILY GIFT"
 openButton.TextColor3 = WHITE
-openButton.TextSize = 13
+openButton.TextSize = 14
 openButton.Font = Enum.Font.GothamBold
 openButton.Selectable = true
 openButton.ZIndex = 5
 openButton.Parent = gui
 local openCorner = Instance.new("UICorner")
-openCorner.CornerRadius = UDim.new(0, 12)
+openCorner.CornerRadius = UDim.new(1, 0)
 openCorner.Parent = openButton
+local openGradient = Instance.new("UIGradient")
+openGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(106, 76, 232)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(177, 113, 255)),
+})
+openGradient.Rotation = 12
+openGradient.Parent = openButton
 local openStroke = Instance.new("UIStroke")
-openStroke.Thickness = 1.5
-openStroke.Color = ACCENT
-openStroke.Transparency = 0.25
+openStroke.Thickness = 2
+openStroke.Color = ACCENT_LIGHT
+openStroke.Transparency = 0.15
 openStroke.Parent = openButton
 
 local readyBadge = Instance.new("TextLabel")
 readyBadge.Name = "ReadyBadge"
 readyBadge.AnchorPoint = Vector2.new(1, 0)
-readyBadge.Position = UDim2.new(1, 7, 0, -7)
-readyBadge.Size = UDim2.fromOffset(46, 20)
+readyBadge.Position = UDim2.new(1, 5, 0, -5)
+readyBadge.Size = UDim2.fromOffset(48, 21)
 readyBadge.BackgroundColor3 = GOLD
 readyBadge.TextColor3 = Color3.fromRGB(35, 29, 12)
 readyBadge.Text = "CLAIM"
@@ -107,8 +116,35 @@ windowCorner.Parent = window
 local windowStroke = Instance.new("UIStroke")
 windowStroke.Thickness = 2
 windowStroke.Color = ACCENT
-windowStroke.Transparency = 0.35
+windowStroke.Transparency = 0.18
 windowStroke.Parent = window
+local windowGradient = Instance.new("UIGradient")
+windowGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 25, 52)),
+	ColorSequenceKeypoint.new(0.55, BG),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(19, 27, 48)),
+})
+windowGradient.Rotation = 115
+windowGradient.Parent = window
+
+local topGlow = Instance.new("Frame")
+topGlow.Name = "TopGlow"
+topGlow.Position = UDim2.fromOffset(20, 0)
+topGlow.Size = UDim2.new(1, -40, 0, 4)
+topGlow.BackgroundColor3 = ACCENT
+topGlow.BorderSizePixel = 0
+topGlow.ZIndex = 22
+topGlow.Parent = window
+local topGlowCorner = Instance.new("UICorner")
+topGlowCorner.CornerRadius = UDim.new(1, 0)
+topGlowCorner.Parent = topGlow
+local topGlowGradient = Instance.new("UIGradient")
+topGlowGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, ACCENT),
+	ColorSequenceKeypoint.new(0.55, GOLD),
+	ColorSequenceKeypoint.new(1, ACCENT),
+})
+topGlowGradient.Parent = topGlow
 
 local title = Instance.new("TextLabel")
 title.Name = "Title"
@@ -117,7 +153,7 @@ title.Size = UDim2.new(1, -80, 0, 30)
 title.BackgroundTransparency = 1
 title.Text = "DAILY REWARDS"
 title.TextColor3 = WHITE
-title.TextSize = 24
+title.TextSize = 26
 title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.ZIndex = 22
@@ -128,7 +164,7 @@ subtitle.Name = "Subtitle"
 subtitle.Position = UDim2.fromOffset(25, 49)
 subtitle.Size = UDim2.new(1, -50, 0, 22)
 subtitle.BackgroundTransparency = 1
-subtitle.Text = "Build your login streak and unlock the exclusive shirt on Day 7."
+subtitle.Text = "Come back every day • Unlock the exclusive shirt on Day 7"
 subtitle.TextColor3 = MUTED
 subtitle.TextSize = 12
 subtitle.Font = Enum.Font.Gotham
@@ -141,8 +177,8 @@ closeButton.Name = "Close"
 closeButton.AnchorPoint = Vector2.new(1, 0)
 closeButton.Position = UDim2.new(1, -14, 0, 14)
 closeButton.Size = UDim2.fromOffset(38, 38)
-closeButton.BackgroundColor3 = Color3.fromRGB(44, 52, 72)
-closeButton.Text = "X"
+closeButton.BackgroundColor3 = Color3.fromRGB(44, 42, 72)
+closeButton.Text = "×"
 closeButton.TextColor3 = WHITE
 closeButton.TextSize = 15
 closeButton.Font = Enum.Font.GothamBold
@@ -185,8 +221,15 @@ for day = 1, 7 do
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = 1
 	stroke.Color = Color3.fromRGB(80, 96, 132)
-	stroke.Transparency = 0.35
+	stroke.Transparency = 0.3
 	stroke.Parent = card
+	local cardGradient = Instance.new("UIGradient")
+	cardGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(49, 52, 88)),
+		ColorSequenceKeypoint.new(1, CARD),
+	})
+	cardGradient.Rotation = 90
+	cardGradient.Parent = card
 
 	local dayLabel = Instance.new("TextLabel")
 	dayLabel.Position = UDim2.fromOffset(8, 7)
@@ -204,8 +247,8 @@ for day = 1, 7 do
 	rewardLabel.Size = UDim2.new(1, -14, 0, 39)
 	rewardLabel.BackgroundTransparency = 1
 	rewardLabel.Text = "..."
-	rewardLabel.TextColor3 = if day == 7 then GOLD else ACCENT
-	rewardLabel.TextSize = 14
+	rewardLabel.TextColor3 = if day == 7 then GOLD else ACCENT_LIGHT
+	rewardLabel.TextSize = if day == 7 then 15 else 14
 	rewardLabel.Font = Enum.Font.GothamBold
 	rewardLabel.TextWrapped = true
 	rewardLabel.ZIndex = 23
@@ -258,8 +301,8 @@ claimButton.Name = "Claim"
 claimButton.AnchorPoint = Vector2.new(1, 1)
 claimButton.Position = UDim2.new(1, -22, 1, -20)
 claimButton.Size = UDim2.fromOffset(220, 52)
-claimButton.BackgroundColor3 = ACCENT
-claimButton.TextColor3 = Color3.fromRGB(13, 30, 43)
+claimButton.BackgroundColor3 = GOLD
+claimButton.TextColor3 = Color3.fromRGB(47, 34, 12)
 claimButton.Text = "CLAIM"
 claimButton.TextSize = 15
 claimButton.Font = Enum.Font.GothamBold
@@ -268,8 +311,20 @@ claimButton.Selectable = true
 claimButton.ZIndex = 23
 claimButton.Parent = window
 local claimCorner = Instance.new("UICorner")
-claimCorner.CornerRadius = UDim.new(0, 13)
+claimCorner.CornerRadius = UDim.new(1, 0)
 claimCorner.Parent = claimButton
+local claimGradient = Instance.new("UIGradient")
+claimGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, GOLD_LIGHT),
+	ColorSequenceKeypoint.new(1, GOLD),
+})
+claimGradient.Rotation = 90
+claimGradient.Parent = claimButton
+local claimStroke = Instance.new("UIStroke")
+claimStroke.Color = GOLD_LIGHT
+claimStroke.Transparency = 0.25
+claimStroke.Thickness = 1.5
+claimStroke.Parent = claimButton
 
 local function setPanelVisible(visible: boolean)
 	panelVisible = visible
@@ -294,22 +349,35 @@ local function stopPulse()
 		pulseTween:Cancel()
 		pulseTween = nil
 	end
-	openButton.Size = UDim2.fromOffset(132, 42)
+	openButton.Size = UDim2.fromOffset(156, 48)
 end
 
 local function refreshPulse(canClaim: boolean)
 	readyBadge.Visible = canClaim
+	stopPulse()
 	if not canClaim then
-		stopPulse()
+		openButton.Size = UDim2.fromOffset(108, 38)
+		openButton.Text = "REWARDS"
+		openButton.TextSize = 11
+		openButton.BackgroundColor3 = PANEL
+		openGradient.Enabled = false
+		openStroke.Color = Color3.fromRGB(104, 98, 148)
+		openStroke.Transparency = 0.42
 		return
 	end
+	openButton.Text = "DAILY GIFT"
+	openButton.TextSize = 14
+	openButton.BackgroundColor3 = ACCENT
+	openGradient.Enabled = true
+	openStroke.Color = ACCENT_LIGHT
+	openStroke.Transparency = 0.15
 	if pulseTween then
 		return
 	end
 	pulseTween = TweenService:Create(
 		openButton,
 		TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{ Size = UDim2.fromOffset(140, 46) }
+		{ Size = UDim2.fromOffset(164, 52) }
 	)
 	pulseTween:Play()
 end
@@ -349,11 +417,11 @@ local function applyState(state: any)
 				refs.status.TextColor3 = GREEN
 			elseif day == currentDay then
 				refs.frame.BackgroundColor3 = CARD_CURRENT
-				refs.stroke.Color = if day == 7 then GOLD else ACCENT
+				refs.stroke.Color = if day == 7 then GOLD else ACCENT_LIGHT
 				refs.stroke.Thickness = 2.5
 				if canClaim then
 					refs.status.Text = if day == 7 and shirtUnlocked then "SHIRT UNLOCKED" else "READY"
-					refs.status.TextColor3 = if day == 7 then GOLD else ACCENT
+					refs.status.TextColor3 = if day == 7 then GOLD else ACCENT_LIGHT
 				else
 					refs.status.Text = "CLAIMED"
 					refs.status.TextColor3 = GREEN
@@ -370,8 +438,10 @@ local function applyState(state: any)
 
 	claimButton.Active = canClaim
 	claimButton.AutoButtonColor = canClaim
-	claimButton.BackgroundColor3 = if canClaim then ACCENT else Color3.fromRGB(70, 82, 104)
-	claimButton.TextColor3 = if canClaim then Color3.fromRGB(13, 30, 43) else MUTED
+	claimButton.BackgroundColor3 = if canClaim then GOLD else Color3.fromRGB(65, 66, 88)
+	claimButton.TextColor3 = if canClaim then Color3.fromRGB(47, 34, 12) else MUTED
+	claimGradient.Enabled = canClaim
+	claimStroke.Transparency = if canClaim then 0.25 else 0.65
 	claimButton.Text = if canClaim then ("CLAIM DAY %d"):format(currentDay) else "CLAIMED TODAY"
 	refreshPulse(canClaim)
 end
