@@ -17,7 +17,7 @@ local GridUtil = require(script.Parent.GridUtil)
 local player = Players.LocalPlayer
 local PopEffects = {}
 
-local POP_SOUND_ID = "rbxassetid://6042053626"
+local POP_SOUND_ID = "rbxassetid://109359226723492"
 local RARE_SOUND_ID = "rbxassetid://6026984224"
 
 local soundPool: { Sound } = {}
