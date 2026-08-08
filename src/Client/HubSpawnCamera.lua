@@ -17,6 +17,7 @@ local MIN_ZOOM_DISTANCE = 6
 local MAX_ZOOM_DISTANCE = 18
 
 local player = Players.LocalPlayer
+local initialCameraCompleted = false
 
 local function findHubSpawnLocation(): BasePart?
 	local world = Workspace:FindFirstChild("BubblePopWorld")
@@ -124,10 +125,14 @@ local function applySpawnCamera(character: Model)
 	camera.CameraType = Enum.CameraType.Custom
 	RunService.RenderStepped:Wait()
 	camera.CFrame = safeCFrame
+	initialCameraCompleted = true
 	print("[HubSpawnCamera] released to Custom with bounded zoom")
 end
 
 local function onCharacter(character: Model)
+	if initialCameraCompleted then
+		return
+	end
 	task.spawn(function()
 		applySpawnCamera(character)
 	end)
