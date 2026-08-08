@@ -1891,7 +1891,7 @@ local function applyConsoleDockedLayout(vp: Vector2)
 	end
 
 	if closeBtn then
-		closeBtn.Visible = false
+		closeBtn.Visible = true
 	end
 	if challengesBtn then
 		challengesBtn.Visible = true
@@ -2328,7 +2328,7 @@ showDockedChallengesPanel = function()
 		setButtonActive(challengesBtn, true)
 	end
 	if closeBtn then
-		closeBtn.Visible = false
+		closeBtn.Visible = true
 	end
 	if mobileBackdrop then
 		mobileBackdrop.Visible = false
