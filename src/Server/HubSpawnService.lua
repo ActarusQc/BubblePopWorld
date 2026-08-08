@@ -16,6 +16,7 @@ local LOG = "[HubSpawnManual] "
 local AUDIT = "[HubSpawnManualAudit] "
 
 local postSpawnWrites = 0
+local initialSpawnCorrected: { [Player]: boolean } = {}
 
 local function log(msg: string)
 	print(LOG .. msg)
@@ -278,7 +279,28 @@ function HubSpawnService.Start()
 	Players.PlayerAdded:Connect(function(player)
 		HubSpawnService.ApplyRespawnLocation(player)
 		player.CharacterAdded:Connect(function(character)
-			-- Aucun repositionnement. Filet anti-anchor / PlatformStand seulement.
+			-- Le tout premier Character peut être créé avant PlayerAdded/RespawnLocation.
+			-- Si Roblox l'a placé sur un ancien spawn, refaire une seule apparition native.
+			task.spawn(function()
+				local root = character:WaitForChild("HumanoidRootPart", 8)
+				local spawn = HubSpawnService.FindManualHubSpawn()
+				if not root or not root:IsA("BasePart") or not spawn or initialSpawnCorrected[player] then
+					return
+				end
+				local horizontal = HubSpawnLogic.HorizontalDisplacement(root.Position, spawn.Position)
+				if horizontal > 24 then
+					initialSpawnCorrected[player] = true
+					warn(LOG .. string.format(
+						"initial character spawned %.1f studs from hub; reloading at canonical spawn",
+						horizontal
+					))
+					HubSpawnService.ReloadCharacterAtHubSpawn(player)
+				else
+					initialSpawnCorrected[player] = true
+				end
+			end)
+
+			-- Aucun CFrame forcé. Filet anti-anchor / PlatformStand seulement.
 			task.delay(1, function()
 				if not character.Parent then
 					return
@@ -299,6 +321,9 @@ function HubSpawnService.Start()
 	for _, plr in ipairs(Players:GetPlayers()) do
 		HubSpawnService.ApplyRespawnLocation(plr)
 	end
+	Players.PlayerRemoving:Connect(function(player)
+		initialSpawnCorrected[player] = nil
+	end)
 
 	task.spawn(function()
 		local deadline = os.clock() + 30
