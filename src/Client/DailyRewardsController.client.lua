@@ -32,7 +32,7 @@ local MUTED = Color3.fromRGB(166, 169, 199)
 local WHITE = Color3.fromRGB(249, 248, 255)
 
 local latestState: any? = nil
-local cards: { [number]: { frame: Frame, stroke: UIStroke, icon: ImageLabel, reward: TextLabel, status: TextLabel } } = {}
+local cards: { [number]: { frame: Frame, stroke: UIStroke, icon: ImageLabel, reward: TextLabel, status: TextLabel, claimedTint: Frame, claimedSeal: TextLabel } } = {}
 local panelVisible = false
 local pulseTween: Tween? = nil
 local previousCanClaim: boolean? = nil
@@ -472,6 +472,41 @@ for day = 1, 7 do
 	rewardLabel.ZIndex = 23
 	rewardLabel.Parent = card
 
+	local claimedTint = Instance.new("Frame")
+	claimedTint.Name = "ClaimedTint"
+	claimedTint.Size = UDim2.fromScale(1, 1)
+	claimedTint.BackgroundColor3 = Color3.fromRGB(28, 196, 145)
+	claimedTint.BackgroundTransparency = 0.88
+	claimedTint.BorderSizePixel = 0
+	claimedTint.Visible = false
+	claimedTint.ZIndex = 22
+	claimedTint.Parent = card
+	local claimedTintCorner = Instance.new("UICorner")
+	claimedTintCorner.CornerRadius = UDim.new(0, 18)
+	claimedTintCorner.Parent = claimedTint
+
+	local claimedSeal = Instance.new("TextLabel")
+	claimedSeal.Name = "ClaimedSeal"
+	claimedSeal.Position = UDim2.fromOffset(-2, -2)
+	claimedSeal.Size = UDim2.fromOffset(42, 42)
+	claimedSeal.BackgroundColor3 = Color3.fromRGB(17, 190, 133)
+	claimedSeal.BorderSizePixel = 0
+	claimedSeal.Text = "✓"
+	claimedSeal.TextColor3 = WHITE
+	claimedSeal.TextSize = 23
+	claimedSeal.Font = Enum.Font.GothamBlack
+	claimedSeal.Visible = false
+	claimedSeal.ZIndex = 27
+	claimedSeal.Parent = card
+	local claimedSealCorner = Instance.new("UICorner")
+	claimedSealCorner.CornerRadius = UDim.new(0, 13)
+	claimedSealCorner.Parent = claimedSeal
+	local claimedSealStroke = Instance.new("UIStroke")
+	claimedSealStroke.Color = Color3.fromRGB(109, 255, 207)
+	claimedSealStroke.Thickness = 2
+	claimedSealStroke.Transparency = 0.05
+	claimedSealStroke.Parent = claimedSeal
+
 	local status = Instance.new("TextLabel")
 	status.AnchorPoint = Vector2.new(0.5, 1)
 	status.Position = UDim2.new(0.5, 0, 1, -8)
@@ -490,6 +525,39 @@ for day = 1, 7 do
 	statusCorner.Parent = status
 
 	if day == 7 then
+		local goldGlow = Instance.new("UIStroke")
+		goldGlow.Name = "GoldGlow"
+		goldGlow.Color = GOLD
+		goldGlow.Thickness = 8
+		goldGlow.Transparency = 0.6
+		goldGlow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		goldGlow.Parent = card
+		TweenService:Create(
+			goldGlow,
+			TweenInfo.new(1.15, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+			{ Transparency = 0.82, Thickness = 5 }
+		):Play()
+
+		for sparkleIndex, sparklePosition in {
+			UDim2.new(0.12, 0, 0.42, 0),
+			UDim2.new(0.84, 0, 0.38, 0),
+			UDim2.new(0.2, 0, 0.72, 0),
+			UDim2.new(0.78, 0, 0.7, 0),
+		} do
+			local sparkle = Instance.new("TextLabel")
+			sparkle.Name = "GoldSparkle" .. tostring(sparkleIndex)
+			sparkle.AnchorPoint = Vector2.new(0.5, 0.5)
+			sparkle.Position = sparklePosition
+			sparkle.Size = UDim2.fromOffset(18, 18)
+			sparkle.BackgroundTransparency = 1
+			sparkle.Text = "✦"
+			sparkle.TextColor3 = GOLD_LIGHT
+			sparkle.TextSize = 15
+			sparkle.Font = Enum.Font.GothamBold
+			sparkle.ZIndex = 25
+			sparkle.Parent = card
+		end
+
 		local prizeTag = Instance.new("TextLabel")
 		prizeTag.Name = "PrizeTag"
 		prizeTag.AnchorPoint = Vector2.new(0.5, 0)
@@ -512,7 +580,15 @@ for day = 1, 7 do
 		prizeInnerStroke.Parent = prizeTag
 	end
 
-	cards[day] = { frame = card, stroke = stroke, icon = rewardIcon, reward = rewardLabel, status = status }
+	cards[day] = {
+		frame = card,
+		stroke = stroke,
+		icon = rewardIcon,
+		reward = rewardLabel,
+		status = status,
+		claimedTint = claimedTint,
+		claimedSeal = claimedSeal,
+	}
 end
 
 local function layoutRewardCards(mobile: boolean)
@@ -522,18 +598,18 @@ local function layoutRewardCards(mobile: boolean)
 			if day <= 4 then
 				local col = day - 1
 				refs.frame.Position = UDim2.new(col * 0.25, col * 4, 0, 0)
-				refs.frame.Size = UDim2.new(0.25, -8, 0.5, -8)
+				refs.frame.Size = UDim2.new(0.25, -8, 0.46, -6)
 			elseif day <= 6 then
 				local col = day - 5
-				refs.frame.Position = UDim2.new(0.08 + col * 0.255, col * 4, 0.5, 8)
-				refs.frame.Size = UDim2.new(0.245, -8, 0.5, -8)
+				refs.frame.Position = UDim2.new(0.08 + col * 0.255, col * 4, 0.46, 8)
+				refs.frame.Size = UDim2.new(0.245, -8, 0.54, -8)
 			else
-				refs.frame.Position = UDim2.new(0.59, 8, 0.5, 8)
-				refs.frame.Size = UDim2.new(0.41, -8, 0.5, -8)
+				refs.frame.Position = UDim2.new(0.59, 8, 0.46, 8)
+				refs.frame.Size = UDim2.new(0.41, -8, 0.54, -8)
 			end
-			refs.icon.Position = UDim2.new(0.5, 0, 0, if day == 7 then 52 else 35)
-			refs.icon.Size = UDim2.fromOffset(if day == 7 then 94 else 82, if day == 7 then 94 else 82)
-			refs.reward.Position = UDim2.new(0, 7, 0, if day == 7 then 104 else 82)
+			refs.icon.Position = UDim2.new(0.5, 0, 0, if day == 7 then 43 else 31)
+			refs.icon.Size = UDim2.fromOffset(if day == 7 then 66 else 74, if day == 7 then 66 else 74)
+			refs.reward.Position = UDim2.new(0, 7, 0, if day == 7 then 108 else 77)
 			refs.reward.TextSize = if day == 7 then 19 else 16
 			refs.stroke.Thickness = if day == 7 then 3 else refs.stroke.Thickness
 		end
@@ -696,6 +772,8 @@ local function applyState(state: any)
 				refs.status.TextColor3 = GREEN
 				refs.status.BackgroundColor3 = Color3.fromRGB(24, 72, 62)
 				refs.icon.ImageTransparency = 0
+				refs.claimedTint.Visible = true
+				refs.claimedSeal.Visible = true
 			elseif day == currentDay then
 				refs.frame.BackgroundColor3 = CARD_CURRENT
 				refs.stroke.Color = if day == 7 then GOLD else ACCENT_LIGHT
@@ -705,11 +783,15 @@ local function applyState(state: any)
 					refs.status.TextColor3 = if day == 7 then GOLD else WHITE
 					refs.status.BackgroundColor3 = if day == 7 then Color3.fromRGB(91, 65, 22) else ACCENT
 					refs.icon.ImageTransparency = 0
+					refs.claimedTint.Visible = false
+					refs.claimedSeal.Visible = false
 				else
 					refs.status.Text = "✓  CLAIMED"
 					refs.status.TextColor3 = GREEN
 					refs.status.BackgroundColor3 = Color3.fromRGB(24, 72, 62)
 					refs.icon.ImageTransparency = 0
+					refs.claimedTint.Visible = true
+					refs.claimedSeal.Visible = true
 				end
 			else
 				refs.frame.BackgroundColor3 = CARD
@@ -719,6 +801,8 @@ local function applyState(state: any)
 				refs.status.TextColor3 = MUTED
 				refs.status.BackgroundColor3 = Color3.fromRGB(25, 28, 50)
 				refs.icon.ImageTransparency = 0.25
+				refs.claimedTint.Visible = false
+				refs.claimedSeal.Visible = false
 			end
 		end
 	end
