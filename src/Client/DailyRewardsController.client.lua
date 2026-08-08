@@ -143,14 +143,37 @@ readyCorner.CornerRadius = UDim.new(1, 0)
 readyCorner.Parent = readyBadge
 
 task.spawn(function()
-	local hud = playerGui:WaitForChild(HudChrome.SCREEN_NAME)
-	local actionColumn = hud:WaitForChild(HudChrome.ACTION_COLUMN_NAME)
+	local actionColumn: Frame? = nil
+	while not actionColumn do
+		local candidate = playerGui:FindFirstChild(HudChrome.ACTION_COLUMN_NAME, true)
+		if candidate and candidate:IsA("Frame") then
+			actionColumn = candidate
+			break
+		end
+		task.wait(0.1)
+	end
+
 	openButton.Parent = actionColumn
 	openButton.AnchorPoint = Vector2.new(0, 0)
 	openButton.Position = UDim2.fromOffset(0, 0)
 	openButton.ZIndex = math.max(actionColumn.ZIndex + 1, 61)
 	calendarIcon.ZIndex = openButton.ZIndex + 1
 	readyBadge.ZIndex = openButton.ZIndex + 2
+
+	local list = actionColumn:FindFirstChildOfClass("UIListLayout")
+	local buttonSize = openButton.Size.X.Offset
+	local gap = if list then list.Padding.Offset else HudChrome.ACTION_BUTTON_GAP
+	local visibleButtons = 0
+	for _, child in actionColumn:GetChildren() do
+		if child:IsA("GuiObject") and (child:IsA("TextButton") or child.Name == "InventorySlot") then
+			visibleButtons += 1
+			buttonSize = math.max(buttonSize, child.Size.X.Offset)
+		end
+	end
+	actionColumn.Size = UDim2.fromOffset(
+		buttonSize,
+		buttonSize * visibleButtons + gap * math.max(0, visibleButtons - 1)
+	)
 	openButton.Visible = not panelVisible
 end)
 
