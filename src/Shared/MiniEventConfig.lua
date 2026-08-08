@@ -64,8 +64,11 @@ MiniEventConfig.Events = {
 		Enabled = true,
 		DurationSeconds = 60,
 		SellMultiplier = 3,
-		-- Distance RGB (0–1) pour matcher la couleur cible.
-		ColorMatchDistance = 0.18,
+		-- Des bulles normales deviennent temporairement noires et très faciles à identifier.
+		InitialTransformRatio = 0.20,
+		RegenBlackChance = 0.24,
+		TargetColor = Color3.fromRGB(8, 10, 16),
+		ColorMatchDistance = 0.08,
 		MarkTransparency = 0.45,
 	},
 	GiantBubble = {
@@ -104,6 +107,7 @@ MiniEventConfig.Events = {
 -- Noms lisibles des teintes (accessibilité Color Rush)
 --------------------------------------------------------------------
 MiniEventConfig.ColorLabels = {
+	{ Color = Color3.fromRGB(8, 10, 16), Name = "Black" },
 	{ Color = Color3.fromRGB(30, 95, 255), Name = "Blue" },
 	{ Color = Color3.fromRGB(0, 210, 220), Name = "Cyan" },
 	{ Color = Color3.fromRGB(40, 220, 110), Name = "Green" },
