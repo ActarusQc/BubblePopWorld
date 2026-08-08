@@ -12,7 +12,9 @@ local MAX_DISTANCE = 24
 local CAMERA_BACK_DISTANCE = 14
 local CAMERA_HEIGHT = 7
 local CAMERA_LOOK_HEIGHT = 2
-local HOLD_SCRIPTABLE_SEC = 0.35
+local MODAL_WAIT_TIMEOUT_SEC = 15
+local MIN_ZOOM_DISTANCE = 6
+local MAX_ZOOM_DISTANCE = 18
 
 local player = Players.LocalPlayer
 
@@ -85,12 +87,32 @@ local function applySpawnCamera(character: Model)
 		desiredPosition = obstruction.Position + obstruction.Normal * 0.8
 	end
 
+	local safeCFrame = CFrame.lookAt(desiredPosition, lookAt)
+	player.CameraMode = Enum.CameraMode.Classic
+	player.CameraMinZoomDistance = MIN_ZOOM_DISTANCE
+	player.CameraMaxZoomDistance = MAX_ZOOM_DISTANCE
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CameraSubject = humanoid
-	camera.CFrame = CFrame.lookAt(desiredPosition, lookAt)
+	camera.CFrame = safeCFrame
 	print("[HubSpawnCamera] safe initial camera applied")
 
-	task.wait(HOLD_SCRIPTABLE_SEC)
+	-- Le contrôleur caméra Roblox réutilisait ensuite son ancienne distance et repartait
+	-- derrière les panneaux. Garder cette vue pendant le modal d'arrivée, puis libérer.
+	local sawDailyModal = false
+	local deadline = os.clock() + MODAL_WAIT_TIMEOUT_SEC
+	while character.Parent and player.Character == character do
+		local modalOpen = player:GetAttribute("DailyRewardsModalOpen") == true
+		if modalOpen then
+			sawDailyModal = true
+		elseif sawDailyModal or os.clock() >= deadline then
+			break
+		end
+		camera = Workspace.CurrentCamera or camera
+		camera.CameraType = Enum.CameraType.Scriptable
+		camera.CameraSubject = humanoid
+		camera.CFrame = safeCFrame
+		RunService.RenderStepped:Wait()
+	end
 
 	if character.Parent == nil or player.Character ~= character then
 		return
@@ -98,8 +120,11 @@ local function applySpawnCamera(character: Model)
 
 	camera = Workspace.CurrentCamera or camera
 	camera.CameraSubject = humanoid
+	camera.CFrame = safeCFrame
 	camera.CameraType = Enum.CameraType.Custom
-	print("[HubSpawnCamera] released to Custom")
+	RunService.RenderStepped:Wait()
+	camera.CFrame = safeCFrame
+	print("[HubSpawnCamera] released to Custom with bounded zoom")
 end
 
 local function onCharacter(character: Model)
