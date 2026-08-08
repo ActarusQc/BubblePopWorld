@@ -6,6 +6,7 @@ local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GuiService = game:GetService("GuiService")
 local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
@@ -194,10 +195,19 @@ end
 
 function HUD.Start()
 	-- Sur Xbox/TV, la liste native Roblox répète "Coins: valeur" depuis leaderstats.
-	-- Le HUD BPW affiche déjà ce solde; masquer uniquement ce doublon CoreGui.
-	if GuiService:IsTenFootInterface() then
-		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+	-- Le CoreGui console arrive parfois après HUD.Start : répéter jusqu'à ce qu'il soit prêt.
+	local consoleUi = GuiService:IsTenFootInterface()
+		or (UserInputService.GamepadEnabled
+			and not UserInputService.TouchEnabled
+			and not UserInputService.KeyboardEnabled)
+	if consoleUi then
+		task.spawn(function()
+			for _ = 1, 20 do
+				pcall(function()
+					StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+				end)
+				task.wait(0.5)
+			end
 		end)
 	end
 
