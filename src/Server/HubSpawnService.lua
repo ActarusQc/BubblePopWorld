@@ -276,10 +276,17 @@ function HubSpawnService.RunRuntimeAudit(player: Player?): boolean
 end
 
 function HubSpawnService.Start()
-	Players.PlayerAdded:Connect(function(player)
+	local boundPlayers: { [Player]: boolean } = {}
+
+	local function bindPlayer(player: Player)
+		if boundPlayers[player] then
+			return
+		end
+		boundPlayers[player] = true
 		HubSpawnService.ApplyRespawnLocation(player)
-		player.CharacterAdded:Connect(function(character)
-			-- Le tout premier Character peut être créé avant PlayerAdded/RespawnLocation.
+
+		local function onCharacter(character: Model)
+			-- En Studio, le tout premier Character peut exister avant le démarrage du service.
 			-- Si Roblox l'a placé sur un ancien spawn, refaire une seule apparition native.
 			task.spawn(function()
 				local root = character:WaitForChild("HumanoidRootPart", 8)
@@ -316,13 +323,21 @@ function HubSpawnService.Start()
 				end
 				HubSpawnService.RunRuntimeAudit(player)
 			end)
-		end)
-	end)
-	for _, plr in ipairs(Players:GetPlayers()) do
-		HubSpawnService.ApplyRespawnLocation(plr)
+		end
+
+		player.CharacterAdded:Connect(onCharacter)
+		if player.Character then
+			onCharacter(player.Character)
+		end
+	end
+
+	Players.PlayerAdded:Connect(bindPlayer)
+	for _, player in ipairs(Players:GetPlayers()) do
+		bindPlayer(player)
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		initialSpawnCorrected[player] = nil
+		boundPlayers[player] = nil
 	end)
 
 	task.spawn(function()
