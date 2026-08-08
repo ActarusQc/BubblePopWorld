@@ -32,7 +32,7 @@ local MUTED = Color3.fromRGB(166, 169, 199)
 local WHITE = Color3.fromRGB(249, 248, 255)
 
 local latestState: any? = nil
-local cards: { [number]: { frame: Frame, stroke: UIStroke, icon: TextLabel, reward: TextLabel, status: TextLabel } } = {}
+local cards: { [number]: { frame: Frame, stroke: UIStroke, icon: ImageLabel, reward: TextLabel, status: TextLabel } } = {}
 local panelVisible = false
 local pulseTween: Tween? = nil
 local previousCanClaim: boolean? = nil
@@ -249,14 +249,15 @@ topGlowGradient.Color = ColorSequence.new({
 })
 topGlowGradient.Parent = topGlow
 
-local headerIcon = Instance.new("TextLabel")
+local headerIcon = Instance.new("ImageLabel")
 headerIcon.Name = "HeaderIcon"
 headerIcon.Position = UDim2.fromOffset(32, 24)
 headerIcon.Size = UDim2.fromOffset(68, 68)
 headerIcon.BackgroundColor3 = ACCENT
-headerIcon.Text = "🎁"
-headerIcon.TextSize = 27
-headerIcon.Font = Enum.Font.GothamBold
+headerIcon.BackgroundTransparency = 0.15
+headerIcon.BorderSizePixel = 0
+headerIcon.Image = "rbxassetid://125048443338815"
+headerIcon.ScaleType = Enum.ScaleType.Fit
 headerIcon.ZIndex = 23
 headerIcon.Parent = window
 local headerIconCorner = Instance.new("UICorner")
@@ -445,82 +446,19 @@ for day = 1, 7 do
 	dayLabel.ZIndex = 23
 	dayLabel.Parent = card
 
-	local rewardIcon = Instance.new("TextLabel")
+	local rewardIcon = Instance.new("ImageLabel")
 	rewardIcon.Name = "RewardIcon"
 	rewardIcon.AnchorPoint = Vector2.new(0.5, 0)
-	rewardIcon.Position = UDim2.new(0.5, 0, 0, 27)
-	rewardIcon.Size = UDim2.fromOffset(34, 34)
-	rewardIcon.BackgroundColor3 = if day == 7 then Color3.fromRGB(95, 68, 33) else Color3.fromRGB(255, 190, 55)
-	rewardIcon.BackgroundTransparency = if day == 7 then 1 else 0
+	rewardIcon.Position = UDim2.new(0.5, 0, 0, 30)
+	rewardIcon.Size = UDim2.fromOffset(if day == 7 then 74 else 68, if day == 7 then 74 else 68)
+	rewardIcon.BackgroundTransparency = 1
 	rewardIcon.BorderSizePixel = 0
-	rewardIcon.Text = if day == 7 then "👕" else "B"
-	rewardIcon.TextColor3 = if day == 7 then GOLD_LIGHT else Color3.fromRGB(93, 55, 8)
-	rewardIcon.TextSize = if day == 7 then 31 else 19
-	rewardIcon.Font = Enum.Font.GothamBlack
-	rewardIcon.ZIndex = 23
+	rewardIcon.Image = if day == 7
+		then "rbxassetid://137664935993597"
+		else "rbxassetid://100961065553997"
+	rewardIcon.ScaleType = Enum.ScaleType.Fit
+	rewardIcon.ZIndex = 24
 	rewardIcon.Parent = card
-
-	if day ~= 7 then
-		local extraCoinCount = math.clamp(day - 1, 0, 3)
-		for coinIndex = 1, extraCoinCount do
-			local extraCoin = Instance.new("TextLabel")
-			extraCoin.Name = "Coin" .. tostring(coinIndex)
-			extraCoin.AnchorPoint = Vector2.new(0.5, 0.5)
-			extraCoin.Position = UDim2.new(0.5, (coinIndex - 2) * 22, 0, 53 - math.abs(coinIndex - 2) * 5)
-			extraCoin.Size = UDim2.fromOffset(30, 30)
-			extraCoin.BackgroundColor3 = Color3.fromRGB(255, 177, 34)
-			extraCoin.BorderSizePixel = 0
-			extraCoin.Text = "B"
-			extraCoin.TextColor3 = Color3.fromRGB(98, 56, 5)
-			extraCoin.TextSize = 15
-			extraCoin.Font = Enum.Font.GothamBlack
-			extraCoin.ZIndex = 22
-			extraCoin.Parent = card
-			local extraCorner = Instance.new("UICorner")
-			extraCorner.CornerRadius = UDim.new(1, 0)
-			extraCorner.Parent = extraCoin
-			local extraStroke = Instance.new("UIStroke")
-			extraStroke.Color = GOLD_LIGHT
-			extraStroke.Thickness = 1.5
-			extraStroke.Parent = extraCoin
-		end
-		rewardIcon.ZIndex = 24
-		for stackIndex = 1, math.clamp(math.floor(day / 2), 1, 3) do
-			local coinStack = Instance.new("Frame")
-			coinStack.Name = "CoinStack" .. tostring(stackIndex)
-			coinStack.AnchorPoint = Vector2.new(0.5, 0.5)
-			coinStack.Position = UDim2.new(0.5, (stackIndex - 2) * 28, 0, 62 + stackIndex * 3)
-			coinStack.Size = UDim2.fromOffset(38, 8)
-			coinStack.BackgroundColor3 = Color3.fromRGB(220, 126, 15)
-			coinStack.BorderSizePixel = 0
-			coinStack.ZIndex = 21
-			coinStack.Parent = card
-			local stackCorner = Instance.new("UICorner")
-			stackCorner.CornerRadius = UDim.new(1, 0)
-			stackCorner.Parent = coinStack
-			local stackStroke = Instance.new("UIStroke")
-			stackStroke.Color = GOLD
-			stackStroke.Transparency = 0.15
-			stackStroke.Parent = coinStack
-		end
-	end
-	local rewardIconCorner = Instance.new("UICorner")
-	rewardIconCorner.CornerRadius = UDim.new(1, 0)
-	rewardIconCorner.Parent = rewardIcon
-	if day ~= 7 then
-		local coinStroke = Instance.new("UIStroke")
-		coinStroke.Color = GOLD_LIGHT
-		coinStroke.Thickness = 2
-		coinStroke.Transparency = 0.1
-		coinStroke.Parent = rewardIcon
-		local coinGradient = Instance.new("UIGradient")
-		coinGradient.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, GOLD_LIGHT),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(235, 144, 31)),
-		})
-		coinGradient.Rotation = 90
-		coinGradient.Parent = rewardIcon
-	end
 
 	local rewardLabel = Instance.new("TextLabel")
 	rewardLabel.Position = UDim2.fromOffset(7, 65)
@@ -594,8 +532,7 @@ local function layoutRewardCards(mobile: boolean)
 				refs.frame.Size = UDim2.new(0.41, -8, 0.5, -8)
 			end
 			refs.icon.Position = UDim2.new(0.5, 0, 0, if day == 7 then 52 else 35)
-			refs.icon.Size = UDim2.fromOffset(if day == 7 then 60 else 42, if day == 7 then 60 else 42)
-			refs.icon.TextSize = if day == 7 then 50 else 22
+			refs.icon.Size = UDim2.fromOffset(if day == 7 then 94 else 82, if day == 7 then 94 else 82)
 			refs.reward.Position = UDim2.new(0, 7, 0, if day == 7 then 104 else 82)
 			refs.reward.TextSize = if day == 7 then 19 else 16
 			refs.stroke.Thickness = if day == 7 then 3 else refs.stroke.Thickness
@@ -758,6 +695,7 @@ local function applyState(state: any)
 				refs.status.Text = "✓  CLAIMED"
 				refs.status.TextColor3 = GREEN
 				refs.status.BackgroundColor3 = Color3.fromRGB(24, 72, 62)
+				refs.icon.ImageTransparency = 0
 			elseif day == currentDay then
 				refs.frame.BackgroundColor3 = CARD_CURRENT
 				refs.stroke.Color = if day == 7 then GOLD else ACCENT_LIGHT
@@ -766,10 +704,12 @@ local function applyState(state: any)
 					refs.status.Text = if day == 7 and shirtUnlocked then "★  UNLOCKED" else "★  TODAY"
 					refs.status.TextColor3 = if day == 7 then GOLD else WHITE
 					refs.status.BackgroundColor3 = if day == 7 then Color3.fromRGB(91, 65, 22) else ACCENT
+					refs.icon.ImageTransparency = 0
 				else
 					refs.status.Text = "✓  CLAIMED"
 					refs.status.TextColor3 = GREEN
 					refs.status.BackgroundColor3 = Color3.fromRGB(24, 72, 62)
+					refs.icon.ImageTransparency = 0
 				end
 			else
 				refs.frame.BackgroundColor3 = CARD
@@ -778,6 +718,7 @@ local function applyState(state: any)
 				refs.status.Text = "LOCKED"
 				refs.status.TextColor3 = MUTED
 				refs.status.BackgroundColor3 = Color3.fromRGB(25, 28, 50)
+				refs.icon.ImageTransparency = 0.25
 			end
 		end
 	end
