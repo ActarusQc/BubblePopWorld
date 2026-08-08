@@ -363,7 +363,7 @@ function BackpackService.Sell(player: Player): (number?, number?, string?)
 			"Announce",
 			player,
 			("You sold %d bubbles for %d coins!"):format(sold, earned),
-			"sell"
+			"sell_success"
 		)
 		return sold, earned, nil
 	end
