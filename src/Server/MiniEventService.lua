@@ -368,8 +368,13 @@ end
 
 local function applyColorRushMark(cell: any)
 	local part = cell.part :: BasePart
+	local black = MiniEventConfig.Events.ColorRush.TargetColor
 	part:SetAttribute("EventMark", "ColorRush")
-	part:SetAttribute("EventMarkColor", targetColor or Color3.fromRGB(255, 255, 255))
+	part:SetAttribute("EventMarkColor", black)
+	part.Color = black
+	part.Material = Enum.Material.Neon
+	part.Reflectance = 0
+	part.CastShadow = false
 	if not CollectionService:HasTag(part, COLOR_RUSH_TARGET_TAG) then
 		CollectionService:AddTag(part, COLOR_RUSH_TARGET_TAG)
 	end
@@ -379,10 +384,16 @@ local function removeColorRushMark(cell: any)
 	if not cell or not cell.part then
 		return
 	end
-	cell.part:SetAttribute("EventMark", nil)
-	cell.part:SetAttribute("EventMarkColor", nil)
-	if CollectionService:HasTag(cell.part, COLOR_RUSH_TARGET_TAG) then
-		CollectionService:RemoveTag(cell.part, COLOR_RUSH_TARGET_TAG)
+	local part = cell.part :: BasePart
+	local wasMarked = CollectionService:HasTag(part, COLOR_RUSH_TARGET_TAG)
+		or part:GetAttribute("EventMark") == "ColorRush"
+	part:SetAttribute("EventMark", nil)
+	part:SetAttribute("EventMarkColor", nil)
+	if CollectionService:HasTag(part, COLOR_RUSH_TARGET_TAG) then
+		CollectionService:RemoveTag(part, COLOR_RUSH_TARGET_TAG)
+	end
+	if wasMarked and cell.def then
+		BubbleAppearance.ApplyToPart(part, cell.zoneId, cell.def.Id, cell.tintIndex or 1, cell.alive == true)
 	end
 end
 
@@ -442,35 +453,22 @@ local function startGoldenWave()
 end
 
 local function startColorRush()
-	local observed = {}
+	targetColor = MiniEventConfig.Events.ColorRush.TargetColor
+	local eligible = {}
 	forEachCell(function(cell, _zoneId)
 		if cell.alive and cell.def and cell.def.Id == "Normal" then
-			local c = cellColor(cell)
-			if c then
-				table.insert(observed, c)
-			end
+			table.insert(eligible, cell)
 		end
 	end)
-	targetColor = MiniEventLogic.PickTargetColor(observed, reservedColors(), 0.3, rng)
-	if not targetColor then
-		-- fallback palette GameRoom
-		local palette = BubbleAppearance.GetNormalPalette("ClassicZone")
-		if #palette > 0 then
-			targetColor = palette[1]
-		else
-			targetColor = Color3.fromRGB(30, 95, 255)
-		end
+	local picks = MiniEventLogic.SelectTransformIndices(
+		#eligible,
+		MiniEventConfig.Events.ColorRush.InitialTransformRatio,
+		rng
+	)
+	for _, idx in ipairs(picks) do
+		applyColorRushMark(eligible[idx])
 	end
-	local matchDist = MiniEventConfig.Events.ColorRush.ColorMatchDistance
-	forEachCell(function(cell, _zoneId)
-		if cell.alive and cell.def and cell.def.Id == "Normal" then
-			local c = cellColor(cell)
-			if c and targetColor and MiniEventLogic.ColorsMatch(c, targetColor, matchDist) then
-				applyColorRushMark(cell)
-			end
-		end
-	end)
-	log("ColorRush cible=" .. MiniEventConfig.ColorLabel(targetColor))
+	log(("ColorRush: %d / %d bulles devenues noires"):format(#picks, #eligible))
 end
 
 local function destroyGiants()
@@ -945,17 +943,10 @@ function MiniEventService.GetPopSellMultiplier(cell: any): number
 	end
 	local rarityId = cell and cell.def and cell.def.Id
 	local variant = cell and (cell.eventVariant or (cell.part and cell.part:GetAttribute("EventVariant")))
-	local colorMatch = false
-	if currentEventType == "ColorRush" and targetColor and rarityId == "Normal" then
-		local c = cellColor(cell)
-		if c then
-			colorMatch = MiniEventLogic.ColorsMatch(
-				c,
-				targetColor,
-				MiniEventConfig.Events.ColorRush.ColorMatchDistance
-			)
-		end
-	end
+	local colorMatch = currentEventType == "ColorRush"
+		and rarityId == "Normal"
+		and cell.part ~= nil
+		and CollectionService:HasTag(cell.part, COLOR_RUSH_TARGET_TAG)
 	return MiniEventLogic.GetPopSellMultiplier(
 		currentEventType,
 		true,
@@ -983,15 +974,10 @@ function MiniEventService.OnBubbleReady(cell: any)
 			end
 		end
 	elseif currentEventType == "ColorRush" and targetColor then
-		if cell.alive and cell.def and cell.def.Id == "Normal" then
-			local c = cellColor(cell)
-			if c and MiniEventLogic.ColorsMatch(
-				c,
-				targetColor,
-				MiniEventConfig.Events.ColorRush.ColorMatchDistance
-			) then
-				applyColorRushMark(cell)
-			end
+		if cell.alive and cell.def and cell.def.Id == "Normal"
+			and rng:NextNumber() <= MiniEventConfig.Events.ColorRush.RegenBlackChance
+		then
+			applyColorRushMark(cell)
 		end
 	end
 end
@@ -1008,16 +994,9 @@ function MiniEventService.GetPopChallengeTags(cell: any): { isGoldenWave: boolea
 	end
 	if machineState == MiniEventLogic.STATES.Active and currentEventType == "ColorRush" and targetColor then
 		local rarityId = cell.def and cell.def.Id
-		if rarityId == "Normal" then
-			local c = cellColor(cell)
-			if c then
-				isColor = MiniEventLogic.ColorsMatch(
-					c,
-					targetColor,
-					MiniEventConfig.Events.ColorRush.ColorMatchDistance
-				)
-			end
-		end
+		isColor = rarityId == "Normal"
+			and cell.part ~= nil
+			and CollectionService:HasTag(cell.part, COLOR_RUSH_TARGET_TAG)
 	end
 	return { isGoldenWave = isGolden, isColorRushMatch = isColor }
 end
