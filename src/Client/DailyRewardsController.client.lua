@@ -11,6 +11,7 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
+local HudChrome = require(Shared.HudChrome)
 
 local stateRemote = Remotes.Event("DailyRewardsState")
 local requestRemote = Remotes.Event("DailyRewardsRequestState")
@@ -34,6 +35,7 @@ local latestState: any? = nil
 local cards: { [number]: { frame: Frame, stroke: UIStroke, reward: TextLabel, status: TextLabel } } = {}
 local panelVisible = false
 local pulseTween: Tween? = nil
+local previousCanClaim: boolean? = nil
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "BPW_DailyRewards"
@@ -45,20 +47,24 @@ gui.Parent = playerGui
 
 local openButton = Instance.new("TextButton")
 openButton.Name = "DailyRewardsButton"
-openButton.AnchorPoint = Vector2.new(0.5, 0)
-openButton.Position = UDim2.new(0.5, 0, 0, 14)
-openButton.Size = UDim2.fromOffset(156, 48)
-openButton.BackgroundColor3 = ACCENT
-openButton.AutoButtonColor = true
-openButton.Text = "DAILY GIFT"
-openButton.TextColor3 = WHITE
-openButton.TextSize = 14
+openButton.AnchorPoint = Vector2.new(0, 0)
+openButton.Position = UDim2.fromOffset(0, 0)
+openButton.Size = UDim2.fromOffset(HudChrome.ACTION_BUTTON_SIZE, HudChrome.ACTION_BUTTON_SIZE)
+openButton.BackgroundColor3 = HudChrome.BG_BUTTON
+openButton.BackgroundTransparency = 0.08
+openButton.BorderSizePixel = 0
+openButton.AutoButtonColor = false
+openButton.Text = ""
 openButton.Font = Enum.Font.GothamBold
 openButton.Selectable = true
+openButton.Active = true
+openButton.LayoutOrder = 4
 openButton.ZIndex = 5
+openButton.Visible = false
 openButton.Parent = gui
+openButton:SetAttribute("AccessibleName", "Daily Rewards")
 local openCorner = Instance.new("UICorner")
-openCorner.CornerRadius = UDim.new(1, 0)
+openCorner.CornerRadius = UDim.new(0, 16)
 openCorner.Parent = openButton
 local openGradient = Instance.new("UIGradient")
 openGradient.Color = ColorSequence.new({
@@ -66,22 +72,68 @@ openGradient.Color = ColorSequence.new({
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(177, 113, 255)),
 })
 openGradient.Rotation = 12
+openGradient.Enabled = false
 openGradient.Parent = openButton
 local openStroke = Instance.new("UIStroke")
-openStroke.Thickness = 2
-openStroke.Color = ACCENT_LIGHT
-openStroke.Transparency = 0.15
+openStroke.Thickness = 1.4
+openStroke.Color = HudChrome.ACCENT
+openStroke.Transparency = 0.12
 openStroke.Parent = openButton
+
+local calendarIcon = Instance.new("TextLabel")
+calendarIcon.Name = "IconGlyph"
+calendarIcon.Size = UDim2.fromScale(1, 1)
+calendarIcon.BackgroundTransparency = 1
+calendarIcon.Text = "📅"
+calendarIcon.TextColor3 = WHITE
+calendarIcon.TextScaled = true
+calendarIcon.Font = Enum.Font.GothamBold
+calendarIcon.ZIndex = 6
+calendarIcon.Parent = openButton
+local calendarConstraint = Instance.new("UITextSizeConstraint")
+calendarConstraint.MinTextSize = 18
+calendarConstraint.MaxTextSize = 32
+calendarConstraint.Parent = calendarIcon
+
+local openTooltip = Instance.new("TextLabel")
+openTooltip.Name = "Tooltip"
+openTooltip.Visible = false
+openTooltip.AnchorPoint = Vector2.new(1, 0.5)
+openTooltip.Position = UDim2.new(0, -8, 0.5, 0)
+openTooltip.Size = UDim2.fromOffset(104, 24)
+openTooltip.BackgroundColor3 = HudChrome.BG
+openTooltip.BackgroundTransparency = 0.1
+openTooltip.BorderSizePixel = 0
+openTooltip.Text = "Daily Rewards"
+openTooltip.TextColor3 = WHITE
+openTooltip.TextSize = 12
+openTooltip.Font = Enum.Font.GothamMedium
+openTooltip.ZIndex = 70
+openTooltip.Parent = openButton
+local tooltipCorner = Instance.new("UICorner")
+tooltipCorner.CornerRadius = UDim.new(0, 6)
+tooltipCorner.Parent = openTooltip
+
+openButton.MouseEnter:Connect(function()
+	openTooltip.Visible = true
+	openStroke.Thickness = 2.2
+	openButton.BackgroundTransparency = 0
+end)
+openButton.MouseLeave:Connect(function()
+	openTooltip.Visible = false
+	openStroke.Thickness = 1.4
+	openButton.BackgroundTransparency = 0.08
+end)
 
 local readyBadge = Instance.new("TextLabel")
 readyBadge.Name = "ReadyBadge"
 readyBadge.AnchorPoint = Vector2.new(1, 0)
-readyBadge.Position = UDim2.new(1, 5, 0, -5)
-readyBadge.Size = UDim2.fromOffset(48, 21)
+readyBadge.Position = UDim2.new(1, 3, 0, -3)
+readyBadge.Size = UDim2.fromOffset(18, 18)
 readyBadge.BackgroundColor3 = GOLD
 readyBadge.TextColor3 = Color3.fromRGB(35, 29, 12)
-readyBadge.Text = "CLAIM"
-readyBadge.TextSize = 9
+readyBadge.Text = "!"
+readyBadge.TextSize = 12
 readyBadge.Font = Enum.Font.GothamBold
 readyBadge.Visible = false
 readyBadge.ZIndex = 6
@@ -89,6 +141,18 @@ readyBadge.Parent = openButton
 local readyCorner = Instance.new("UICorner")
 readyCorner.CornerRadius = UDim.new(1, 0)
 readyCorner.Parent = readyBadge
+
+task.spawn(function()
+	local hud = playerGui:WaitForChild(HudChrome.SCREEN_NAME)
+	local actionColumn = hud:WaitForChild(HudChrome.ACTION_COLUMN_NAME)
+	openButton.Parent = actionColumn
+	openButton.AnchorPoint = Vector2.new(0, 0)
+	openButton.Position = UDim2.fromOffset(0, 0)
+	openButton.ZIndex = math.max(actionColumn.ZIndex + 1, 61)
+	calendarIcon.ZIndex = openButton.ZIndex + 1
+	readyBadge.ZIndex = openButton.ZIndex + 2
+	openButton.Visible = not panelVisible
+end)
 
 local overlay = Instance.new("Frame")
 overlay.Name = "Overlay"
@@ -349,35 +413,23 @@ local function stopPulse()
 		pulseTween:Cancel()
 		pulseTween = nil
 	end
-	openButton.Size = UDim2.fromOffset(156, 48)
 end
 
 local function refreshPulse(canClaim: boolean)
 	readyBadge.Visible = canClaim
 	stopPulse()
+	openGradient.Enabled = canClaim
+	openButton.BackgroundColor3 = if canClaim then ACCENT else HudChrome.BG_BUTTON
+	calendarIcon.TextColor3 = if canClaim then GOLD_LIGHT else WHITE
+	openStroke.Color = if canClaim then GOLD else HudChrome.ACCENT
+	openStroke.Transparency = if canClaim then 0.05 else 0.12
 	if not canClaim then
-		openButton.Size = UDim2.fromOffset(108, 38)
-		openButton.Text = "REWARDS"
-		openButton.TextSize = 11
-		openButton.BackgroundColor3 = PANEL
-		openGradient.Enabled = false
-		openStroke.Color = Color3.fromRGB(104, 98, 148)
-		openStroke.Transparency = 0.42
-		return
-	end
-	openButton.Text = "DAILY GIFT"
-	openButton.TextSize = 14
-	openButton.BackgroundColor3 = ACCENT
-	openGradient.Enabled = true
-	openStroke.Color = ACCENT_LIGHT
-	openStroke.Transparency = 0.15
-	if pulseTween then
 		return
 	end
 	pulseTween = TweenService:Create(
-		openButton,
-		TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{ Size = UDim2.fromOffset(164, 52) }
+		openStroke,
+		TweenInfo.new(0.75, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{ Transparency = 0.55 }
 	)
 	pulseTween:Play()
 end
@@ -444,6 +496,16 @@ local function applyState(state: any)
 	claimStroke.Transparency = if canClaim then 0.25 else 0.65
 	claimButton.Text = if canClaim then ("CLAIM DAY %d"):format(currentDay) else "CLAIMED TODAY"
 	refreshPulse(canClaim)
+
+	local shouldAutoOpen = canClaim and previousCanClaim ~= true
+	previousCanClaim = canClaim
+	if shouldAutoOpen and not panelVisible then
+		task.defer(function()
+			if latestState == state and latestState.CanClaim == true then
+				setPanelVisible(true)
+			end
+		end)
+	end
 end
 
 local function applyResponsive()
