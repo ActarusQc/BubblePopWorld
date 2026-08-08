@@ -799,9 +799,9 @@ local function setPanelVisible(visible: boolean)
 			GuiService.SelectedObject = if latestState and latestState.CanClaim == true then claimButton else closeButton
 		end)
 	else
-		if GuiService.SelectedObject == claimButton or GuiService.SelectedObject == closeButton then
-			GuiService.SelectedObject = openButton
-		end
+		-- Rendre la manette au personnage. Garder un bouton sélectionné détourne
+		-- le stick/D-pad vers la barre Inventory/Challenges/Music/Daily Rewards.
+		GuiService.SelectedObject = nil
 	end
 end
 
