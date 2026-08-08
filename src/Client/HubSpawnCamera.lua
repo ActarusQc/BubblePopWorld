@@ -66,6 +66,13 @@ local function applySpawnCamera(character: Model)
 	if character.Parent == nil or player.Character ~= character then
 		return
 	end
+
+	-- Le SpawnLocation manuel regarde vers les bulles (+Z), mais les panneaux sont
+	-- immédiatement derrière lui. Inverser l'orientation initiale place la caméra
+	-- Roblox normale du côté ouvert (escaliers) au lieu de l'enfoncer dans les panneaux.
+	local initialLook = root.CFrame.LookVector
+	root.CFrame = CFrame.lookAt(root.Position, root.Position - initialLook)
+
 	local camera = waitForCamera()
 	if not camera then
 		return
