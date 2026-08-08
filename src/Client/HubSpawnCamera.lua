@@ -62,20 +62,13 @@ local function applySpawnCamera(character: Model)
 	if character.Parent == nil or player.Character ~= character then
 		return
 	end
-	if not isNearHubSpawn(root.Position) then
-		return
-	end
-
 	local camera = waitForCamera()
 	if not camera then
 		return
 	end
 
-	-- Ne pas écraser une caméra déjà scriptée (ex. boutique).
-	if camera.CameraType == Enum.CameraType.Scriptable then
-		return
-	end
-
+	-- Au démarrage, un autre contrôleur peut brièvement laisser la caméra Scriptable.
+	-- Cette correction de spawn est prioritaire et rend ensuite le contrôle à Roblox.
 	-- Séquence validée manuellement : Scriptable → hold → Custom.
 	local lookAt = root.Position + Vector3.new(0, CAMERA_LOOK_HEIGHT, 0)
 	local desiredPosition = root.Position
