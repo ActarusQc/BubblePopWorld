@@ -83,6 +83,12 @@ AnalyticsConfig.CustomEvents = {
 	"DailyLeaderboardTop10Entered",
 	"ChallengesPanelOpened",
 	"ChallengePinned",
+	-- Daily Rewards
+	"DailyRewardsPanelOpened",
+	"DailyRewardClaimed",
+	"DailyStreakAdvanced",
+	"DailyStreakBroken",
+	"DailyRewardDay7Reached",
 }
 
 AnalyticsConfig.EconomySkus = {
