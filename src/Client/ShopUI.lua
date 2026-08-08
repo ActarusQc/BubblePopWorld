@@ -959,22 +959,6 @@ function ShopUI.Start()
 		leftBtn.BackgroundColor3 = if canNavigate then ARROW_BG else ARROW_BG_DISABLED
 		rightBtn.BackgroundColor3 = if canNavigate then ARROW_BG else ARROW_BG_DISABLED
 
-		if UserInputService.GamepadEnabled and canInvoke then
-			GuiService.SelectedObject = actionBtn
-		end
-
-		-- Console : la sélection ne doit jamais rester sur un bouton inactif.
-		if currentLayout.Mode == ShopBrowseLayout.Modes.Console then
-			local selected = GuiService.SelectedObject
-			local stale = selected == nil
-				or (isPanelButton(selected) and not (selected :: GuiButton).Selectable)
-			if stale then
-				GuiService.SelectedObject = if canInvoke
-					then actionBtn
-					elseif canNavigate then rightBtn
-					else closeBtn
-			end
-		end
 	end
 
 	--------------------------------------------------------------------
