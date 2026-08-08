@@ -192,7 +192,7 @@ local window = Instance.new("Frame")
 window.Name = "Window"
 window.AnchorPoint = Vector2.new(0.5, 0.5)
 window.Position = UDim2.fromScale(0.5, 0.5)
-window.Size = UDim2.fromOffset(980, 590)
+window.Size = UDim2.fromOffset(980, 560)
 window.BackgroundColor3 = BG
 window.BorderSizePixel = 0
 window.ZIndex = 21
@@ -213,6 +213,22 @@ windowGradient.Color = ColorSequence.new({
 })
 windowGradient.Rotation = 115
 windowGradient.Parent = window
+
+local innerBorder = Instance.new("Frame")
+innerBorder.Name = "InnerBorder"
+innerBorder.Position = UDim2.fromOffset(10, 10)
+innerBorder.Size = UDim2.new(1, -20, 1, -20)
+innerBorder.BackgroundTransparency = 1
+innerBorder.ZIndex = 21
+innerBorder.Parent = window
+local innerCorner = Instance.new("UICorner")
+innerCorner.CornerRadius = UDim.new(0, 20)
+innerCorner.Parent = innerBorder
+local innerStroke = Instance.new("UIStroke")
+innerStroke.Color = Color3.fromRGB(31, 113, 178)
+innerStroke.Transparency = 0.45
+innerStroke.Thickness = 1
+innerStroke.Parent = innerBorder
 
 local topGlow = Instance.new("Frame")
 topGlow.Name = "TopGlow"
@@ -355,8 +371,8 @@ closeStroke.Parent = closeButton
 
 local gridHost = Instance.new("Frame")
 gridHost.Name = "RewardsGrid"
-gridHost.Position = UDim2.fromOffset(48, 116)
-gridHost.Size = UDim2.new(1, -96, 0, 298)
+gridHost.Position = UDim2.fromOffset(48, 110)
+gridHost.Size = UDim2.new(1, -96, 0, 278)
 gridHost.BackgroundTransparency = 1
 gridHost.ZIndex = 22
 gridHost.Parent = window
@@ -437,7 +453,7 @@ for day = 1, 7 do
 	rewardIcon.BackgroundColor3 = if day == 7 then Color3.fromRGB(95, 68, 33) else Color3.fromRGB(255, 190, 55)
 	rewardIcon.BackgroundTransparency = if day == 7 then 1 else 0
 	rewardIcon.BorderSizePixel = 0
-	rewardIcon.Text = if day == 7 then "👕" else "$"
+	rewardIcon.Text = if day == 7 then "👕" else "B"
 	rewardIcon.TextColor3 = if day == 7 then GOLD_LIGHT else Color3.fromRGB(93, 55, 8)
 	rewardIcon.TextSize = if day == 7 then 31 else 19
 	rewardIcon.Font = Enum.Font.GothamBlack
@@ -454,7 +470,7 @@ for day = 1, 7 do
 			extraCoin.Size = UDim2.fromOffset(30, 30)
 			extraCoin.BackgroundColor3 = Color3.fromRGB(255, 177, 34)
 			extraCoin.BorderSizePixel = 0
-			extraCoin.Text = "$"
+			extraCoin.Text = "B"
 			extraCoin.TextColor3 = Color3.fromRGB(98, 56, 5)
 			extraCoin.TextSize = 15
 			extraCoin.Font = Enum.Font.GothamBlack
@@ -469,6 +485,24 @@ for day = 1, 7 do
 			extraStroke.Parent = extraCoin
 		end
 		rewardIcon.ZIndex = 24
+		for stackIndex = 1, math.clamp(math.floor(day / 2), 1, 3) do
+			local coinStack = Instance.new("Frame")
+			coinStack.Name = "CoinStack" .. tostring(stackIndex)
+			coinStack.AnchorPoint = Vector2.new(0.5, 0.5)
+			coinStack.Position = UDim2.new(0.5, (stackIndex - 2) * 28, 0, 62 + stackIndex * 3)
+			coinStack.Size = UDim2.fromOffset(38, 8)
+			coinStack.BackgroundColor3 = Color3.fromRGB(220, 126, 15)
+			coinStack.BorderSizePixel = 0
+			coinStack.ZIndex = 21
+			coinStack.Parent = card
+			local stackCorner = Instance.new("UICorner")
+			stackCorner.CornerRadius = UDim.new(1, 0)
+			stackCorner.Parent = coinStack
+			local stackStroke = Instance.new("UIStroke")
+			stackStroke.Color = GOLD
+			stackStroke.Transparency = 0.15
+			stackStroke.Parent = coinStack
+		end
 	end
 	local rewardIconCorner = Instance.new("UICorner")
 	rewardIconCorner.CornerRadius = UDim.new(1, 0)
@@ -517,6 +551,29 @@ for day = 1, 7 do
 	statusCorner.CornerRadius = UDim.new(1, 0)
 	statusCorner.Parent = status
 
+	if day == 7 then
+		local prizeTag = Instance.new("TextLabel")
+		prizeTag.Name = "PrizeTag"
+		prizeTag.AnchorPoint = Vector2.new(0.5, 0)
+		prizeTag.Position = UDim2.new(0.5, 0, 0, 27)
+		prizeTag.Size = UDim2.fromOffset(132, 22)
+		prizeTag.BackgroundColor3 = Color3.fromRGB(91, 60, 11)
+		prizeTag.BorderSizePixel = 0
+		prizeTag.Text = "★  WEEKLY REWARD  ★"
+		prizeTag.TextColor3 = GOLD_LIGHT
+		prizeTag.TextSize = 9
+		prizeTag.Font = Enum.Font.GothamBold
+		prizeTag.ZIndex = 24
+		prizeTag.Parent = card
+		local prizeTagCorner = Instance.new("UICorner")
+		prizeTagCorner.CornerRadius = UDim.new(1, 0)
+		prizeTagCorner.Parent = prizeTag
+		local prizeInnerStroke = Instance.new("UIStroke")
+		prizeInnerStroke.Color = GOLD
+		prizeInnerStroke.Transparency = 0.25
+		prizeInnerStroke.Parent = prizeTag
+	end
+
 	cards[day] = { frame = card, stroke = stroke, icon = rewardIcon, reward = rewardLabel, status = status }
 end
 
@@ -524,30 +581,31 @@ local function layoutRewardCards(mobile: boolean)
 	for day = 1, 7 do
 		local refs = cards[day]
 		if refs then
-			local col: number
-			local row: number
 			if day <= 4 then
-				col = day - 1
-				row = 0
+				local col = day - 1
+				refs.frame.Position = UDim2.new(col * 0.25, col * 4, 0, 0)
+				refs.frame.Size = UDim2.new(0.25, -8, 0.5, -8)
+			elseif day <= 6 then
+				local col = day - 5
+				refs.frame.Position = UDim2.new(0.08 + col * 0.255, col * 4, 0.5, 8)
+				refs.frame.Size = UDim2.new(0.245, -8, 0.5, -8)
 			else
-				col = day - 5
-				row = 1
+				refs.frame.Position = UDim2.new(0.59, 8, 0.5, 8)
+				refs.frame.Size = UDim2.new(0.41, -8, 0.5, -8)
 			end
-			local horizontalInset = if day >= 5 then 0.125 else 0
-			refs.frame.Position = UDim2.new(horizontalInset + col * 0.25, col * 4, row * 0.5, row * 8)
-			refs.frame.Size = UDim2.new(0.25, -8, 0.5, -8)
-			refs.icon.Position = UDim2.new(0.5, 0, 0, if mobile then 28 else 35)
-			refs.icon.Size = UDim2.fromOffset(if day == 7 then 48 else 42, if day == 7 then 48 else 42)
-			refs.icon.TextSize = if day == 7 then 40 else 22
-			refs.reward.Position = UDim2.new(0, 7, 0, if mobile then 70 else 82)
-			refs.reward.TextSize = if day == 7 then 17 else 16
+			refs.icon.Position = UDim2.new(0.5, 0, 0, if day == 7 then 52 else 35)
+			refs.icon.Size = UDim2.fromOffset(if day == 7 then 60 else 42, if day == 7 then 60 else 42)
+			refs.icon.TextSize = if day == 7 then 50 else 22
+			refs.reward.Position = UDim2.new(0, 7, 0, if day == 7 then 104 else 82)
+			refs.reward.TextSize = if day == 7 then 19 else 16
+			refs.stroke.Thickness = if day == 7 then 3 else refs.stroke.Thickness
 		end
 	end
 end
 
 local infoBar = Instance.new("Frame")
 infoBar.Name = "InfoBar"
-infoBar.Position = UDim2.fromOffset(48, 428)
+infoBar.Position = UDim2.fromOffset(48, 400)
 infoBar.Size = UDim2.new(1, -96, 0, 66)
 infoBar.BackgroundColor3 = Color3.fromRGB(7, 30, 59)
 infoBar.BackgroundTransparency = 0.08
@@ -564,7 +622,7 @@ infoStroke.Parent = infoBar
 
 local streakLabel = Instance.new("TextLabel")
 streakLabel.Name = "Streak"
-streakLabel.Position = UDim2.fromOffset(78, 436)
+streakLabel.Position = UDim2.fromOffset(78, 408)
 streakLabel.Size = UDim2.new(1, -156, 0, 25)
 streakLabel.BackgroundTransparency = 1
 streakLabel.Text = "Streak: --"
@@ -577,7 +635,7 @@ streakLabel.Parent = window
 
 local shirtStatus = Instance.new("TextLabel")
 shirtStatus.Name = "ShirtStatus"
-shirtStatus.Position = UDim2.fromOffset(78, 462)
+shirtStatus.Position = UDim2.fromOffset(78, 434)
 shirtStatus.Size = UDim2.new(1, -156, 0, 24)
 shirtStatus.BackgroundTransparency = 1
 shirtStatus.Text = "Day 7: Exclusive Shirt"
@@ -686,7 +744,9 @@ local function applyState(state: any)
 		local reward = rewards[day]
 		if refs then
 			if type(reward) == "table" then
-				refs.reward.Text = tostring(reward.ShortLabel or reward.Title or "REWARD")
+				refs.reward.Text = if day == 7
+					then "EXCLUSIVE SHIRT"
+					else tostring(reward.ShortLabel or reward.Title or "REWARD")
 			else
 				refs.reward.Text = "REWARD"
 			end
@@ -747,7 +807,7 @@ local function applyResponsive()
 	local vp = if camera then camera.ViewportSize else Vector2.new(1280, 720)
 	local width = math.clamp(vp.X - 28, 560, 980)
 	local mobile = vp.X < 760
-	local height = if mobile then math.clamp(vp.Y - 24, 520, 620) else 590
+	local height = math.clamp(vp.Y - 36, 500, 560)
 	window.Size = UDim2.fromOffset(width, height)
 
 	if mobile then
@@ -761,17 +821,17 @@ local function applyResponsive()
 		titleAccent.TextSize = 23
 		subtitle.Position = UDim2.fromOffset(79, 46)
 		subtitle.Size = UDim2.new(1, -142, 0, 24)
-		gridHost.Position = UDim2.fromOffset(18, 86)
-		gridHost.Size = UDim2.new(1, -36, 0, 286)
+		gridHost.Position = UDim2.fromOffset(18, 82)
+		gridHost.Size = UDim2.new(1, -36, 0, 274)
 		layoutRewardCards(true)
 		progressPill.Visible = false
 		subtitle.TextSize = 10
-		infoBar.Position = UDim2.new(0, 18, 1, -136)
+		infoBar.Position = UDim2.new(0, 18, 1, -130)
 		infoBar.Size = UDim2.new(1, -36, 0, 58)
-		streakLabel.Position = UDim2.new(0, 34, 1, -130)
+		streakLabel.Position = UDim2.new(0, 34, 1, -124)
 		streakLabel.Size = UDim2.new(1, -68, 0, 20)
 		streakLabel.TextSize = 12
-		shirtStatus.Position = UDim2.new(0, 34, 1, -108)
+		shirtStatus.Position = UDim2.new(0, 34, 1, -102)
 		shirtStatus.Size = UDim2.new(1, -68, 0, 24)
 		shirtStatus.TextSize = 9
 		claimButton.AnchorPoint = Vector2.new(0.5, 1)
@@ -780,8 +840,8 @@ local function applyResponsive()
 	else
 		headerIcon.Position = UDim2.fromOffset(32, 24)
 		headerIcon.Size = UDim2.fromOffset(68, 68)
-		gridHost.Position = UDim2.fromOffset(48, 116)
-		gridHost.Size = UDim2.new(1, -96, 0, 298)
+		gridHost.Position = UDim2.fromOffset(48, 110)
+		gridHost.Size = UDim2.new(1, -96, 0, 278)
 		layoutRewardCards(false)
 		progressPill.Visible = true
 		title.Position = UDim2.fromOffset(118, 25)
@@ -793,12 +853,12 @@ local function applyResponsive()
 		subtitle.Position = UDim2.fromOffset(120, 67)
 		subtitle.Size = UDim2.new(1, -390, 0, 22)
 		subtitle.TextSize = 12
-		infoBar.Position = UDim2.fromOffset(48, 428)
+		infoBar.Position = UDim2.fromOffset(48, 400)
 		infoBar.Size = UDim2.new(1, -96, 0, 66)
-		streakLabel.Position = UDim2.fromOffset(78, 436)
+		streakLabel.Position = UDim2.fromOffset(78, 408)
 		streakLabel.Size = UDim2.new(1, -156, 0, 25)
 		streakLabel.TextSize = 15
-		shirtStatus.Position = UDim2.fromOffset(78, 462)
+		shirtStatus.Position = UDim2.fromOffset(78, 434)
 		shirtStatus.Size = UDim2.new(1, -156, 0, 24)
 		shirtStatus.TextSize = 11
 		claimButton.AnchorPoint = Vector2.new(1, 1)
