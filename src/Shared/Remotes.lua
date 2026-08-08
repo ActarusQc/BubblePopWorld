@@ -32,6 +32,7 @@ local EVENTS = {
 	"DailyRewardsState",        -- serveur -> client : état public + calendrier 7 jours
 	"DailyRewardsRequestState", -- client -> serveur : demande état courant
 	"DailyRewardsClaim",        -- client -> serveur : claim du reward du jour
+	"DailyRewardsToggleShirt",  -- client -> serveur : équiper/retirer le chandail J7
 	"DailyRewardsPanelOpened",  -- client -> serveur : analytics panel
 	-- Tutoriel d'accueil (serveur → client uniquement)
 	"TutorialState",          -- serveur -> client : étape / progrès / célébration / fin
