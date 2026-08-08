@@ -290,10 +290,10 @@ function DataService.Load(player: Player)
 	data.__isNewProfile = isNewProfile
 	profiles[player] = data
 
-	-- leaderstats (classement natif Roblox)
+	-- leaderstats natifs : ne pas exposer Coins, car Xbox l’affiche en permanence.
+	-- Le solde BPW reste dans le profil, l’attribut Player.Coins et le HUD personnalisé.
 	local ls = Instance.new("Folder")
 	ls.Name = "leaderstats"
-	local coins = Instance.new("IntValue"); coins.Name = "Coins"; coins.Parent = ls
 	local level = Instance.new("IntValue"); level.Name = "Level"; level.Parent = ls
 	local pops  = Instance.new("IntValue"); pops.Name = "Bubbles"; pops.Parent = ls
 	ls.Parent = player
@@ -393,8 +393,7 @@ function DataService.Push(player: Player)
 	player:SetAttribute("PlayerLevel", d.Level)
 	local ls = player:FindFirstChild("leaderstats")
 	if ls then
-		(ls:FindFirstChild("Coins") :: IntValue).Value = math.min(d.Coins, 2^31 - 1)
-		;(ls:FindFirstChild("Level") :: IntValue).Value = d.Level
+		(ls:FindFirstChild("Level") :: IntValue).Value = d.Level
 		;(ls:FindFirstChild("Bubbles") :: IntValue).Value = math.min(d.Pops, 2^31 - 1)
 	end
 	local nextLevel = d.Level + 1
