@@ -23,8 +23,8 @@ local PANEL = Color3.fromRGB(31, 29, 62)
 local CARD = Color3.fromRGB(34, 38, 68)
 local CARD_PAST = Color3.fromRGB(27, 66, 63)
 local CARD_CURRENT = Color3.fromRGB(55, 42, 96)
-local ACCENT = Color3.fromRGB(142, 111, 255)
-local ACCENT_LIGHT = Color3.fromRGB(210, 192, 255)
+local ACCENT = Color3.fromRGB(0, 211, 255)
+local ACCENT_LIGHT = Color3.fromRGB(116, 235, 255)
 local GOLD = Color3.fromRGB(255, 209, 92)
 local GOLD_LIGHT = Color3.fromRGB(255, 239, 178)
 local GREEN = Color3.fromRGB(100, 231, 169)
@@ -192,32 +192,32 @@ local window = Instance.new("Frame")
 window.Name = "Window"
 window.AnchorPoint = Vector2.new(0.5, 0.5)
 window.Position = UDim2.fromScale(0.5, 0.5)
-window.Size = UDim2.fromOffset(820, 470)
+window.Size = UDim2.fromOffset(980, 590)
 window.BackgroundColor3 = BG
 window.BorderSizePixel = 0
 window.ZIndex = 21
 window.Parent = overlay
 local windowCorner = Instance.new("UICorner")
-windowCorner.CornerRadius = UDim.new(0, 18)
+windowCorner.CornerRadius = UDim.new(0, 26)
 windowCorner.Parent = window
 local windowStroke = Instance.new("UIStroke")
-windowStroke.Thickness = 2
+windowStroke.Thickness = 3
 windowStroke.Color = ACCENT
-windowStroke.Transparency = 0.18
+windowStroke.Transparency = 0.02
 windowStroke.Parent = window
 local windowGradient = Instance.new("UIGradient")
 windowGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 34, 78)),
-	ColorSequenceKeypoint.new(0.48, Color3.fromRGB(24, 27, 52)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(19, 34, 58)),
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(5, 27, 55)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(5, 16, 37)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 12, 29)),
 })
 windowGradient.Rotation = 115
 windowGradient.Parent = window
 
 local topGlow = Instance.new("Frame")
 topGlow.Name = "TopGlow"
-topGlow.Position = UDim2.fromOffset(20, 0)
-topGlow.Size = UDim2.new(1, -40, 0, 4)
+topGlow.Position = UDim2.fromOffset(30, 0)
+topGlow.Size = UDim2.new(1, -60, 0, 5)
 topGlow.BackgroundColor3 = ACCENT
 topGlow.BorderSizePixel = 0
 topGlow.ZIndex = 22
@@ -228,15 +228,15 @@ topGlowCorner.Parent = topGlow
 local topGlowGradient = Instance.new("UIGradient")
 topGlowGradient.Color = ColorSequence.new({
 	ColorSequenceKeypoint.new(0, ACCENT),
-	ColorSequenceKeypoint.new(0.55, GOLD),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(117, 86, 255)),
 	ColorSequenceKeypoint.new(1, ACCENT),
 })
 topGlowGradient.Parent = topGlow
 
 local headerIcon = Instance.new("TextLabel")
 headerIcon.Name = "HeaderIcon"
-headerIcon.Position = UDim2.fromOffset(24, 18)
-headerIcon.Size = UDim2.fromOffset(50, 50)
+headerIcon.Position = UDim2.fromOffset(32, 24)
+headerIcon.Size = UDim2.fromOffset(68, 68)
 headerIcon.BackgroundColor3 = ACCENT
 headerIcon.Text = "🎁"
 headerIcon.TextSize = 27
@@ -244,7 +244,7 @@ headerIcon.Font = Enum.Font.GothamBold
 headerIcon.ZIndex = 23
 headerIcon.Parent = window
 local headerIconCorner = Instance.new("UICorner")
-headerIconCorner.CornerRadius = UDim.new(0, 14)
+headerIconCorner.CornerRadius = UDim.new(0, 20)
 headerIconCorner.Parent = headerIcon
 local headerIconStroke = Instance.new("UIStroke")
 headerIconStroke.Color = ACCENT_LIGHT
@@ -261,21 +261,41 @@ headerIconGradient.Parent = headerIcon
 
 local title = Instance.new("TextLabel")
 title.Name = "Title"
-title.Position = UDim2.fromOffset(88, 18)
-title.Size = UDim2.new(1, -174, 0, 30)
+title.Position = UDim2.fromOffset(118, 25)
+title.Size = UDim2.fromOffset(125, 42)
 title.BackgroundTransparency = 1
-title.Text = "DAILY REWARDS"
+title.Text = "DAILY"
 title.TextColor3 = WHITE
-title.TextSize = 25
+title.TextSize = 34
 title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.ZIndex = 22
 title.Parent = window
 
+local titleAccent = Instance.new("TextLabel")
+titleAccent.Name = "TitleAccent"
+titleAccent.Position = UDim2.fromOffset(242, 25)
+titleAccent.Size = UDim2.fromOffset(230, 42)
+titleAccent.BackgroundTransparency = 1
+titleAccent.Text = "REWARDS"
+titleAccent.TextColor3 = ACCENT
+titleAccent.TextSize = 34
+titleAccent.Font = Enum.Font.GothamBlack
+titleAccent.TextXAlignment = Enum.TextXAlignment.Left
+titleAccent.ZIndex = 22
+titleAccent.Parent = window
+local titleAccentGradient = Instance.new("UIGradient")
+titleAccentGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(73, 239, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 149, 232)),
+})
+titleAccentGradient.Rotation = 90
+titleAccentGradient.Parent = titleAccent
+
 local subtitle = Instance.new("TextLabel")
 subtitle.Name = "Subtitle"
-subtitle.Position = UDim2.fromOffset(89, 48)
-subtitle.Size = UDim2.new(1, -184, 0, 22)
+subtitle.Position = UDim2.fromOffset(120, 67)
+subtitle.Size = UDim2.new(1, -390, 0, 22)
 subtitle.BackgroundTransparency = 1
 subtitle.Text = "Come back every day • Unlock the exclusive shirt on Day 7"
 subtitle.TextColor3 = MUTED
@@ -288,9 +308,9 @@ subtitle.Parent = window
 local progressPill = Instance.new("Frame")
 progressPill.Name = "ProgressPill"
 progressPill.AnchorPoint = Vector2.new(1, 0)
-progressPill.Position = UDim2.new(1, -72, 0, 22)
-progressPill.Size = UDim2.fromOffset(116, 34)
-progressPill.BackgroundColor3 = Color3.fromRGB(48, 42, 87)
+progressPill.Position = UDim2.new(1, -90, 0, 35)
+progressPill.Size = UDim2.fromOffset(190, 50)
+progressPill.BackgroundColor3 = Color3.fromRGB(5, 29, 55)
 progressPill.BorderSizePixel = 0
 progressPill.ZIndex = 23
 progressPill.Parent = window
@@ -304,9 +324,9 @@ progressStroke.Parent = progressPill
 local progressText = Instance.new("TextLabel")
 progressText.Size = UDim2.fromScale(1, 1)
 progressText.BackgroundTransparency = 1
-progressText.Text = "STREAK  0 / 7"
+progressText.Text = "🔥  0 DAY STREAK"
 progressText.TextColor3 = ACCENT_LIGHT
-progressText.TextSize = 11
+progressText.TextSize = 15
 progressText.Font = Enum.Font.GothamBold
 progressText.ZIndex = 24
 progressText.Parent = progressPill
@@ -314,9 +334,9 @@ progressText.Parent = progressPill
 local closeButton = Instance.new("TextButton")
 closeButton.Name = "Close"
 closeButton.AnchorPoint = Vector2.new(1, 0)
-closeButton.Position = UDim2.new(1, -14, 0, 14)
-closeButton.Size = UDim2.fromOffset(38, 38)
-closeButton.BackgroundColor3 = Color3.fromRGB(44, 42, 72)
+closeButton.Position = UDim2.new(1, -18, 0, 18)
+closeButton.Size = UDim2.fromOffset(56, 56)
+closeButton.BackgroundColor3 = Color3.fromRGB(8, 30, 61)
 closeButton.Text = "×"
 closeButton.TextColor3 = WHITE
 closeButton.TextSize = 15
@@ -325,13 +345,18 @@ closeButton.Selectable = true
 closeButton.ZIndex = 23
 closeButton.Parent = window
 local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 10)
+closeCorner.CornerRadius = UDim.new(0, 15)
 closeCorner.Parent = closeButton
+local closeStroke = Instance.new("UIStroke")
+closeStroke.Color = ACCENT
+closeStroke.Thickness = 2
+closeStroke.Transparency = 0
+closeStroke.Parent = closeButton
 
 local gridHost = Instance.new("Frame")
 gridHost.Name = "RewardsGrid"
-gridHost.Position = UDim2.fromOffset(22, 94)
-gridHost.Size = UDim2.new(1, -44, 0, 242)
+gridHost.Position = UDim2.fromOffset(48, 116)
+gridHost.Size = UDim2.new(1, -96, 0, 298)
 gridHost.BackgroundTransparency = 1
 gridHost.ZIndex = 22
 gridHost.Parent = window
@@ -371,24 +396,24 @@ for day = 1, 7 do
 	card.ZIndex = 22
 	card.Parent = gridHost
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 15)
+	corner.CornerRadius = UDim.new(0, 18)
 	corner.Parent = card
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = 1
-	stroke.Color = Color3.fromRGB(80, 96, 132)
-	stroke.Transparency = 0.3
+	stroke.Color = if day == 7 then GOLD else Color3.fromRGB(41, 96, 145)
+	stroke.Transparency = if day == 7 then 0.05 else 0.18
 	stroke.Parent = card
 	local cardGradient = Instance.new("UIGradient")
 	cardGradient.Color = if day == 7
 		then ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(116, 77, 27)),
-			ColorSequenceKeypoint.new(0.48, Color3.fromRGB(69, 45, 35)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(35, 29, 48)),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(105, 72, 12)),
+			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(55, 39, 16)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 24, 34)),
 		})
 		else ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(62, 59, 111)),
-			ColorSequenceKeypoint.new(0.55, Color3.fromRGB(38, 41, 76)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 29, 55)),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 61, 100)),
+			ColorSequenceKeypoint.new(0.55, Color3.fromRGB(8, 36, 69)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(7, 22, 47)),
 		})
 	cardGradient.Rotation = 90
 	cardGradient.Parent = card
@@ -398,8 +423,8 @@ for day = 1, 7 do
 	dayLabel.Size = UDim2.new(1, -16, 0, 18)
 	dayLabel.BackgroundTransparency = 1
 	dayLabel.Text = if day == 7 then "DAY 7  •  GRAND PRIZE" else "DAY " .. tostring(day)
-	dayLabel.TextColor3 = if day == 7 then GOLD_LIGHT else WHITE
-	dayLabel.TextSize = 11
+	dayLabel.TextColor3 = if day == 7 then GOLD_LIGHT else ACCENT_LIGHT
+	dayLabel.TextSize = 14
 	dayLabel.Font = Enum.Font.GothamBold
 	dayLabel.ZIndex = 23
 	dayLabel.Parent = card
@@ -418,6 +443,33 @@ for day = 1, 7 do
 	rewardIcon.Font = Enum.Font.GothamBlack
 	rewardIcon.ZIndex = 23
 	rewardIcon.Parent = card
+
+	if day ~= 7 then
+		local extraCoinCount = math.clamp(day - 1, 0, 3)
+		for coinIndex = 1, extraCoinCount do
+			local extraCoin = Instance.new("TextLabel")
+			extraCoin.Name = "Coin" .. tostring(coinIndex)
+			extraCoin.AnchorPoint = Vector2.new(0.5, 0.5)
+			extraCoin.Position = UDim2.new(0.5, (coinIndex - 2) * 22, 0, 53 - math.abs(coinIndex - 2) * 5)
+			extraCoin.Size = UDim2.fromOffset(30, 30)
+			extraCoin.BackgroundColor3 = Color3.fromRGB(255, 177, 34)
+			extraCoin.BorderSizePixel = 0
+			extraCoin.Text = "$"
+			extraCoin.TextColor3 = Color3.fromRGB(98, 56, 5)
+			extraCoin.TextSize = 15
+			extraCoin.Font = Enum.Font.GothamBlack
+			extraCoin.ZIndex = 22
+			extraCoin.Parent = card
+			local extraCorner = Instance.new("UICorner")
+			extraCorner.CornerRadius = UDim.new(1, 0)
+			extraCorner.Parent = extraCoin
+			local extraStroke = Instance.new("UIStroke")
+			extraStroke.Color = GOLD_LIGHT
+			extraStroke.Thickness = 1.5
+			extraStroke.Parent = extraCoin
+		end
+		rewardIcon.ZIndex = 24
+	end
 	local rewardIconCorner = Instance.new("UICorner")
 	rewardIconCorner.CornerRadius = UDim.new(1, 0)
 	rewardIconCorner.Parent = rewardIcon
@@ -472,38 +524,48 @@ local function layoutRewardCards(mobile: boolean)
 	for day = 1, 7 do
 		local refs = cards[day]
 		if refs then
-			if mobile then
-				local col = (day - 1) % 4
-				local row = math.floor((day - 1) / 4)
-				refs.frame.Position = UDim2.new(col * 0.25, col * 3, row * 0.5, row * 5)
-				refs.frame.Size = UDim2.new(0.25, -7, 0.5, -5)
-			elseif day == 7 then
-				refs.frame.Position = UDim2.new(0.75, 7, 0, 0)
-				refs.frame.Size = UDim2.new(0.25, -7, 1, 0)
-				refs.icon.Position = UDim2.new(0.5, 0, 0, 56)
-				refs.icon.Size = UDim2.fromOffset(58, 58)
-				refs.icon.TextSize = 48
-				refs.reward.Position = UDim2.new(0, 7, 0, 124)
-				refs.reward.TextSize = 18
+			local col: number
+			local row: number
+			if day <= 4 then
+				col = day - 1
+				row = 0
 			else
-				local col = (day - 1) % 3
-				local row = math.floor((day - 1) / 3)
-				refs.frame.Position = UDim2.new(col * 0.25, col * 3, row * 0.5, row * 5)
-				refs.frame.Size = UDim2.new(0.25, -7, 0.5, -5)
-				refs.icon.Position = UDim2.new(0.5, 0, 0, 27)
-				refs.icon.Size = UDim2.fromOffset(34, 34)
-				refs.icon.TextSize = 19
-				refs.reward.Position = UDim2.fromOffset(7, 65)
-				refs.reward.TextSize = 14
+				col = day - 5
+				row = 1
 			end
+			local horizontalInset = if day >= 5 then 0.125 else 0
+			refs.frame.Position = UDim2.new(horizontalInset + col * 0.25, col * 4, row * 0.5, row * 8)
+			refs.frame.Size = UDim2.new(0.25, -8, 0.5, -8)
+			refs.icon.Position = UDim2.new(0.5, 0, 0, if mobile then 28 else 35)
+			refs.icon.Size = UDim2.fromOffset(if day == 7 then 48 else 42, if day == 7 then 48 else 42)
+			refs.icon.TextSize = if day == 7 then 40 else 22
+			refs.reward.Position = UDim2.new(0, 7, 0, if mobile then 70 else 82)
+			refs.reward.TextSize = if day == 7 then 17 else 16
 		end
 	end
 end
 
+local infoBar = Instance.new("Frame")
+infoBar.Name = "InfoBar"
+infoBar.Position = UDim2.fromOffset(48, 428)
+infoBar.Size = UDim2.new(1, -96, 0, 66)
+infoBar.BackgroundColor3 = Color3.fromRGB(7, 30, 59)
+infoBar.BackgroundTransparency = 0.08
+infoBar.BorderSizePixel = 0
+infoBar.ZIndex = 22
+infoBar.Parent = window
+local infoCorner = Instance.new("UICorner")
+infoCorner.CornerRadius = UDim.new(0, 15)
+infoCorner.Parent = infoBar
+local infoStroke = Instance.new("UIStroke")
+infoStroke.Color = Color3.fromRGB(30, 101, 158)
+infoStroke.Transparency = 0.15
+infoStroke.Parent = infoBar
+
 local streakLabel = Instance.new("TextLabel")
 streakLabel.Name = "Streak"
-streakLabel.Position = UDim2.fromOffset(26, 352)
-streakLabel.Size = UDim2.new(0.6, -26, 0, 25)
+streakLabel.Position = UDim2.fromOffset(78, 436)
+streakLabel.Size = UDim2.new(1, -156, 0, 25)
 streakLabel.BackgroundTransparency = 1
 streakLabel.Text = "Streak: --"
 streakLabel.TextColor3 = WHITE
@@ -515,8 +577,8 @@ streakLabel.Parent = window
 
 local shirtStatus = Instance.new("TextLabel")
 shirtStatus.Name = "ShirtStatus"
-shirtStatus.Position = UDim2.fromOffset(26, 380)
-shirtStatus.Size = UDim2.new(0.6, -26, 0, 34)
+shirtStatus.Position = UDim2.fromOffset(78, 462)
+shirtStatus.Size = UDim2.new(1, -156, 0, 24)
 shirtStatus.BackgroundTransparency = 1
 shirtStatus.Text = "Day 7: Exclusive Shirt"
 shirtStatus.TextColor3 = GOLD
@@ -530,8 +592,8 @@ shirtStatus.Parent = window
 local claimButton = Instance.new("TextButton")
 claimButton.Name = "Claim"
 claimButton.AnchorPoint = Vector2.new(1, 1)
-claimButton.Position = UDim2.new(1, -24, 1, -24)
-claimButton.Size = UDim2.fromOffset(260, 54)
+claimButton.Position = UDim2.new(1, -48, 1, -20)
+claimButton.Size = UDim2.new(1, -96, 0, 66)
 claimButton.BackgroundColor3 = GOLD
 claimButton.TextColor3 = Color3.fromRGB(47, 34, 12)
 claimButton.Text = "CLAIM"
@@ -542,7 +604,7 @@ claimButton.Selectable = true
 claimButton.ZIndex = 23
 claimButton.Parent = window
 local claimCorner = Instance.new("UICorner")
-claimCorner.CornerRadius = UDim.new(1, 0)
+claimCorner.CornerRadius = UDim.new(0, 18)
 claimCorner.Parent = claimButton
 local claimGradient = Instance.new("UIGradient")
 claimGradient.Color = ColorSequence.new({
@@ -613,7 +675,7 @@ local function applyState(state: any)
 	local rewards = if type(state.Rewards) == "table" then state.Rewards else {}
 
 	streakLabel.Text = ("Login streak: %d day%s  •  Current: Day %d"):format(streak, if streak == 1 then "" else "s", currentDay)
-	progressText.Text = ("STREAK  %d / 7"):format(math.clamp(streak, 0, 7))
+	progressText.Text = ("🔥  %d DAY STREAK"):format(math.clamp(streak, 0, 7))
 	shirtStatus.Text = if shirtUnlocked
 		then "Exclusive shirt milestone: UNLOCKED"
 		else "Reach Day 7 without missing a day to unlock the exclusive shirt."
@@ -683,53 +745,66 @@ end
 local function applyResponsive()
 	local camera = workspace.CurrentCamera
 	local vp = if camera then camera.ViewportSize else Vector2.new(1280, 720)
-	local width = math.clamp(vp.X - 28, 320, 820)
-	local mobile = vp.X < 720
-	local height = if mobile then math.clamp(vp.Y - 32, 420, 560) else 470
+	local width = math.clamp(vp.X - 28, 560, 980)
+	local mobile = vp.X < 760
+	local height = if mobile then math.clamp(vp.Y - 24, 520, 620) else 590
 	window.Size = UDim2.fromOffset(width, height)
 
 	if mobile then
-		headerIcon.Position = UDim2.fromOffset(14, 14)
-		headerIcon.Size = UDim2.fromOffset(42, 42)
-		title.Position = UDim2.fromOffset(66, 13)
-		title.TextSize = 20
-		subtitle.Position = UDim2.fromOffset(67, 40)
-		subtitle.Size = UDim2.new(1, -122, 0, 31)
-		gridHost.Position = UDim2.fromOffset(14, 76)
-		gridHost.Size = UDim2.new(1, -28, 0, 250)
+		headerIcon.Position = UDim2.fromOffset(18, 18)
+		headerIcon.Size = UDim2.fromOffset(48, 48)
+		title.Position = UDim2.fromOffset(78, 17)
+		title.Size = UDim2.fromOffset(86, 30)
+		title.TextSize = 23
+		titleAccent.Position = UDim2.fromOffset(164, 17)
+		titleAccent.Size = UDim2.fromOffset(150, 30)
+		titleAccent.TextSize = 23
+		subtitle.Position = UDim2.fromOffset(79, 46)
+		subtitle.Size = UDim2.new(1, -142, 0, 24)
+		gridHost.Position = UDim2.fromOffset(18, 86)
+		gridHost.Size = UDim2.new(1, -36, 0, 286)
 		layoutRewardCards(true)
 		progressPill.Visible = false
 		subtitle.TextSize = 10
-		streakLabel.Position = UDim2.new(0, 16, 1, -124)
-		streakLabel.Size = UDim2.new(1, -32, 0, 20)
+		infoBar.Position = UDim2.new(0, 18, 1, -136)
+		infoBar.Size = UDim2.new(1, -36, 0, 58)
+		streakLabel.Position = UDim2.new(0, 34, 1, -130)
+		streakLabel.Size = UDim2.new(1, -68, 0, 20)
 		streakLabel.TextSize = 12
-		shirtStatus.Position = UDim2.new(0, 16, 1, -101)
-		shirtStatus.Size = UDim2.new(1, -32, 0, 30)
+		shirtStatus.Position = UDim2.new(0, 34, 1, -108)
+		shirtStatus.Size = UDim2.new(1, -68, 0, 24)
 		shirtStatus.TextSize = 9
 		claimButton.AnchorPoint = Vector2.new(0.5, 1)
 		claimButton.Position = UDim2.new(0.5, 0, 1, -12)
-		claimButton.Size = UDim2.new(1, -32, 0, 44)
+		claimButton.Size = UDim2.new(1, -36, 0, 54)
 	else
-		headerIcon.Position = UDim2.fromOffset(24, 18)
-		headerIcon.Size = UDim2.fromOffset(50, 50)
-		gridHost.Position = UDim2.fromOffset(22, 94)
-		gridHost.Size = UDim2.new(1, -44, 0, 242)
+		headerIcon.Position = UDim2.fromOffset(32, 24)
+		headerIcon.Size = UDim2.fromOffset(68, 68)
+		gridHost.Position = UDim2.fromOffset(48, 116)
+		gridHost.Size = UDim2.new(1, -96, 0, 298)
 		layoutRewardCards(false)
 		progressPill.Visible = true
-		title.Position = UDim2.fromOffset(88, 18)
-		title.TextSize = 25
-		subtitle.Position = UDim2.fromOffset(89, 48)
-		subtitle.Size = UDim2.new(1, -184, 0, 22)
+		title.Position = UDim2.fromOffset(118, 25)
+		title.Size = UDim2.fromOffset(125, 42)
+		title.TextSize = 34
+		titleAccent.Position = UDim2.fromOffset(242, 25)
+		titleAccent.Size = UDim2.fromOffset(230, 42)
+		titleAccent.TextSize = 34
+		subtitle.Position = UDim2.fromOffset(120, 67)
+		subtitle.Size = UDim2.new(1, -390, 0, 22)
 		subtitle.TextSize = 12
-		streakLabel.Position = UDim2.fromOffset(26, 352)
-		streakLabel.Size = UDim2.new(0.6, -26, 0, 25)
+		infoBar.Position = UDim2.fromOffset(48, 428)
+		infoBar.Size = UDim2.new(1, -96, 0, 66)
+		streakLabel.Position = UDim2.fromOffset(78, 436)
+		streakLabel.Size = UDim2.new(1, -156, 0, 25)
 		streakLabel.TextSize = 15
-		shirtStatus.Position = UDim2.fromOffset(26, 380)
-		shirtStatus.Size = UDim2.new(0.6, -26, 0, 34)
+		shirtStatus.Position = UDim2.fromOffset(78, 462)
+		shirtStatus.Size = UDim2.new(1, -156, 0, 24)
 		shirtStatus.TextSize = 11
 		claimButton.AnchorPoint = Vector2.new(1, 1)
-		claimButton.Position = UDim2.new(1, -24, 1, -24)
-		claimButton.Size = UDim2.fromOffset(260, 54)
+		claimButton.AnchorPoint = Vector2.new(0.5, 1)
+		claimButton.Position = UDim2.new(0.5, 0, 1, -20)
+		claimButton.Size = UDim2.new(1, -96, 0, 66)
 	end
 end
 
