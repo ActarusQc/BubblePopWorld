@@ -155,6 +155,29 @@ task.spawn(function()
 	end
 
 	openButton.Parent = actionColumn
+	openButton.Selectable = true
+
+	-- Le contrôleur Challenges peut avoir câblé la navigation avant l'arrivée de ce bouton.
+	-- Refaire ici la boucle Xbox garantit Inventory -> Challenges -> Music -> Daily Rewards.
+	local inv = actionColumn:FindFirstChild(HudChrome.INVENTORY_BUTTON_NAME, true)
+	local challenges = actionColumn:FindFirstChild(HudChrome.CHALLENGES_BUTTON_NAME, true)
+	local music = actionColumn:FindFirstChild(HudChrome.MUSIC_BUTTON_NAME, true)
+	if inv and inv:IsA("GuiButton")
+		and challenges and challenges:IsA("GuiButton")
+		and music and music:IsA("GuiButton") then
+		inv.Selectable = true
+		challenges.Selectable = true
+		music.Selectable = true
+		inv.NextSelectionDown = challenges
+		challenges.NextSelectionUp = inv
+		challenges.NextSelectionDown = music
+		music.NextSelectionUp = challenges
+		music.NextSelectionDown = openButton
+		openButton.NextSelectionUp = music
+		openButton.NextSelectionDown = inv
+		inv.NextSelectionUp = openButton
+	end
+
 	openButton.AnchorPoint = Vector2.new(0, 0)
 	openButton.Position = UDim2.fromOffset(0, 0)
 	openButton.ZIndex = math.max(actionColumn.ZIndex + 1, 61)
