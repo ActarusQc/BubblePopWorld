@@ -16,6 +16,7 @@ local DataService = require(script.Parent.DataService)
 local stateRemote = Remotes.Event("DailyRewardsState")
 local requestRemote = Remotes.Event("DailyRewardsRequestState")
 local claimRemote = Remotes.Event("DailyRewardsClaim")
+local toggleShirtRemote = Remotes.Event("DailyRewardsToggleShirt")
 local panelOpenedRemote = Remotes.Event("DailyRewardsPanelOpened")
 local announceRemote = Remotes.Event("Announce")
 
@@ -23,6 +24,9 @@ local claimBusy: { [Player]: boolean } = {}
 local lastClaimAt: { [Player]: number } = {}
 local lastRequestAt: { [Player]: number } = {}
 local started = false
+
+local DAY7_SHIRT_TEMPLATE = "rbxassetid://89396927934094"
+local SHIRT_MARKER = "BPW_Day7RewardShirt"
 
 local function todayKey(): number
 	return DailyRewardsLogic.DayKeyFromUnix(os.time())
@@ -70,8 +74,42 @@ local function persistState(profile: any, state: any)
 		LifetimeClaims = state.LifetimeClaims,
 		CompletedCycles = state.CompletedCycles,
 		ShirtUnlocked = state.ShirtUnlocked == true,
+		ShirtEquipped = state.ShirtUnlocked == true and state.ShirtEquipped == true,
 	}
 	profile.__dirty = true
+end
+
+local function applyRewardShirt(player: Player, character: Model?)
+	local profile = validLoadedProfile(player)
+	local target = character or player.Character
+	if not profile or not target then
+		return
+	end
+
+	local state = DailyRewardsLogic.NormalizeState(profile.DailyRewards)
+	local existing = target:FindFirstChildOfClass("Shirt")
+	if state.ShirtUnlocked and state.ShirtEquipped then
+		if not existing then
+			existing = Instance.new("Shirt")
+			existing.Name = SHIRT_MARKER
+			existing:SetAttribute("BPWCreated", true)
+			existing.Parent = target
+		elseif existing:GetAttribute("BPWOriginalTemplate") == nil then
+			existing:SetAttribute("BPWOriginalTemplate", existing.ShirtTemplate)
+		end
+		existing.ShirtTemplate = DAY7_SHIRT_TEMPLATE
+		existing:SetAttribute("BPWRewardShirt", true)
+	else
+		if existing and existing:GetAttribute("BPWRewardShirt") == true then
+			local original = existing:GetAttribute("BPWOriginalTemplate")
+			if existing:GetAttribute("BPWCreated") == true then
+				existing:Destroy()
+			elseif type(original) == "string" then
+				existing.ShirtTemplate = original
+				existing:SetAttribute("BPWRewardShirt", nil)
+			end
+		end
+	end
 end
 
 local function pushState(player: Player, extra: any?)
@@ -226,6 +264,17 @@ local function onPlayerReady(player: Player)
 			return
 		end
 		ensureTodayVisit(player)
+		local function refreshShirt(character: Model)
+			task.delay(1, function()
+				if character.Parent then
+					applyRewardShirt(player, character)
+				end
+			end)
+		end
+		player.CharacterAdded:Connect(refreshShirt)
+		if player.Character then
+			refreshShirt(player.Character)
+		end
 		pushState(player)
 	end)
 end
@@ -250,6 +299,23 @@ local function start()
 
 	claimRemote.OnServerEvent:Connect(function(player: Player)
 		claimToday(player)
+	end)
+
+	toggleShirtRemote.OnServerEvent:Connect(function(player: Player)
+		local profile = validLoadedProfile(player)
+		if not profile then
+			return
+		end
+		local state = DailyRewardsLogic.NormalizeState(profile.DailyRewards)
+		if not state.ShirtUnlocked then
+			pushState(player, { ShirtToggleResult = "locked" })
+			return
+		end
+		state.ShirtEquipped = not state.ShirtEquipped
+		persistState(profile, state)
+		applyRewardShirt(player)
+		DataService.Push(player)
+		pushState(player, { ShirtToggleResult = "ok" })
 	end)
 
 	panelOpenedRemote.OnServerEvent:Connect(function(player: Player)
