@@ -801,6 +801,7 @@ local function applyState(state: any)
 		end
 	end
 
+	claimButton.Visible = canClaim
 	claimButton.Active = canClaim
 	claimButton.AutoButtonColor = canClaim
 	claimButton.BackgroundColor3 = if canClaim then GOLD else Color3.fromRGB(65, 66, 88)
