@@ -1285,10 +1285,13 @@ local function buildSellFunctional(functional: Folder)
 	local S = H.Sell
 	local base = HubLayout.GetSellBaseCFrame()
 	local zone = functional:FindFirstChild("SellZone") or functional:FindFirstChild("HubSellZone")
+
 	if not (zone and zone:IsA("BasePart")) then
 		if zone then
 			zone:Destroy()
 		end
+
+		-- Fallback code-owned : utilisé uniquement lorsqu'aucune SellZone Studio n'existe.
 		zone = makePart({
 			Name = "SellZone",
 			Size = S.ZoneSize,
@@ -1300,17 +1303,36 @@ local function buildSellFunctional(functional: Folder)
 		})
 	else
 		local z = zone :: BasePart
+		local manual = z:GetAttribute("BPW_ManualPlacement") == true
+
 		z.Name = "SellZone"
-		z.Size = S.ZoneSize
-		z.CFrame = HubLayout.GetSellZoneCFrame()
+		z.Anchored = true
 		z.Transparency = 1
 		z.CanCollide = false
+		z.CanTouch = false
+		z.CanQuery = true
+		z.CastShadow = false
+
+		if manual then
+			-- STUDIO-OWNED : CFrame et Size sont la source de vérité.
+			-- Ne jamais les recalculer depuis HubLayout.
+			z:SetAttribute("BPW_ManualPlacement", true)
+			z:SetAttribute("BPW_Role", "SellZone")
+		else
+			-- Ancienne/fallback SellZone code-owned.
+			z.Size = S.ZoneSize
+			z.CFrame = HubLayout.GetSellZoneCFrame()
+			z:SetAttribute("GeneratedByCode", true)
+			z:SetAttribute("BPW_GeneratedBy", GEN_BY)
+		end
 	end
+
 	for _, child in ipairs((zone :: Instance):GetChildren()) do
 		if child:IsA("ProximityPrompt") then
 			child:Destroy()
 		end
 	end
+
 	sellZone = zone :: BasePart
 
 	-- Pad vente transparent (repère)
@@ -1326,7 +1348,6 @@ local function buildSellFunctional(functional: Folder)
 		Parent = functional,
 	})
 end
-
 local function buildHubShopPrompt(functional: Folder)
 	-- STUDIO-OWNED : ne jamais Destroy / repositionner HubShopPrompt s'il existe.
 	local defaults = HubShopPromptLogic.DefaultPromptConfig(H.Shop.PromptMaxDistance or 13)
