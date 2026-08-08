@@ -290,13 +290,8 @@ function DataService.Load(player: Player)
 	data.__isNewProfile = isNewProfile
 	profiles[player] = data
 
-	-- leaderstats natifs : ne pas exposer Coins, car Xbox l’affiche en permanence.
-	-- Le solde BPW reste dans le profil, l’attribut Player.Coins et le HUD personnalisé.
-	local ls = Instance.new("Folder")
-	ls.Name = "leaderstats"
-	local level = Instance.new("IntValue"); level.Name = "Level"; level.Parent = ls
-	local pops  = Instance.new("IntValue"); pops.Name = "Bubbles"; pops.Parent = ls
-	ls.Parent = player
+	-- Aucun leaderstats natif : Xbox afficherait successivement Coins, Level puis Bubbles.
+	-- Les valeurs restent disponibles via le profil, les attributs et le HUD BPW.
 
 	DataService.Push(player)
 	-- Collision groups / portes : appliquer dès que le profil (niveau HUD) est connu.
@@ -391,11 +386,6 @@ function DataService.Push(player: Player)
 	player:SetAttribute("TotalBubblesSold", d.TotalBubblesSold)
 	player:SetAttribute("EquippedBackpack", d.EquippedBackpack or "")
 	player:SetAttribute("PlayerLevel", d.Level)
-	local ls = player:FindFirstChild("leaderstats")
-	if ls then
-		(ls:FindFirstChild("Level") :: IntValue).Value = d.Level
-		;(ls:FindFirstChild("Bubbles") :: IntValue).Value = math.min(d.Pops, 2^31 - 1)
-	end
 	local nextLevel = d.Level + 1
 	-- FireClient exige une Instance Player (tests / stubs : ignorer sans casser la mutation).
 	pcall(function()
