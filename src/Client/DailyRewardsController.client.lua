@@ -465,8 +465,8 @@ for day = 1, 7 do
 	rewardLabel.Size = UDim2.new(1, -14, 0, 23)
 	rewardLabel.BackgroundTransparency = 1
 	rewardLabel.Text = "..."
-	rewardLabel.TextColor3 = if day == 7 then GOLD else ACCENT_LIGHT
-	rewardLabel.TextSize = if day == 7 then 15 else 14
+	rewardLabel.TextColor3 = if day == 7 then GOLD_LIGHT else ACCENT_LIGHT
+	rewardLabel.TextSize = if day == 7 then 23 else 20
 	rewardLabel.Font = Enum.Font.GothamBold
 	rewardLabel.TextWrapped = true
 	rewardLabel.ZIndex = 23
@@ -538,30 +538,10 @@ for day = 1, 7 do
 			{ Transparency = 0.82, Thickness = 5 }
 		):Play()
 
-		for sparkleIndex, sparklePosition in {
-			UDim2.new(0.12, 0, 0.42, 0),
-			UDim2.new(0.84, 0, 0.38, 0),
-			UDim2.new(0.2, 0, 0.72, 0),
-			UDim2.new(0.78, 0, 0.7, 0),
-		} do
-			local sparkle = Instance.new("TextLabel")
-			sparkle.Name = "GoldSparkle" .. tostring(sparkleIndex)
-			sparkle.AnchorPoint = Vector2.new(0.5, 0.5)
-			sparkle.Position = sparklePosition
-			sparkle.Size = UDim2.fromOffset(18, 18)
-			sparkle.BackgroundTransparency = 1
-			sparkle.Text = "✦"
-			sparkle.TextColor3 = GOLD_LIGHT
-			sparkle.TextSize = 15
-			sparkle.Font = Enum.Font.GothamBold
-			sparkle.ZIndex = 25
-			sparkle.Parent = card
-		end
-
 		local prizeTag = Instance.new("TextLabel")
 		prizeTag.Name = "PrizeTag"
-		prizeTag.AnchorPoint = Vector2.new(0.5, 0)
-		prizeTag.Position = UDim2.new(0.5, 0, 0, 27)
+		prizeTag.AnchorPoint = Vector2.new(0, 0)
+		prizeTag.Position = UDim2.new(0.07, 0, 0, 31)
 		prizeTag.Size = UDim2.fromOffset(132, 22)
 		prizeTag.BackgroundColor3 = Color3.fromRGB(91, 60, 11)
 		prizeTag.BorderSizePixel = 0
@@ -607,11 +587,25 @@ local function layoutRewardCards(mobile: boolean)
 				refs.frame.Position = UDim2.new(0.59, 8, 0.46, 8)
 				refs.frame.Size = UDim2.new(0.41, -8, 0.54, -8)
 			end
-			refs.icon.Position = UDim2.new(0.5, 0, 0, if day == 7 then 43 else 31)
-			refs.icon.Size = UDim2.fromOffset(if day == 7 then 66 else 74, if day == 7 then 66 else 74)
-			refs.reward.Position = UDim2.new(0, 7, 0, if day == 7 then 108 else 77)
-			refs.reward.TextSize = if day == 7 then 19 else 16
-			refs.stroke.Thickness = if day == 7 then 3 else refs.stroke.Thickness
+			if day == 7 then
+				refs.icon.AnchorPoint = Vector2.new(0.5, 0)
+				refs.icon.Position = UDim2.new(0.78, 0, 0, 34)
+				refs.icon.Size = UDim2.fromOffset(92, 92)
+				refs.reward.Position = UDim2.new(0.07, 0, 0, 69)
+				refs.reward.Size = UDim2.new(0.52, 0, 0, 52)
+				refs.reward.TextSize = 23
+				refs.reward.TextXAlignment = Enum.TextXAlignment.Left
+				refs.reward.TextWrapped = true
+				refs.stroke.Thickness = 3
+			else
+				refs.icon.AnchorPoint = Vector2.new(0.5, 0)
+				refs.icon.Position = UDim2.new(0.5, 0, 0, 24)
+				refs.icon.Size = UDim2.fromOffset(58, 58)
+				refs.reward.Position = UDim2.new(0, 7, 0, 76)
+				refs.reward.Size = UDim2.new(1, -14, 0, 22)
+				refs.reward.TextSize = 20
+				refs.reward.TextXAlignment = Enum.TextXAlignment.Center
+			end
 		end
 	end
 end
