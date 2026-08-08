@@ -2427,8 +2427,8 @@ function ChallengeController.Close()
 		dock.Size = UDim2.new(0, railW, 1, 0)
 		if challengesBtn then
 			setButtonActive(challengesBtn, false)
-			GuiService.SelectedObject = challengesBtn
 		end
+		GuiService.SelectedObject = nil
 	end
 end
 
