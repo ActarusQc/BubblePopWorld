@@ -9,7 +9,6 @@ local GuiService = game:GetService("GuiService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -86,7 +85,6 @@ local ACTION_ON = Color3.fromRGB(120, 220, 160)
 local ACTION_OFF = Color3.fromRGB(58, 64, 78)
 
 local DISPLAY_ORDER = 105
-local TWEEN_TIME = 0.55
 
 local function corner(parent: Instance, r: number?): UICorner
 	local c = Instance.new("UICorner")
@@ -1146,40 +1144,6 @@ function ShopUI.Start()
 	--------------------------------------------------------------------
 	-- Navigation / action / catégories
 	--------------------------------------------------------------------
-
-	local function tweenCameraToCategory(category: CategoryId)
-		local itemShop = findItemShop()
-		if not itemShop then
-			return
-		end
-		local cameraPoint = itemShop:FindFirstChild("CameraPoint_" .. category)
-		local display = itemShop:FindFirstChild("Display_" .. category)
-		local camera = Workspace.CurrentCamera
-		if not (camera and cameraPoint and cameraPoint:IsA("BasePart")) then
-			return
-		end
-		local lookAtPos = cameraPoint.Position + cameraPoint.CFrame.LookVector * 5
-		if display then
-			local displayModel = display :: Instance
-			if displayModel:IsA("Model") then
-				local primary = displayModel.PrimaryPart
-				lookAtPos = if primary then primary.Position else displayModel:GetPivot().Position
-			elseif displayModel:IsA("BasePart") then
-				lookAtPos = displayModel.Position
-			end
-		end
-		local targetCFrame = CFrame.lookAt(cameraPoint.Position, lookAtPos)
-		if browse.cameraTween then
-			browse.cameraTween:Cancel()
-		end
-		local tween = TweenService:Create(
-			camera,
-			TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ CFrame = targetCFrame }
-		)
-		browse.cameraTween = tween
-		tween:Play()
-	end
 
 	local function switchCategory(category: CategoryId)
 		if not browse.active or browse.category == category then
