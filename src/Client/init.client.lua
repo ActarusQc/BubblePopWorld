@@ -22,6 +22,7 @@ local modules = {
 	require(script.WorldChallengesBoardController),
 	require(script.TopCoinsBoardController),
 	require(script.MiniEventController),
+	require(script.ColorRushBubbleEffects),
 	require(script.TutorialController),
 }
 
