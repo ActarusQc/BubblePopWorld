@@ -14,9 +14,9 @@ ChallengeUIConfig.DebugRuntime = false
 --------------------------------------------------------------------
 ChallengeUIConfig.ConsoleSafeMarginX = 36 -- 24–48
 ChallengeUIConfig.ConsoleSafeMarginY = 24 -- 18–36
-ChallengeUIConfig.ConsolePanelWidthRatio = 0.23
-ChallengeUIConfig.ConsolePanelWidthMin = 330
-ChallengeUIConfig.ConsolePanelWidthMax = 430
+ChallengeUIConfig.ConsolePanelWidthRatio = 0.34
+ChallengeUIConfig.ConsolePanelWidthMin = 520
+ChallengeUIConfig.ConsolePanelWidthMax = 700
 
 --------------------------------------------------------------------
 -- Display
