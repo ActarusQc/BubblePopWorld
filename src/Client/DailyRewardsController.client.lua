@@ -16,6 +16,7 @@ local HudChrome = require(Shared.HudChrome)
 local stateRemote = Remotes.Event("DailyRewardsState")
 local requestRemote = Remotes.Event("DailyRewardsRequestState")
 local claimRemote = Remotes.Event("DailyRewardsClaim")
+local toggleShirtRemote = Remotes.Event("DailyRewardsToggleShirt")
 local panelOpenedRemote = Remotes.Event("DailyRewardsPanelOpened")
 
 local BG = Color3.fromRGB(14, 16, 31)
@@ -692,6 +693,31 @@ shirtStatus.TextWrapped = true
 shirtStatus.ZIndex = 22
 shirtStatus.Parent = window
 
+local shirtEquipButton = Instance.new("TextButton")
+shirtEquipButton.Name = "ToggleRewardShirt"
+shirtEquipButton.AnchorPoint = Vector2.new(1, 0)
+shirtEquipButton.Position = UDim2.new(1, -66, 0, 411)
+shirtEquipButton.Size = UDim2.fromOffset(172, 44)
+shirtEquipButton.BackgroundColor3 = Color3.fromRGB(17, 94, 111)
+shirtEquipButton.BorderSizePixel = 0
+shirtEquipButton.Text = "EQUIP SHIRT"
+shirtEquipButton.TextColor3 = WHITE
+shirtEquipButton.TextSize = 12
+shirtEquipButton.Font = Enum.Font.GothamBold
+shirtEquipButton.AutoButtonColor = true
+shirtEquipButton.Selectable = true
+shirtEquipButton.Visible = false
+shirtEquipButton.ZIndex = 24
+shirtEquipButton.Parent = window
+local shirtEquipCorner = Instance.new("UICorner")
+shirtEquipCorner.CornerRadius = UDim.new(0, 13)
+shirtEquipCorner.Parent = shirtEquipButton
+local shirtEquipStroke = Instance.new("UIStroke")
+shirtEquipStroke.Color = ACCENT_LIGHT
+shirtEquipStroke.Transparency = 0.15
+shirtEquipStroke.Thickness = 1.5
+shirtEquipStroke.Parent = shirtEquipButton
+
 local claimButton = Instance.new("TextButton")
 claimButton.Name = "Claim"
 claimButton.AnchorPoint = Vector2.new(1, 1)
@@ -775,6 +801,7 @@ local function applyState(state: any)
 	local currentDay = math.clamp(math.floor(tonumber(state.CycleDay) or 1), 1, 7)
 	local canClaim = state.CanClaim == true
 	local shirtUnlocked = state.ShirtUnlocked == true
+	local shirtEquipped = state.ShirtEquipped == true
 	local rewards = if type(state.Rewards) == "table" then state.Rewards else {}
 
 	streakLabel.Text = ("Login streak: %d day%s  •  Current: Day %d"):format(streak, if streak == 1 then "" else "s", currentDay)
@@ -783,6 +810,12 @@ local function applyState(state: any)
 		then "Exclusive shirt milestone: UNLOCKED"
 		else "Reach Day 7 without missing a day to unlock the exclusive shirt."
 	shirtStatus.TextColor3 = if shirtUnlocked then GREEN else GOLD
+	shirtEquipButton.Visible = shirtUnlocked
+	shirtEquipButton.Active = shirtUnlocked
+	shirtEquipButton.Text = if shirtEquipped then "REMOVE SHIRT" else "EQUIP SHIRT"
+	shirtEquipButton.BackgroundColor3 = if shirtEquipped then Color3.fromRGB(78, 58, 31) else Color3.fromRGB(17, 94, 111)
+	streakLabel.Size = if shirtUnlocked then UDim2.new(1, -360, 0, 25) else UDim2.new(1, -156, 0, 25)
+	shirtStatus.Size = if shirtUnlocked then UDim2.new(1, -360, 0, 24) else UDim2.new(1, -156, 0, 24)
 
 	for day = 1, 7 do
 		local refs = cards[day]
@@ -932,6 +965,16 @@ end)
 
 closeButton.Activated:Connect(function()
 	setPanelVisible(false)
+end)
+
+shirtEquipButton.Activated:Connect(function()
+	if latestState and latestState.ShirtUnlocked == true then
+		shirtEquipButton.Active = false
+		shirtEquipButton.Text = "UPDATING..."
+		pcall(function()
+			toggleShirtRemote:FireServer()
+		end)
+	end
 end)
 
 claimButton.Activated:Connect(function()
