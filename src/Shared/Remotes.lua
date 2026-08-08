@@ -28,6 +28,11 @@ local EVENTS = {
 	"ChallengeTrack",         -- client -> serveur : challengeId suivi UI
 	"ChallengeNotify",        -- serveur -> client : toasts (complete/claim/milestone)
 	"ChallengePanelOpened",   -- client -> serveur : analytics panel
+	-- Daily Rewards / streak de connexion
+	"DailyRewardsState",        -- serveur -> client : état public + calendrier 7 jours
+	"DailyRewardsRequestState", -- client -> serveur : demande état courant
+	"DailyRewardsClaim",        -- client -> serveur : claim du reward du jour
+	"DailyRewardsPanelOpened",  -- client -> serveur : analytics panel
 	-- Tutoriel d'accueil (serveur → client uniquement)
 	"TutorialState",          -- serveur -> client : étape / progrès / célébration / fin
 }
