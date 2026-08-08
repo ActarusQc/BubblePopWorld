@@ -3,6 +3,7 @@
 -- Idle → Countdown → Active → Cleanup → Cooldown → Idle
 
 local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -20,6 +21,7 @@ local DataService = require(script.Parent.DataService)
 local BubbleService = require(script.Parent.BubbleService)
 
 local MiniEventService = {}
+local COLOR_RUSH_TARGET_TAG = "BPW_ColorRushTarget"
 
 local rng = Random.new()
 local started = false
@@ -367,18 +369,10 @@ end
 local function applyColorRushMark(cell: any)
 	local part = cell.part :: BasePart
 	part:SetAttribute("EventMark", "ColorRush")
-	-- Anneau discret (Highlight limité — UIStroke equivalent via SelectionBox léger)
-	local existing = part:FindFirstChild("EventMarkRing")
-	if existing then
-		return
+	part:SetAttribute("EventMarkColor", targetColor or Color3.fromRGB(255, 255, 255))
+	if not CollectionService:HasTag(part, COLOR_RUSH_TARGET_TAG) then
+		CollectionService:AddTag(part, COLOR_RUSH_TARGET_TAG)
 	end
-	local ring = Instance.new("SelectionBox")
-	ring.Name = "EventMarkRing"
-	ring.Adornee = part
-	ring.Color3 = targetColor or Color3.fromRGB(255, 255, 255)
-	ring.LineThickness = 0.04
-	ring.Transparency = MiniEventConfig.Events.ColorRush.MarkTransparency
-	ring.Parent = part
 end
 
 local function removeColorRushMark(cell: any)
@@ -386,9 +380,9 @@ local function removeColorRushMark(cell: any)
 		return
 	end
 	cell.part:SetAttribute("EventMark", nil)
-	local ring = cell.part:FindFirstChild("EventMarkRing")
-	if ring then
-		ring:Destroy()
+	cell.part:SetAttribute("EventMarkColor", nil)
+	if CollectionService:HasTag(cell.part, COLOR_RUSH_TARGET_TAG) then
+		CollectionService:RemoveTag(cell.part, COLOR_RUSH_TARGET_TAG)
 	end
 end
 
@@ -1062,9 +1056,10 @@ function MiniEventService.OnBubblePopped(player: Player, cell: any, eventBonusCo
 		cell.eventVariant = nil
 		if cell.part then
 			cell.part:SetAttribute("EventVariant", nil)
-			local ring = cell.part:FindFirstChild("EventMarkRing")
-			if ring then
-				ring:Destroy()
+			cell.part:SetAttribute("EventMark", nil)
+			cell.part:SetAttribute("EventMarkColor", nil)
+			if CollectionService:HasTag(cell.part, COLOR_RUSH_TARGET_TAG) then
+				CollectionService:RemoveTag(cell.part, COLOR_RUSH_TARGET_TAG)
 			end
 		end
 	end
