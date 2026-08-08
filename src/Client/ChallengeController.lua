@@ -1621,6 +1621,7 @@ end
 local function ensureGamepadSelectables()
 	local invBtn: GuiButton? = nil
 	local musicBtn: GuiButton? = nil
+	local dailyRewardsBtn: GuiButton? = nil
 	if boundActionColumn then
 		local inv = boundActionColumn:FindFirstChild(HudChrome.INVENTORY_BUTTON_NAME, true)
 		if inv and inv:IsA("GuiButton") then
@@ -1631,6 +1632,11 @@ local function ensureGamepadSelectables()
 		if mus and mus:IsA("GuiButton") then
 			musicBtn = mus
 			wireSelectable(mus)
+		end
+		local daily = boundActionColumn:FindFirstChild("DailyRewardsButton", true)
+		if daily and daily:IsA("GuiButton") then
+			dailyRewardsBtn = daily
+			wireSelectable(daily)
 		end
 	end
 	if challengesBtn then
@@ -1655,7 +1661,14 @@ local function ensureGamepadSelectables()
 		challengesBtn.NextSelectionDown = musicBtn
 		musicBtn.NextSelectionUp = challengesBtn
 	end
-	if musicBtn and invBtn then
+	if musicBtn and dailyRewardsBtn then
+		musicBtn.NextSelectionDown = dailyRewardsBtn
+		dailyRewardsBtn.NextSelectionUp = musicBtn
+	end
+	if dailyRewardsBtn and invBtn then
+		dailyRewardsBtn.NextSelectionDown = invBtn
+		invBtn.NextSelectionUp = dailyRewardsBtn
+	elseif musicBtn and invBtn then
 		musicBtn.NextSelectionDown = invBtn
 		invBtn.NextSelectionUp = musicBtn
 	end
