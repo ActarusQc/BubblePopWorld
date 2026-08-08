@@ -6,6 +6,7 @@ local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GuiService = game:GetService("GuiService")
 local StarterGui = game:GetService("StarterGui")
+local SoundService = game:GetService("SoundService")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -225,6 +226,12 @@ function HUD.Start()
 	gui.DisplayOrder = 10
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = playerGui
+
+	local sellSound = Instance.new("Sound")
+	sellSound.Name = "BPW_SellCoins"
+	sellSound.SoundId = "rbxassetid://139075138086569"
+	sellSound.Volume = 0.65
+	sellSound.Parent = SoundService
 
 	local panelW = HudChrome.DESKTOP_PANEL_WIDTH
 	local panelH = HudChrome.DESKTOP_PANEL_HEIGHT
@@ -569,7 +576,14 @@ function HUD.Start()
 		goalFill.Size = UDim2.new(math.clamp(total / target, 0, 1), 0, 1, 0)
 	end)
 
-	Remotes.Event("Announce").OnClientEvent:Connect(toast)
+	Remotes.Event("Announce").OnClientEvent:Connect(function(message, kind)
+		if kind == "sell_success" then
+			sellSound:Stop()
+			sellSound.TimePosition = 0
+			sellSound:Play()
+		end
+		toast(message, kind)
+	end)
 
 	-- Colonne d'actions : Inventory (InventoryUI) → Challenges → Music
 	local actionColumn = Instance.new("Frame")
