@@ -779,6 +779,7 @@ claimStroke.Parent = claimButton
 
 local function setPanelVisible(visible: boolean)
 	panelVisible = visible
+	player:SetAttribute("DailyRewardsModalOpen", visible)
 	overlay.Visible = visible
 	openButton.Visible = not visible
 	if playerControls then
