@@ -13,6 +13,7 @@ local CAMERA_BACK_DISTANCE = 14
 local CAMERA_HEIGHT = 7
 local CAMERA_LOOK_HEIGHT = 2
 local MODAL_WAIT_TIMEOUT_SEC = 15
+local RESET_ZOOM_DISTANCE = 12
 local MIN_ZOOM_DISTANCE = 6
 local MAX_ZOOM_DISTANCE = 18
 
@@ -121,12 +122,25 @@ local function applySpawnCamera(character: Model)
 
 	camera = Workspace.CurrentCamera or camera
 	camera.CameraSubject = humanoid
+	camera.Focus = CFrame.new(lookAt)
+
+	-- Réinitialiser aussi la distance mémorisée à l'intérieur du contrôleur Roblox.
+	-- Une simple CameraMaxZoomDistance ne réduit pas toujours un ancien zoom déjà actif.
+	player.CameraMinZoomDistance = RESET_ZOOM_DISTANCE
+	player.CameraMaxZoomDistance = RESET_ZOOM_DISTANCE
 	camera.CFrame = safeCFrame
 	camera.CameraType = Enum.CameraType.Custom
-	RunService.RenderStepped:Wait()
-	camera.CFrame = safeCFrame
+	for _ = 1, 12 do
+		RunService.RenderStepped:Wait()
+		camera = Workspace.CurrentCamera or camera
+		camera.CameraSubject = humanoid
+		camera.Focus = CFrame.new(lookAt)
+		camera.CFrame = safeCFrame
+	end
+	player.CameraMinZoomDistance = MIN_ZOOM_DISTANCE
+	player.CameraMaxZoomDistance = MAX_ZOOM_DISTANCE
 	initialCameraCompleted = true
-	print("[HubSpawnCamera] released to Custom with bounded zoom")
+	print("[HubSpawnCamera] released to Custom after forced zoom reset")
 end
 
 local function onCharacter(character: Model)
