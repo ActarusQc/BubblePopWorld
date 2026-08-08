@@ -356,8 +356,10 @@ closeButton.Size = UDim2.fromOffset(70, 70)
 closeButton.BackgroundColor3 = Color3.fromRGB(10, 35, 72)
 closeButton.AutoButtonColor = false
 closeButton.Text = "X"
-closeButton.TextColor3 = WHITE
-closeButton.TextSize = 29
+closeButton.TextColor3 = GOLD_LIGHT
+closeButton.TextStrokeColor3 = Color3.fromRGB(40, 24, 5)
+closeButton.TextStrokeTransparency = 0.15
+closeButton.TextSize = 31
 closeButton.Font = Enum.Font.GothamBlack
 closeButton.Selectable = true
 closeButton.ZIndex = 23
@@ -382,12 +384,13 @@ closeGradient.Color = ColorSequence.new({
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 20, 47)),
 })
 closeGradient.Rotation = 90
+closeGradient.Enabled = false
 closeGradient.Parent = closeButton
 
 closeButton.MouseEnter:Connect(function()
 	TweenService:Create(closeButton, TweenInfo.new(0.12), {
 		BackgroundColor3 = Color3.fromRGB(19, 82, 135),
-		TextColor3 = ACCENT_LIGHT,
+		TextColor3 = GOLD,
 	}):Play()
 	TweenService:Create(closeGlow, TweenInfo.new(0.12), {
 		Transparency = 0.3,
@@ -397,7 +400,7 @@ end)
 closeButton.MouseLeave:Connect(function()
 	TweenService:Create(closeButton, TweenInfo.new(0.12), {
 		BackgroundColor3 = Color3.fromRGB(10, 35, 72),
-		TextColor3 = WHITE,
+		TextColor3 = GOLD_LIGHT,
 	}):Play()
 	TweenService:Create(closeGlow, TweenInfo.new(0.12), {
 		Transparency = 0.58,
