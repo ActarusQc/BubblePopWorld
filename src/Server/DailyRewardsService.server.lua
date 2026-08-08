@@ -90,13 +90,13 @@ local function pushState(player: Player, extra: any?)
 	end)
 end
 
-local function ensureTodayVisit(player: Player): (any?, any?)
+local function ensureTodayVisit(player: Player, dayKeyOverride: number?): (any?, any?)
 	local profile = validLoadedProfile(player)
 	if not profile then
 		return nil, nil
 	end
 
-	local key = todayKey()
+	local key = dayKeyOverride or todayKey()
 	local state, visit = DailyRewardsLogic.RecordVisit(profile.DailyRewards, key)
 	if visit.Changed then
 		persistState(profile, state)
@@ -137,12 +137,14 @@ local function claimToday(player: Player)
 	claimBusy[player] = true
 
 	local ok, err = xpcall(function()
-		local profile, state = ensureTodayVisit(player)
+		-- Une seule frontière de journée pour toute la transaction, même si minuit UTC
+		-- tombe exactement pendant le clic.
+		local key = todayKey()
+		local profile, state = ensureTodayVisit(player, key)
 		if not profile or not state then
 			return
 		end
 
-		local key = todayKey()
 		if not DailyRewardsLogic.CanClaim(state, key) then
 			pushState(player, { ClaimResult = "already_claimed" })
 			return
@@ -152,6 +154,14 @@ local function claimToday(player: Player)
 		local reward = DailyRewardsConfig.GetReward(cycleDay)
 		if not reward then
 			pushState(player, { ClaimResult = "invalid_reward" })
+			return
+		end
+
+		-- Préparer le marker idempotent avant de créditer les Coins, mais ne le persister
+		-- qu'après un crédit réussi. Ainsi un échec de grant ne consomme jamais le claim.
+		local claimedState, marked, code = DailyRewardsLogic.MarkClaimed(state, key)
+		if not marked then
+			pushState(player, { ClaimResult = code })
 			return
 		end
 
@@ -166,12 +176,6 @@ local function claimToday(player: Player)
 			endingBalance = balance
 		end
 
-		local claimedState, marked, code = DailyRewardsLogic.MarkClaimed(state, key)
-		if not marked then
-			-- En pratique impossible sous claimBusy; ne jamais écraser l'état si le marker refuse.
-			pushState(player, { ClaimResult = code })
-			return
-		end
 		if reward.RewardType == "ExclusiveShirt" then
 			claimedState.ShirtUnlocked = true
 		end
@@ -276,7 +280,7 @@ local function start()
 				observedDay = currentDay
 				for _, player in ipairs(Players:GetPlayers()) do
 					if validLoadedProfile(player) then
-						ensureTodayVisit(player)
+						ensureTodayVisit(player, currentDay)
 						pushState(player)
 					end
 				end
@@ -324,7 +328,7 @@ local function start()
 			state.LastVisitDayKey = key - 1
 			state.LastClaimDayKey = math.min(state.LastClaimDayKey, key - 1)
 			persistState(profile, state)
-			ensureTodayVisit(p)
+			ensureTodayVisit(p, key)
 			pushState(p)
 			return true
 		end
