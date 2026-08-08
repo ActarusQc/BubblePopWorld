@@ -9,9 +9,10 @@ local Workspace = game:GetService("Workspace")
 local HubSpawnCamera = {}
 
 local MAX_DISTANCE = 24
-local CAMERA_EYE_OFFSET = Vector3.new(0, 7, -14)
-local CAMERA_LOOK_OFFSET = Vector3.new(0, 2, 0)
-local HOLD_SCRIPTABLE_SEC = 0.15
+local CAMERA_BACK_DISTANCE = 14
+local CAMERA_HEIGHT = 7
+local CAMERA_LOOK_HEIGHT = 2
+local HOLD_SCRIPTABLE_SEC = 0.35
 
 local player = Players.LocalPlayer
 
@@ -76,9 +77,25 @@ local function applySpawnCamera(character: Model)
 	end
 
 	-- Séquence validée manuellement : Scriptable → hold → Custom.
+	local lookAt = root.Position + Vector3.new(0, CAMERA_LOOK_HEIGHT, 0)
+	local desiredPosition = root.Position
+		- root.CFrame.LookVector * CAMERA_BACK_DISTANCE
+		+ Vector3.new(0, CAMERA_HEIGHT, 0)
+
+	-- Ne jamais placer la caméra à l'intérieur d'un panneau ou d'un décor.
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { character }
+	local direction = desiredPosition - lookAt
+	local obstruction = Workspace:Raycast(lookAt, direction, rayParams)
+	if obstruction then
+		desiredPosition = obstruction.Position + obstruction.Normal * 0.8
+	end
+
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame = CFrame.lookAt(root.Position + CAMERA_EYE_OFFSET, root.Position + CAMERA_LOOK_OFFSET)
-	print("[HubSpawnCamera] initial camera applied")
+	camera.CameraSubject = humanoid
+	camera.CFrame = CFrame.lookAt(desiredPosition, lookAt)
+	print("[HubSpawnCamera] safe initial camera applied")
 
 	task.wait(HOLD_SCRIPTABLE_SEC)
 
