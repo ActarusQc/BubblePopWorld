@@ -39,6 +39,7 @@ local eventSlot: Frame? = nil
 local scroll: ScrollingFrame? = nil
 local countdownLabel: TextLabel? = nil
 local closeBtn: TextButton? = nil
+local dockedMinimized = false
 local challengesBtn: TextButton? = nil
 local eventBadge: Frame? = nil
 local tabChallenges: TextButton? = nil
@@ -1231,7 +1232,7 @@ local function applyState(payload: any)
 	end
 	if isPermanentDock() and gui and panel and dock then
 		gui.Enabled = true
-		panel.Visible = true
+		panel.Visible = not dockedMinimized
 		dock.Visible = true
 	end
 end
@@ -1527,11 +1528,20 @@ local function applyChromeForMode()
 			countdownLabel.TextSize = 11
 			countdownLabel.Position = UDim2.fromOffset(12, 24)
 		end
-		closeBtn.Size = UDim2.fromOffset(26, 26)
-		closeBtn.Position = UDim2.new(1, -32, 0, 6)
-		closeBtn.Visible = false
+		local closeSize = if isConsoleDocked() then 40 else 32
+		closeBtn.Size = UDim2.fromOffset(closeSize, closeSize)
+		closeBtn.Position = UDim2.new(1, -(closeSize + 6), 0, 4)
+		closeBtn.TextSize = if isConsoleDocked() then 20 else 16
+		closeBtn.Visible = true
 		if scroll then
-			scroll.ScrollBarThickness = 5
+			scroll.ScrollBarThickness = if isConsoleDocked() then 10 else 6
+		end
+		if isConsoleDocked() and panel then
+			for _, item in ipairs(panel:GetDescendants()) do
+				if item:IsA("TextLabel") or item:IsA("TextButton") then
+					item.TextSize = math.max(item.TextSize, 15)
+				end
+			end
 		end
 	end
 end
@@ -1774,7 +1784,7 @@ local function applyDesktopDockedLayout(vp: Vector2)
 	panel.Size = UDim2.new(0, panelW, 1, 0)
 
 	if closeBtn then
-		closeBtn.Visible = false
+		closeBtn.Visible = true
 	end
 	if challengesBtn then
 		challengesBtn.Visible = true
@@ -2292,6 +2302,7 @@ showDockedChallengesPanel = function()
 
 	mobileDrawerState = "Closed"
 	open = false
+	dockedMinimized = false
 	cancelPanelTween()
 
 	if layoutMode == HudChrome.LAYOUT_CONSOLE_DOCKED then
@@ -2405,6 +2416,19 @@ end
 function ChallengeController.Close()
 	if isMobileDrawer() then
 		setOpen(false, true)
+		return
+	end
+	if panel and dock and actionRail then
+		dockedMinimized = true
+		panel.Visible = false
+		panel.Active = false
+		actionRail.Visible = true
+		local railW = HudChrome.CHALLENGES_RAIL_WIDTH or 48
+		dock.Size = UDim2.new(0, railW, 1, 0)
+		if challengesBtn then
+			setButtonActive(challengesBtn, false)
+			GuiService.SelectedObject = challengesBtn
+		end
 	end
 end
 
