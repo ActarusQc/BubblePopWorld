@@ -37,6 +37,7 @@ local cards: { [number]: { frame: Frame, stroke: UIStroke, icon: ImageLabel, rew
 local panelVisible = false
 local pulseTween: Tween? = nil
 local previousCanClaim: boolean? = nil
+local receivedInitialState = false
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "BPW_DailyRewards"
@@ -905,11 +906,15 @@ local function applyState(state: any)
 	claimButton.Text = if canClaim then ("CLAIM DAY %d"):format(currentDay) else "CLAIMED TODAY"
 	refreshPulse(canClaim)
 
-	local shouldAutoOpen = canClaim and previousCanClaim ~= true
+	-- Toujours présenter le calendrier à l'arrivée. Ensuite, ne le rouvrir
+	-- automatiquement que lorsqu'une nouvelle récompense devient disponible.
+	local isInitialState = not receivedInitialState
+	receivedInitialState = true
+	local shouldAutoOpen = isInitialState or (canClaim and previousCanClaim ~= true)
 	previousCanClaim = canClaim
 	if shouldAutoOpen and not panelVisible then
 		task.defer(function()
-			if latestState == state and latestState.CanClaim == true then
+			if latestState == state then
 				setPanelVisible(true)
 			end
 		end)
