@@ -1,6 +1,6 @@
 --!strict
 -- Boutique walk-in : browse local par mur (Skills / Items / Cosmetics).
--- Caméra, freeze personnage, UI compacte et présentoir sont 100% locaux :
+-- Caméra inchangée, freeze personnage et boutique premium sont 100% locaux :
 -- aucun remote enter/exit browse, aucune mutation de Display_*/Wall_* serveur.
 
 local Players = game:GetService("Players")
@@ -145,11 +145,11 @@ function ShopUI.Start()
 
 	local panel = Instance.new("Frame")
 	panel.Name = "BrowsePanel"
-	panel.AnchorPoint = Vector2.new(0.5, 1)
-	panel.Position = UDim2.new(0.5, 0, 1, -22)
-	panel.Size = UDim2.new(0.9, 0, 0, 190)
-	panel.BackgroundColor3 = BG
-	panel.BackgroundTransparency = 0.08
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.new(0.5, 0, 0.52, 0)
+	panel.Size = UDim2.new(0.92, 0, 0.82, 0)
+	panel.BackgroundColor3 = Color3.fromRGB(27, 22, 58)
+	panel.BackgroundTransparency = 0.02
 	panel.BorderSizePixel = 0
 	panel.Visible = false
 	panel.ZIndex = 2
@@ -157,21 +157,21 @@ function ShopUI.Start()
 	local panelCorner = corner(panel, 18)
 
 	local sizeConstraint = Instance.new("UISizeConstraint")
-	sizeConstraint.MinSize = Vector2.new(300, 190)
-	sizeConstraint.MaxSize = Vector2.new(640, 220)
+	sizeConstraint.MinSize = Vector2.new(320, 360)
+	sizeConstraint.MaxSize = Vector2.new(1180, 720)
 	sizeConstraint.Parent = panel
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(90, 150, 210)
-	stroke.Thickness = 1.5
-	stroke.Transparency = 0.4
+	stroke.Color = Color3.fromRGB(164, 104, 255)
+	stroke.Thickness = 4
+	stroke.Transparency = 0.08
 	stroke.Parent = panel
 
 	-- Header : catégorie + position + solde coins + fermer
 	local header = Instance.new("Frame")
 	header.Name = "Header"
-	header.Size = UDim2.new(1, -24, 0, 30)
-	header.Position = UDim2.new(0, 12, 0, 10)
+	header.Size = UDim2.new(1, -48, 0, 92)
+	header.Position = UDim2.new(0, 24, 0, 18)
 	header.BackgroundTransparency = 1
 	header.ZIndex = 3
 	header.Parent = panel
@@ -184,7 +184,7 @@ function ShopUI.Start()
 	categoryTitle.TextSize = 18
 	categoryTitle.TextXAlignment = Enum.TextXAlignment.Left
 	categoryTitle.TextColor3 = WHITE
-	categoryTitle.Text = ""
+	categoryTitle.Text = "PREMIUM SHOP"
 	categoryTitle.ZIndex = 3
 	categoryTitle.Parent = header
 
@@ -267,11 +267,36 @@ function ShopUI.Start()
 	-- Corps : flèche gauche | viewport + texte | flèche droite
 	local body = Instance.new("Frame")
 	body.Name = "Body"
-	body.Size = UDim2.new(1, -24, 1, -84)
-	body.Position = UDim2.new(0, 12, 0, 46)
+	body.Size = UDim2.new(1, -48, 1, -148)
+	body.Position = UDim2.new(0, 24, 0, 124)
 	body.BackgroundTransparency = 1
 	body.ZIndex = 3
 	body.Parent = panel
+
+	local itemGrid = Instance.new("ScrollingFrame")
+	itemGrid.Name = "ItemGrid"
+	itemGrid.Size = UDim2.new(0.58, -10, 1, 0)
+	itemGrid.BackgroundColor3 = Color3.fromRGB(42, 34, 82)
+	itemGrid.BackgroundTransparency = 0.08
+	itemGrid.BorderSizePixel = 0
+	itemGrid.ScrollBarThickness = 8
+	itemGrid.ScrollBarImageColor3 = Color3.fromRGB(196, 128, 255)
+	itemGrid.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	itemGrid.CanvasSize = UDim2.new()
+	itemGrid.ZIndex = 3
+	itemGrid.Parent = body
+	corner(itemGrid, 16)
+	local itemGridPadding = Instance.new("UIPadding")
+	itemGridPadding.PaddingTop = UDim.new(0, 12)
+	itemGridPadding.PaddingBottom = UDim.new(0, 12)
+	itemGridPadding.PaddingLeft = UDim.new(0, 12)
+	itemGridPadding.PaddingRight = UDim.new(0, 12)
+	itemGridPadding.Parent = itemGrid
+	local itemGridLayout = Instance.new("UIGridLayout")
+	itemGridLayout.CellSize = UDim2.new(0.5, -8, 0, 116)
+	itemGridLayout.CellPadding = UDim2.fromOffset(12, 12)
+	itemGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	itemGridLayout.Parent = itemGrid
 
 	local leftBtn = Instance.new("TextButton")
 	leftBtn.Name = "LeftArrow"
@@ -288,6 +313,7 @@ function ShopUI.Start()
 	leftBtn.Selectable = true
 	leftBtn.ZIndex = 4
 	leftBtn.Parent = body
+	leftBtn.Visible = false
 	local leftCorner = corner(leftBtn, 14)
 
 	local rightBtn = Instance.new("TextButton")
@@ -305,18 +331,22 @@ function ShopUI.Start()
 	rightBtn.Selectable = true
 	rightBtn.ZIndex = 4
 	rightBtn.Parent = body
+	rightBtn.Visible = false
 	local rightCorner = corner(rightBtn, 14)
 
 	local content = Instance.new("Frame")
 	content.Name = "Content"
-	content.Size = UDim2.new(1, -144, 1, 0)
-	content.Position = UDim2.new(0, 68, 0, 0)
+	content.Size = UDim2.new(0.42, -10, 1, 0)
+	content.Position = UDim2.new(0.58, 20, 0, 0)
+	content.BackgroundColor3 = Color3.fromRGB(51, 42, 94)
+	content.BackgroundTransparency = 0.08
 	content.BackgroundTransparency = 1
 	content.ZIndex = 3
 	content.Parent = body
+	corner(content, 16)
 
 	-- Présentoir local : ViewportFrame + modèle stylisé (jamais Display_* serveur).
-	local VIEWPORT_SIZE = 116
+	local VIEWPORT_SIZE = 190
 	local VIEWPORT_FOV = 40
 
 	local defaultBackground = ShopViewportModels.GetBackground(nil)
@@ -326,7 +356,8 @@ function ShopUI.Start()
 	local previewBackground = Instance.new("Frame")
 	previewBackground.Name = "PreviewBackground"
 	previewBackground.Size = UDim2.fromOffset(VIEWPORT_SIZE, VIEWPORT_SIZE)
-	previewBackground.Position = UDim2.new(0, 0, 0.5, -VIEWPORT_SIZE / 2)
+	previewBackground.AnchorPoint = Vector2.new(0.5, 0)
+	previewBackground.Position = UDim2.new(0.5, 0, 0, 18)
 	previewBackground.BackgroundColor3 = Color3.new(1, 1, 1)
 	previewBackground.BackgroundTransparency = 0
 	previewBackground.BorderSizePixel = 0
@@ -348,7 +379,8 @@ function ShopUI.Start()
 	local viewport = Instance.new("ViewportFrame")
 	viewport.Name = "Presentation"
 	viewport.Size = UDim2.fromOffset(VIEWPORT_SIZE - 6, VIEWPORT_SIZE - 6)
-	viewport.Position = UDim2.new(0, 3, 0.5, -(VIEWPORT_SIZE - 6) / 2)
+	viewport.AnchorPoint = Vector2.new(0.5, 0)
+	viewport.Position = UDim2.new(0.5, 0, 0, 21)
 	viewport.BackgroundColor3 = ShopViewportModels.GetViewportBackground(nil)
 	viewport.BackgroundTransparency = 0
 	viewport.BorderSizePixel = 0
@@ -381,8 +413,8 @@ function ShopUI.Start()
 
 	local textArea = Instance.new("Frame")
 	textArea.Name = "TextArea"
-	textArea.Size = UDim2.new(1, -132, 1, 0)
-	textArea.Position = UDim2.new(0, 132, 0, 0)
+	textArea.Size = UDim2.new(1, -32, 0, 138)
+	textArea.Position = UDim2.new(0, 16, 0, 220)
 	textArea.BackgroundTransparency = 1
 	textArea.ZIndex = 3
 	textArea.Parent = content
@@ -445,7 +477,7 @@ function ShopUI.Start()
 	actionBtn.AutoButtonColor = true
 	actionBtn.Selectable = true
 	actionBtn.ZIndex = 3
-	actionBtn.Parent = panel
+	actionBtn.Parent = content
 	local actionCorner = corner(actionBtn, 10)
 	L10nUtil.dynamic(actionBtn, "")
 
@@ -504,11 +536,13 @@ function ShopUI.Start()
 		currentLayout = layout
 
 		local p = layout.Panel
-		panel.Size = UDim2.new(p.WidthScale, p.WidthOffset, p.HeightScale, p.HeightOffset)
-		panel.Position = UDim2.new(p.XScale, p.XOffset, p.YScale, p.YOffset)
-		sizeConstraint.MinSize = Vector2.new(p.MinSize.X, p.MinSize.Y)
-		sizeConstraint.MaxSize = Vector2.new(p.MaxSize.X, p.MaxSize.Y)
-		panelCorner.CornerRadius = UDim.new(0, p.Corner)
+		local compact = container.X < 760 or container.Y < 560
+		panel.AnchorPoint = Vector2.new(0.5, 0.5)
+		panel.Size = if compact then UDim2.new(0.96, 0, 0.88, 0) else UDim2.new(0.92, 0, 0.82, 0)
+		panel.Position = UDim2.new(0.5, 0, 0.52, 0)
+		sizeConstraint.MinSize = Vector2.new(320, 360)
+		sizeConstraint.MaxSize = Vector2.new(1180, 720)
+		panelCorner.CornerRadius = UDim.new(0, if compact then 14 else 22)
 
 		local h = layout.Header
 		header.Size = UDim2.new(1, -h.InsetX * 2, 0, h.Height)
@@ -527,10 +561,12 @@ function ShopUI.Start()
 		closeCorner.CornerRadius = UDim.new(0, h.CloseCorner)
 
 		local b = layout.Body
-		body.Size = UDim2.new(1, -b.InsetX * 2, b.HeightScale, b.HeightOffset)
-		body.Position = UDim2.new(0, b.InsetX, 0, b.OffsetY)
-		content.Size = UDim2.new(1, b.ContentWidthOffset, 1, 0)
-		content.Position = UDim2.new(0, b.ContentLeft, 0, 0)
+		body.Size = UDim2.new(1, -48, 1, -148)
+		body.Position = UDim2.new(0, 24, 0, 124)
+		itemGrid.Size = if compact then UDim2.new(1, 0, 0.48, 0) else UDim2.new(0.58, -10, 1, 0)
+		itemGridLayout.CellSize = if compact then UDim2.new(1, -4, 0, 100) else UDim2.new(0.5, -8, 0, 116)
+		content.Size = if compact then UDim2.new(1, 0, 0.49, 0) else UDim2.new(0.42, -10, 1, 0)
+		content.Position = if compact then UDim2.new(0, 0, 0.51, 0) else UDim2.new(0.58, 20, 0, 0)
 
 		local a = layout.Arrow
 		leftBtn.Size = UDim2.fromOffset(a.Size, a.Size)
@@ -567,7 +603,21 @@ function ShopUI.Start()
 		actionBtn.Size = UDim2.fromOffset(act.Width, act.Height)
 		actionBtn.Position = UDim2.new(act.XScale, act.XOffset, act.YScale, act.YOffset)
 		actionBtn.TextSize = act.TextSize
-		actionCorner.CornerRadius = UDim.new(0, act.Corner)
+		actionBtn.AnchorPoint = Vector2.new(0.5, 1)
+		actionBtn.Size = UDim2.new(1, -32, 0, if compact then 44 else 54)
+		actionBtn.Position = UDim2.new(0.5, 0, 1, -16)
+		actionBtn.TextSize = if compact then 16 else 20
+		actionCorner.CornerRadius = UDim.new(0, 12)
+
+		local previewSize = if compact then 104 else math.clamp(math.floor(content.AbsoluteSize.Y * 0.42), 150, 210)
+		previewBackground.Size = UDim2.fromOffset(previewSize, previewSize)
+		previewBackground.AnchorPoint = Vector2.new(0.5, 0)
+		previewBackground.Position = UDim2.new(0.5, 0, 0, 16)
+		viewport.Size = UDim2.fromOffset(previewSize - 8, previewSize - 8)
+		viewport.AnchorPoint = Vector2.new(0.5, 0)
+		viewport.Position = UDim2.new(0.5, 0, 0, 20)
+		textArea.Size = UDim2.new(1, -32, 0, if compact then 92 else 138)
+		textArea.Position = UDim2.new(0, 16, 0, previewSize + 24)
 	end
 
 	-- Plusieurs événements d'entrée peuvent arriver en rafale : on temporise, et
@@ -732,6 +782,57 @@ function ShopUI.Start()
 		L10nUtil.dynamic(coinsLabel, comma(browse.coins) .. " " .. L10n.CoinsUnit)
 
 		updatePresentation(item)
+
+		for _, child in ipairs(itemGrid:GetChildren()) do
+			if child:IsA("GuiButton") then
+				child:Destroy()
+			end
+		end
+		for itemIndex, row in ipairs(browse.items) do
+			local card = Instance.new("TextButton")
+			card.Name = "ItemCard_" .. row.Id
+			card.LayoutOrder = itemIndex
+			card.BackgroundColor3 = if itemIndex == browse.index then Color3.fromRGB(101, 66, 170) else Color3.fromRGB(58, 47, 105)
+			card.Text = ""
+			card.BorderSizePixel = 0
+			card.AutoButtonColor = true
+			card.Selectable = true
+			card.ZIndex = 4
+			card.Parent = itemGrid
+			corner(card, 12)
+			local cardStroke = Instance.new("UIStroke")
+			cardStroke.Color = if itemIndex == browse.index then Color3.fromRGB(255, 201, 74) else Color3.fromRGB(131, 101, 191)
+			cardStroke.Thickness = if itemIndex == browse.index then 3 else 1.5
+			cardStroke.Transparency = 0.08
+			cardStroke.Parent = card
+			local cardName = Instance.new("TextLabel")
+			cardName.Size = UDim2.new(1, -20, 0, 42)
+			cardName.Position = UDim2.fromOffset(10, 10)
+			cardName.BackgroundTransparency = 1
+			cardName.Font = Enum.Font.GothamBlack
+			cardName.TextSize = 16
+			cardName.TextWrapped = true
+			cardName.TextColor3 = WHITE
+			cardName.Text = row.Label
+			cardName.ZIndex = 5
+			cardName.Parent = card
+			local cardPrice = Instance.new("TextLabel")
+			cardPrice.Size = UDim2.new(1, -20, 0, 26)
+			cardPrice.Position = UDim2.new(0, 10, 1, -38)
+			cardPrice.BackgroundColor3 = Color3.fromRGB(91, 186, 73)
+			cardPrice.BorderSizePixel = 0
+			cardPrice.Font = Enum.Font.GothamBold
+			cardPrice.TextSize = 15
+			cardPrice.TextColor3 = Color3.fromRGB(255, 255, 255)
+			cardPrice.Text = if type(row.Cost) == "number" then comma(row.Cost) .. " " .. L10n.CoinsUnit else "—"
+			cardPrice.ZIndex = 5
+			cardPrice.Parent = card
+			corner(cardPrice, 8)
+			card.Activated:Connect(function()
+				browse.index = itemIndex
+				refreshPresentation()
+			end)
+		end
 
 		if not item then
 			L10nUtil.dynamic(nameLabel, "")
@@ -918,12 +1019,6 @@ function ShopUI.Start()
 			error("ItemShop introuvable dans Workspace")
 		end
 
-		local cameraPoint = itemShop:FindFirstChild("CameraPoint_" .. category)
-		local display = itemShop:FindFirstChild("Display_" .. category)
-		if not (cameraPoint and cameraPoint:IsA("BasePart")) then
-			error("CameraPoint_" .. category .. " introuvable")
-		end
-
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not (character and humanoid) then
@@ -954,7 +1049,7 @@ function ShopUI.Start()
 
 		-- 2) Mémoriser puis masquer localement corps, accessoires et outils équipés.
 		table.clear(browse.localTransparency)
-		ShopAvatarVisibility.HideCharacter(character, browse.localTransparency)
+		-- Le personnage reste visible : la caméra du joueur n'est plus remplacée.
 		table.insert(
 			browse.tempConns,
 			character.DescendantAdded:Connect(function(descendant)
@@ -997,26 +1092,7 @@ function ShopUI.Start()
 			prompt.Enabled = false
 		end
 
-		-- 6) Tween caméra Scriptable vers CameraPoint_<Category>, LookAt Display_<Category>.
-		camera.CameraType = Enum.CameraType.Scriptable
-		local lookAtPos = cameraPoint.Position + cameraPoint.CFrame.LookVector * 5
-		if display then
-			local displayModel = display :: Instance
-			if displayModel:IsA("Model") then
-				local primary = displayModel.PrimaryPart
-				lookAtPos = if primary then primary.Position else displayModel:GetPivot().Position
-			elseif displayModel:IsA("BasePart") then
-				lookAtPos = displayModel.Position
-			end
-		end
-		local targetCFrame = CFrame.lookAt(cameraPoint.Position, lookAtPos)
-		local tween = TweenService:Create(
-			camera,
-			TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ CFrame = targetCFrame }
-		)
-		browse.cameraTween = tween
-		tween:Play()
+		-- 6) La caméra reste strictement inchangée pendant l'ouverture de la boutique.
 
 		-- 7) Charger les données catégorie, index 1, UI compacte visible.
 		local ok, data = pcall(function()
@@ -1124,7 +1200,6 @@ function ShopUI.Start()
 		browse.items = rows
 		browse.index = 1
 		browse.coins = if type(data.Coins) == "number" then data.Coins else browse.coins
-		tweenCameraToCategory(category)
 		refreshPresentation()
 	end
 
