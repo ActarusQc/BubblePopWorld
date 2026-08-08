@@ -146,7 +146,7 @@ function ShopUI.Start()
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.new(0.5, 0, 0.52, 0)
 	panel.Size = UDim2.new(0.92, 0, 0.82, 0)
-	panel.BackgroundColor3 = Color3.fromRGB(27, 22, 58)
+	panel.BackgroundColor3 = Color3.fromRGB(70, 58, 119)
 	panel.BackgroundTransparency = 0.02
 	panel.BorderSizePixel = 0
 	panel.Visible = false
@@ -160,16 +160,63 @@ function ShopUI.Start()
 	sizeConstraint.Parent = panel
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(164, 104, 255)
+	stroke.Color = Color3.fromRGB(122, 99, 184)
 	stroke.Thickness = 4
 	stroke.Transparency = 0.08
 	stroke.Parent = panel
 
-	-- Header : catégorie + position + solde coins + fermer
+	local ribbonShadow = Instance.new("Frame")
+	ribbonShadow.Name = "RibbonShadow"
+	ribbonShadow.AnchorPoint = Vector2.new(0.5, 0)
+	ribbonShadow.Position = UDim2.new(0.5, 0, 0, -18)
+	ribbonShadow.Size = UDim2.new(0.58, 0, 0, 82)
+	ribbonShadow.BackgroundColor3 = Color3.fromRGB(91, 20, 45)
+	ribbonShadow.BorderSizePixel = 0
+	ribbonShadow.ZIndex = 4
+	ribbonShadow.Parent = panel
+	corner(ribbonShadow, 12)
+
+	local ribbon = Instance.new("Frame")
+	ribbon.Name = "PremiumRibbon"
+	ribbon.AnchorPoint = Vector2.new(0.5, 0)
+	ribbon.Position = UDim2.new(0.5, 0, 0, -24)
+	ribbon.Size = UDim2.new(0.54, 0, 0, 72)
+	ribbon.BackgroundColor3 = Color3.fromRGB(197, 53, 71)
+	ribbon.BorderSizePixel = 0
+	ribbon.ZIndex = 5
+	ribbon.Parent = panel
+	corner(ribbon, 10)
+	local ribbonStroke = Instance.new("UIStroke")
+	ribbonStroke.Color = Color3.fromRGB(255, 174, 47)
+	ribbonStroke.Thickness = 3
+	ribbonStroke.Parent = ribbon
+	local ribbonGradient = Instance.new("UIGradient")
+	ribbonGradient.Color = ColorSequence.new(Color3.fromRGB(224, 71, 84), Color3.fromRGB(166, 37, 61))
+	ribbonGradient.Rotation = 90
+	ribbonGradient.Parent = ribbon
+	local shopTitle = Instance.new("TextLabel")
+	shopTitle.Size = UDim2.fromScale(1, 1)
+	shopTitle.BackgroundTransparency = 1
+	shopTitle.Font = Enum.Font.GothamBlack
+	shopTitle.Text = "PREMIUM SHOP"
+	shopTitle.TextColor3 = Color3.fromRGB(255, 202, 54)
+	shopTitle.TextStrokeColor3 = Color3.fromRGB(91, 29, 24)
+	shopTitle.TextStrokeTransparency = 0
+	shopTitle.TextScaled = true
+	shopTitle.ZIndex = 6
+	shopTitle.Parent = ribbon
+	local titlePadding = Instance.new("UIPadding")
+	titlePadding.PaddingTop = UDim.new(0, 10)
+	titlePadding.PaddingBottom = UDim.new(0, 10)
+	titlePadding.PaddingLeft = UDim.new(0, 18)
+	titlePadding.PaddingRight = UDim.new(0, 18)
+	titlePadding.Parent = shopTitle
+
+	-- Header : onglets, solde et fermeture
 	local header = Instance.new("Frame")
 	header.Name = "Header"
-	header.Size = UDim2.new(1, -48, 0, 92)
-	header.Position = UDim2.new(0, 24, 0, 18)
+	header.Size = UDim2.new(1, -64, 0, 64)
+	header.Position = UDim2.new(0, 32, 0, 62)
 	header.BackgroundTransparency = 1
 	header.ZIndex = 3
 	header.Parent = panel
@@ -185,17 +232,18 @@ function ShopUI.Start()
 	categoryTitle.Text = "PREMIUM SHOP"
 	categoryTitle.ZIndex = 3
 	categoryTitle.Parent = header
+	categoryTitle.Visible = false
 
 	local categoryTabs = Instance.new("Frame")
 	categoryTabs.Name = "CategoryTabs"
-	categoryTabs.Size = UDim2.new(0.42, 0, 1, 0)
-	categoryTabs.Position = UDim2.new(0.28, 4, 0, 0)
+	categoryTabs.Size = UDim2.new(0.68, 0, 1, 0)
+	categoryTabs.Position = UDim2.new(0.02, 0, 0, 0)
 	categoryTabs.BackgroundTransparency = 1
 	categoryTabs.ZIndex = 3
 	categoryTabs.Parent = header
 	local tabsLayout = Instance.new("UIListLayout")
 	tabsLayout.FillDirection = Enum.FillDirection.Horizontal
-	tabsLayout.Padding = UDim.new(0, 4)
+	tabsLayout.Padding = UDim.new(0, 14)
 	tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	tabsLayout.Parent = categoryTabs
 
@@ -204,17 +252,21 @@ function ShopUI.Start()
 		local tab = Instance.new("TextButton")
 		tab.Name = "Tab_" .. catId
 		tab.Size = UDim2.new(0.33, -4, 1, 0)
-		tab.BackgroundColor3 = Color3.fromRGB(40, 50, 70)
-		tab.TextColor3 = WHITE
-		tab.Font = Enum.Font.GothamBold
-		tab.TextSize = 12
+		tab.BackgroundColor3 = Color3.fromRGB(117, 205, 47)
+		tab.TextColor3 = Color3.fromRGB(42, 28, 75)
+		tab.Font = Enum.Font.GothamBlack
+		tab.TextSize = 18
 		tab.BorderSizePixel = 0
 		tab.AutoButtonColor = true
 		tab.Selectable = true
 		tab.LayoutOrder = i
 		tab.ZIndex = 4
 		tab.Parent = categoryTabs
-		corner(tab, 8)
+		corner(tab, 10)
+		local tabStroke = Instance.new("UIStroke")
+		tabStroke.Color = Color3.fromRGB(58, 40, 100)
+		tabStroke.Thickness = 3
+		tabStroke.Parent = tab
 		L10nUtil.localize(tab, localized(CATEGORY_LABEL_KEY[catId]))
 		categoryTabButtons[catId] = tab
 	end
@@ -230,6 +282,7 @@ function ShopUI.Start()
 	positionLabel.Text = ""
 	positionLabel.ZIndex = 3
 	positionLabel.Parent = header
+	positionLabel.Visible = false
 	L10nUtil.dynamic(positionLabel, "")
 
 	local coinsLabel = Instance.new("TextLabel")
@@ -250,9 +303,9 @@ function ShopUI.Start()
 	closeBtn.Name = "CloseButton"
 	closeBtn.Size = UDim2.fromOffset(40, 40)
 	closeBtn.Position = UDim2.new(1, -40, 0, -4)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(48, 56, 74)
-	closeBtn.TextColor3 = WHITE
-	closeBtn.Font = Enum.Font.GothamBold
+	closeBtn.BackgroundColor3 = Color3.fromRGB(196, 55, 66)
+	closeBtn.TextColor3 = Color3.fromRGB(112, 17, 24)
+	closeBtn.Font = Enum.Font.GothamBlack
 	closeBtn.TextSize = 18
 	closeBtn.BorderSizePixel = 0
 	closeBtn.AutoButtonColor = true
@@ -265,17 +318,24 @@ function ShopUI.Start()
 	-- Corps : flèche gauche | viewport + texte | flèche droite
 	local body = Instance.new("Frame")
 	body.Name = "Body"
-	body.Size = UDim2.new(1, -48, 1, -148)
-	body.Position = UDim2.new(0, 24, 0, 124)
+	body.Size = UDim2.new(1, -56, 1, -164)
+	body.Position = UDim2.new(0, 28, 0, 138)
+	body.BackgroundColor3 = Color3.fromRGB(83, 69, 137)
 	body.BackgroundTransparency = 1
 	body.ZIndex = 3
 	body.Parent = panel
+	corner(body, 16)
+	local bodyStroke = Instance.new("UIStroke")
+	bodyStroke.Color = Color3.fromRGB(43, 33, 80)
+	bodyStroke.Thickness = 4
+	bodyStroke.Parent = body
 
 	local itemGrid = Instance.new("ScrollingFrame")
 	itemGrid.Name = "ItemGrid"
-	itemGrid.Size = UDim2.new(0.58, -10, 1, 0)
-	itemGrid.BackgroundColor3 = Color3.fromRGB(42, 34, 82)
-	itemGrid.BackgroundTransparency = 0.08
+	itemGrid.Size = UDim2.new(1, -24, 1, -24)
+	itemGrid.Position = UDim2.fromOffset(12, 12)
+	itemGrid.BackgroundColor3 = Color3.fromRGB(83, 69, 137)
+	itemGrid.BackgroundTransparency = 1
 	itemGrid.BorderSizePixel = 0
 	itemGrid.ScrollBarThickness = 8
 	itemGrid.ScrollBarImageColor3 = Color3.fromRGB(196, 128, 255)
@@ -291,8 +351,8 @@ function ShopUI.Start()
 	itemGridPadding.PaddingRight = UDim.new(0, 12)
 	itemGridPadding.Parent = itemGrid
 	local itemGridLayout = Instance.new("UIGridLayout")
-	itemGridLayout.CellSize = UDim2.new(0.5, -8, 0, 116)
-	itemGridLayout.CellPadding = UDim2.fromOffset(12, 12)
+	itemGridLayout.CellSize = UDim2.new(0.5, -10, 0, 154)
+	itemGridLayout.CellPadding = UDim2.fromOffset(16, 16)
 	itemGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	itemGridLayout.Parent = itemGrid
 
@@ -341,6 +401,7 @@ function ShopUI.Start()
 	content.BackgroundTransparency = 1
 	content.ZIndex = 3
 	content.Parent = body
+	content.Visible = false
 	corner(content, 16)
 
 	-- Présentoir local : ViewportFrame + modèle stylisé (jamais Display_* serveur).
@@ -476,6 +537,7 @@ function ShopUI.Start()
 	actionBtn.Selectable = true
 	actionBtn.ZIndex = 3
 	actionBtn.Parent = content
+	actionBtn.Visible = false
 	local actionCorner = corner(actionBtn, 10)
 	L10nUtil.dynamic(actionBtn, "")
 
@@ -529,93 +591,38 @@ function ShopUI.Start()
 		appliedMode = mode
 		appliedWidth = container.X
 		appliedHeight = container.Y
+		currentLayout = ShopBrowseLayout.Resolve(mode, container)
 
-		local layout = ShopBrowseLayout.Resolve(mode, container)
-		currentLayout = layout
-
-		local p = layout.Panel
 		local compact = container.X < 760 or container.Y < 560
 		panel.AnchorPoint = Vector2.new(0.5, 0.5)
-		panel.Size = if compact then UDim2.new(0.96, 0, 0.88, 0) else UDim2.new(0.92, 0, 0.82, 0)
+		panel.Size = if compact then UDim2.new(0.96, 0, 0.90, 0) else UDim2.new(0.92, 0, 0.84, 0)
 		panel.Position = UDim2.new(0.5, 0, 0.52, 0)
 		sizeConstraint.MinSize = Vector2.new(320, 360)
-		sizeConstraint.MaxSize = Vector2.new(1180, 720)
-		panelCorner.CornerRadius = UDim.new(0, if compact then 14 else 22)
+		sizeConstraint.MaxSize = Vector2.new(1180, 760)
+		panelCorner.CornerRadius = UDim.new(0, 18)
 
-		local h = layout.Header
-		header.Size = UDim2.new(1, -h.InsetX * 2, 0, h.Height)
-		header.Position = UDim2.new(0, h.InsetX, 0, h.OffsetY)
-		categoryTitle.Size = UDim2.new(h.TitleWidthScale, 0, 1, 0)
-		categoryTitle.TextSize = h.TitleSize
-		positionLabel.Size = UDim2.new(h.CounterWidthScale, 0, 1, 0)
-		positionLabel.Position = UDim2.new(h.CounterXScale, 0, 0, 0)
-		positionLabel.TextSize = h.CounterSize
-		coinsLabel.Size = UDim2.new(h.CoinsWidthScale, -h.CoinsInset, 1, 0)
-		coinsLabel.Position = UDim2.new(h.CoinsXScale, 0, 0, 0)
-		coinsLabel.TextSize = h.CoinsSize
-		closeBtn.Size = UDim2.fromOffset(h.CloseSize, h.CloseSize)
-		closeBtn.Position = UDim2.new(1, -h.CloseSize, 0, h.CloseOffsetY)
-		closeBtn.TextSize = h.CloseTextSize
-		closeCorner.CornerRadius = UDim.new(0, h.CloseCorner)
+		ribbon.Size = if compact then UDim2.new(0.62, 0, 0, 58) else UDim2.new(0.54, 0, 0, 72)
+		ribbon.Position = UDim2.new(0.5, 0, 0, if compact then -12 else -24)
+		ribbonShadow.Size = if compact then UDim2.new(0.66, 0, 0, 66) else UDim2.new(0.58, 0, 0, 82)
+		ribbonShadow.Position = UDim2.new(0.5, 0, 0, if compact then -7 else -18)
 
-		local b = layout.Body
-		body.Size = UDim2.new(1, -48, 1, -148)
-		body.Position = UDim2.new(0, 24, 0, 124)
-		itemGrid.Size = if compact then UDim2.new(1, 0, 0.48, 0) else UDim2.new(0.58, -10, 1, 0)
-		itemGridLayout.CellSize = if compact then UDim2.new(1, -4, 0, 100) else UDim2.new(0.5, -8, 0, 116)
-		content.Size = if compact then UDim2.new(1, 0, 0.49, 0) else UDim2.new(0.42, -10, 1, 0)
-		content.Position = if compact then UDim2.new(0, 0, 0.51, 0) else UDim2.new(0.58, 20, 0, 0)
+		header.Size = UDim2.new(1, -48, 0, if compact then 52 else 64)
+		header.Position = UDim2.new(0, 24, 0, if compact then 52 else 62)
+		categoryTabs.Size = UDim2.new(if compact then 0.72 else 0.68, 0, 1, 0)
+		categoryTabs.Position = UDim2.new(0, 0, 0, 0)
+		coinsLabel.Size = UDim2.new(0.24, -58, 1, 0)
+		coinsLabel.Position = UDim2.new(0.72, 0, 0, 0)
+		coinsLabel.TextSize = if compact then 14 else 18
+		closeBtn.Size = UDim2.fromOffset(if compact then 44 else 54, if compact then 44 else 54)
+		closeBtn.Position = UDim2.new(1, -(if compact then 44 else 54), 0.5, -(if compact then 22 else 27))
+		closeBtn.TextSize = if compact then 22 else 28
+		closeCorner.CornerRadius = UDim.new(0, 10)
 
-		local a = layout.Arrow
-		leftBtn.Size = UDim2.fromOffset(a.Size, a.Size)
-		leftBtn.TextSize = a.TextSize
-		leftCorner.CornerRadius = UDim.new(0, a.Corner)
-		rightBtn.Size = UDim2.fromOffset(a.Size, a.Size)
-		rightBtn.TextSize = a.TextSize
-		rightCorner.CornerRadius = UDim.new(0, a.Corner)
-
-		local v = layout.Preview
-		previewBackground.Size = UDim2.fromOffset(v.Width, v.Height)
-		previewBackground.Position = UDim2.new(0, 0, 0.5, -v.Height / 2)
-		previewCorner.CornerRadius = UDim.new(0, v.Corner)
-		local innerWidth = v.Width - v.Inset * 2
-		local innerHeight = v.Height - v.Inset * 2
-		viewport.Size = UDim2.fromOffset(innerWidth, innerHeight)
-		viewport.Position = UDim2.new(0, v.Inset, 0.5, -innerHeight / 2)
-		viewportCorner.CornerRadius = UDim.new(0, v.InnerCorner)
-
-		local t = layout.Text
-		textArea.Size = UDim2.new(1, -t.InsetX, 1, 0)
-		textArea.Position = UDim2.new(0, t.InsetX, 0, 0)
-		nameLabel.Size = UDim2.new(1, 0, 0, t.NameHeight)
-		nameLabel.TextSize = t.NameSize
-		descLabel.Size = UDim2.new(1, 0, 0, t.DescHeight)
-		descLabel.Position = UDim2.new(0, 0, 0, t.DescOffsetY)
-		descLabel.TextSize = t.DescSize
-		priceLabel.Size = UDim2.new(t.PriceWidthScale, 0, 0, t.PriceHeight)
-		priceLabel.Position = UDim2.new(0, 0, t.PriceYScale, t.PriceYOffset)
-		priceLabel.TextSize = t.PriceSize
-
-		local act = layout.Action
-		actionBtn.AnchorPoint = Vector2.new(act.AnchorX, act.AnchorY)
-		actionBtn.Size = UDim2.fromOffset(act.Width, act.Height)
-		actionBtn.Position = UDim2.new(act.XScale, act.XOffset, act.YScale, act.YOffset)
-		actionBtn.TextSize = act.TextSize
-		actionBtn.AnchorPoint = Vector2.new(0.5, 1)
-		actionBtn.Size = UDim2.new(1, -32, 0, if compact then 44 else 54)
-		actionBtn.Position = UDim2.new(0.5, 0, 1, -16)
-		actionBtn.TextSize = if compact then 16 else 20
-		actionCorner.CornerRadius = UDim.new(0, 12)
-
-		local previewSize = if compact then 104 else math.clamp(math.floor(content.AbsoluteSize.Y * 0.42), 150, 210)
-		previewBackground.Size = UDim2.fromOffset(previewSize, previewSize)
-		previewBackground.AnchorPoint = Vector2.new(0.5, 0)
-		previewBackground.Position = UDim2.new(0.5, 0, 0, 16)
-		viewport.Size = UDim2.fromOffset(previewSize - 8, previewSize - 8)
-		viewport.AnchorPoint = Vector2.new(0.5, 0)
-		viewport.Position = UDim2.new(0.5, 0, 0, 20)
-		textArea.Size = UDim2.new(1, -32, 0, if compact then 92 else 138)
-		textArea.Position = UDim2.new(0, 16, 0, previewSize + 24)
+		body.Size = UDim2.new(1, -56, 1, if compact then -136 else -164)
+		body.Position = UDim2.new(0, 28, 0, if compact then 116 else 138)
+		itemGrid.Size = UDim2.new(1, -24, 1, -24)
+		itemGrid.Position = UDim2.fromOffset(12, 12)
+		itemGridLayout.CellSize = if compact then UDim2.new(1, -8, 0, 132) else UDim2.new(0.5, -10, 0, 154)
 	end
 
 	-- Plusieurs événements d'entrée peuvent arriver en rafale : on temporise, et
@@ -764,6 +771,8 @@ function ShopUI.Start()
 		previewBackdrop = backdrop
 	end
 
+	local invokeItemAction: ((number) -> ())? = nil
+
 	local function refreshPresentation()
 		local count = #browse.items
 		local item: ShopRow? = if count > 0 then browse.items[browse.index] else nil
@@ -772,9 +781,13 @@ function ShopUI.Start()
 		L10nUtil.localize(categoryTitle, localized(categoryKey))
 		for catId, tab in pairs(categoryTabButtons) do
 			local active = catId == browse.category
-			tab.BackgroundColor3 = if active
-				then Color3.fromRGB(70, 140, 220)
-				else Color3.fromRGB(40, 50, 70)
+			local activeColors = {
+				Skills = Color3.fromRGB(113, 207, 47),
+				Items = Color3.fromRGB(196, 54, 219),
+				Cosmetics = Color3.fromRGB(35, 181, 229),
+			}
+			tab.BackgroundColor3 = if active then activeColors[catId] else Color3.fromRGB(126, 108, 166)
+			tab.TextColor3 = if active then Color3.fromRGB(42, 28, 75) else Color3.fromRGB(225, 218, 241)
 		end
 		L10nUtil.dynamic(positionLabel, if count > 0 then string.format("%d / %d", browse.index, count) else "")
 		L10nUtil.dynamic(coinsLabel, comma(browse.coins) .. " " .. L10n.CoinsUnit)
@@ -782,54 +795,119 @@ function ShopUI.Start()
 		updatePresentation(item)
 
 		for _, child in ipairs(itemGrid:GetChildren()) do
-			if child:IsA("GuiButton") then
+			if child.Name:sub(1, 9) == "ItemCard_" then
 				child:Destroy()
 			end
 		end
+		local firstSelectable: GuiButton? = nil
 		for itemIndex, row in ipairs(browse.items) do
-			local card = Instance.new("TextButton")
+			local card = Instance.new("Frame")
 			card.Name = "ItemCard_" .. row.Id
 			card.LayoutOrder = itemIndex
-			card.BackgroundColor3 = if itemIndex == browse.index then Color3.fromRGB(101, 66, 170) else Color3.fromRGB(58, 47, 105)
-			card.Text = ""
+			card.BackgroundColor3 = Color3.fromRGB(105, 87, 159)
 			card.BorderSizePixel = 0
-			card.AutoButtonColor = true
-			card.Selectable = true
 			card.ZIndex = 4
 			card.Parent = itemGrid
-			corner(card, 12)
+			corner(card, 14)
 			local cardStroke = Instance.new("UIStroke")
-			cardStroke.Color = if itemIndex == browse.index then Color3.fromRGB(255, 201, 74) else Color3.fromRGB(131, 101, 191)
-			cardStroke.Thickness = if itemIndex == browse.index then 3 else 1.5
-			cardStroke.Transparency = 0.08
+			cardStroke.Color = Color3.fromRGB(48, 36, 89)
+			cardStroke.Thickness = 4
 			cardStroke.Parent = card
+
+			local iconBack = Instance.new("Frame")
+			iconBack.Size = UDim2.fromOffset(118, 118)
+			iconBack.Position = UDim2.fromOffset(12, 18)
+			iconBack.BackgroundColor3 = Color3.fromRGB(72, 59, 126)
+			iconBack.BorderSizePixel = 0
+			iconBack.ZIndex = 5
+			iconBack.Parent = card
+			corner(iconBack, 12)
+
+			local cardViewport = Instance.new("ViewportFrame")
+			cardViewport.Size = UDim2.new(1, -8, 1, -8)
+			cardViewport.Position = UDim2.fromOffset(4, 4)
+			cardViewport.BackgroundColor3 = ShopViewportModels.GetViewportBackground(browse.category)
+			cardViewport.BorderSizePixel = 0
+			cardViewport.ZIndex = 6
+			cardViewport.Parent = iconBack
+			corner(cardViewport, 10)
+			local cardCamera = Instance.new("Camera")
+			cardCamera.FieldOfView = VIEWPORT_FOV
+			cardCamera.Parent = cardViewport
+			cardViewport.CurrentCamera = cardCamera
+			local cardLighting = ShopViewportModels.GetLighting(browse.category)
+			cardViewport.Ambient = cardLighting.Ambient
+			cardViewport.LightColor = cardLighting.LightColor
+			cardViewport.LightDirection = cardLighting.LightDirection
+			local cardModel, cardBounds = ShopViewportModels.Build(row.Id, row.Type, browse.category)
+			cardCamera.CFrame = ShopViewportModels.GetCameraCFrame(cardBounds, VIEWPORT_FOV)
+			cardModel.Parent = cardViewport
+
 			local cardName = Instance.new("TextLabel")
-			cardName.Size = UDim2.new(1, -20, 0, 42)
-			cardName.Position = UDim2.fromOffset(10, 10)
+			cardName.Size = UDim2.new(1, -154, 0, 34)
+			cardName.Position = UDim2.fromOffset(144, 14)
 			cardName.BackgroundTransparency = 1
 			cardName.Font = Enum.Font.GothamBlack
-			cardName.TextSize = 16
-			cardName.TextWrapped = true
+			cardName.TextSize = 20
+			cardName.TextXAlignment = Enum.TextXAlignment.Left
+			cardName.TextTruncate = Enum.TextTruncate.AtEnd
 			cardName.TextColor3 = WHITE
 			cardName.Text = row.Label
 			cardName.ZIndex = 5
 			cardName.Parent = card
-			local cardPrice = Instance.new("TextLabel")
-			cardPrice.Size = UDim2.new(1, -20, 0, 26)
-			cardPrice.Position = UDim2.new(0, 10, 1, -38)
-			cardPrice.BackgroundColor3 = Color3.fromRGB(91, 186, 73)
-			cardPrice.BorderSizePixel = 0
-			cardPrice.Font = Enum.Font.GothamBold
-			cardPrice.TextSize = 15
-			cardPrice.TextColor3 = Color3.fromRGB(255, 255, 255)
-			cardPrice.Text = if type(row.Cost) == "number" then comma(row.Cost) .. " " .. L10n.CoinsUnit else "—"
-			cardPrice.ZIndex = 5
-			cardPrice.Parent = card
-			corner(cardPrice, 8)
-			card.Activated:Connect(function()
-				browse.index = itemIndex
-				refreshPresentation()
+
+			local cardDescription = Instance.new("TextLabel")
+			cardDescription.Size = UDim2.new(1, -154, 0, 38)
+			cardDescription.Position = UDim2.fromOffset(144, 48)
+			cardDescription.BackgroundTransparency = 1
+			cardDescription.Font = Enum.Font.Gotham
+			cardDescription.TextSize = 12
+			cardDescription.TextWrapped = true
+			cardDescription.TextXAlignment = Enum.TextXAlignment.Left
+			cardDescription.TextYAlignment = Enum.TextYAlignment.Top
+			cardDescription.TextColor3 = Color3.fromRGB(224, 218, 242)
+			cardDescription.Text = row.Description or ""
+			cardDescription.ZIndex = 5
+			cardDescription.Parent = card
+
+			local buttonState = row.ButtonState
+			local canInvoke = ShopBrowseLogic.CanInvokeAction(row)
+			local buyButton = Instance.new("TextButton")
+			buyButton.Name = "Buy_" .. row.Id
+			buyButton.Size = UDim2.new(1, -154, 0, 42)
+			buyButton.Position = UDim2.new(0, 144, 1, -54)
+			buyButton.BackgroundColor3 = if canInvoke then Color3.fromRGB(103, 204, 39) else Color3.fromRGB(78, 69, 112)
+			buyButton.BorderSizePixel = 0
+			buyButton.Font = Enum.Font.GothamBlack
+			buyButton.TextSize = 16
+			buyButton.TextColor3 = if canInvoke then Color3.fromRGB(37, 70, 18) else Color3.fromRGB(190, 184, 211)
+			buyButton.AutoButtonColor = canInvoke
+			buyButton.Active = canInvoke
+			buyButton.Selectable = canInvoke
+			buyButton.ZIndex = 6
+			buyButton.Parent = card
+			corner(buyButton, 9)
+			if canInvoke and type(row.Cost) == "number" then
+				local levelText = if row.Type == "Upgrade" and type(row.Level) == "number" and type(row.Max) == "number"
+					then string.format("  •  Lv %d/%d", row.Level, row.Max)
+					else ""
+				buyButton.Text = comma(row.Cost) .. " " .. L10n.CoinsUnit .. levelText
+			else
+				local labelKey = BUTTON_LABEL_KEY[buttonState] or "Locked"
+				L10nUtil.localize(buyButton, localized(labelKey))
+			end
+			buyButton.Activated:Connect(function()
+				if invokeItemAction then
+					invokeItemAction(itemIndex)
+				end
 			end)
+			selectionStroke(buyButton)
+			if not firstSelectable and canInvoke then
+				firstSelectable = buyButton
+			end
+		end
+		if currentLayout.Mode == ShopBrowseLayout.Modes.Console and firstSelectable then
+			GuiService.SelectedObject = firstSelectable
 		end
 
 		if not item then
@@ -1183,9 +1261,12 @@ function ShopUI.Start()
 		refreshPresentation()
 	end
 
-	local function invokeAction()
+	local function invokeAction(itemIndex: number?)
 		if not browse.active then
 			return
+		end
+		if itemIndex then
+			browse.index = itemIndex
 		end
 		local item = browse.items[browse.index]
 		if not ShopBrowseLogic.CanInvokeAction(item) then
@@ -1220,6 +1301,7 @@ function ShopUI.Start()
 		end
 		refreshFromServer(id)
 	end
+	invokeItemAction = invokeAction
 
 	--------------------------------------------------------------------
 	-- Connexions permanentes (ProximityPrompt, entrées, personnage)
