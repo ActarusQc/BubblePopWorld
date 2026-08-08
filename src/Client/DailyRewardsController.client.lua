@@ -9,6 +9,11 @@ local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local playerControls: any? = nil
+pcall(function()
+	local playerModule = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
+	playerControls = playerModule:GetControls()
+end)
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
 local HudChrome = require(Shared.HudChrome)
@@ -776,6 +781,15 @@ local function setPanelVisible(visible: boolean)
 	panelVisible = visible
 	overlay.Visible = visible
 	openButton.Visible = not visible
+	if playerControls then
+		pcall(function()
+			if visible then
+				playerControls:Disable()
+			else
+				playerControls:Enable()
+			end
+		end)
+	end
 	if visible then
 		pcall(function()
 			panelOpenedRemote:FireServer()
