@@ -13,6 +13,7 @@ export type DailyRewardsState = {
 	LifetimeClaims: number,
 	CompletedCycles: number,
 	ShirtUnlocked: boolean,
+	ShirtEquipped: boolean,
 }
 
 export type VisitResult = {
@@ -44,6 +45,7 @@ function DailyRewardsLogic.NewState(): DailyRewardsState
 		LifetimeClaims = 0,
 		CompletedCycles = 0,
 		ShirtUnlocked = false,
+		ShirtEquipped = false,
 	}
 end
 
@@ -59,6 +61,7 @@ function DailyRewardsLogic.NormalizeState(saved: any): DailyRewardsState
 	state.LifetimeClaims = finiteInteger(saved.LifetimeClaims, 0, 0, 100000000)
 	state.CompletedCycles = finiteInteger(saved.CompletedCycles, 0, 0, 10000000)
 	state.ShirtUnlocked = saved.ShirtUnlocked == true
+	state.ShirtEquipped = state.ShirtUnlocked and saved.ShirtEquipped == true
 	return state
 end
 
@@ -145,6 +148,7 @@ function DailyRewardsLogic.SerializePublicState(saved: any, todayKey: number): a
 		CycleDay = DailyRewardsLogic.CurrentCycleDay(state),
 		CanClaim = DailyRewardsLogic.CanClaim(state, todayKey),
 		ShirtUnlocked = state.ShirtUnlocked,
+		ShirtEquipped = state.ShirtEquipped,
 		CompletedCycles = state.CompletedCycles,
 		LifetimeClaims = state.LifetimeClaims,
 		ServerDayKey = todayKey,
