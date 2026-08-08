@@ -351,24 +351,59 @@ progressText.Parent = progressPill
 local closeButton = Instance.new("TextButton")
 closeButton.Name = "Close"
 closeButton.AnchorPoint = Vector2.new(1, 0)
-closeButton.Position = UDim2.new(1, -18, 0, 18)
-closeButton.Size = UDim2.fromOffset(56, 56)
-closeButton.BackgroundColor3 = Color3.fromRGB(8, 30, 61)
-closeButton.Text = "×"
+closeButton.Position = UDim2.new(1, -20, 0, 20)
+closeButton.Size = UDim2.fromOffset(70, 70)
+closeButton.BackgroundColor3 = Color3.fromRGB(10, 35, 72)
+closeButton.AutoButtonColor = false
+closeButton.Text = "X"
 closeButton.TextColor3 = WHITE
-closeButton.TextSize = 15
-closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 29
+closeButton.Font = Enum.Font.GothamBlack
 closeButton.Selectable = true
 closeButton.ZIndex = 23
 closeButton.Parent = window
 local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 15)
+closeCorner.CornerRadius = UDim.new(0, 18)
 closeCorner.Parent = closeButton
 local closeStroke = Instance.new("UIStroke")
 closeStroke.Color = ACCENT
-closeStroke.Thickness = 2
+closeStroke.Thickness = 3
 closeStroke.Transparency = 0
 closeStroke.Parent = closeButton
+local closeGlow = Instance.new("UIStroke")
+closeGlow.Color = ACCENT
+closeGlow.Thickness = 8
+closeGlow.Transparency = 0.58
+closeGlow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+closeGlow.Parent = closeButton
+local closeGradient = Instance.new("UIGradient")
+closeGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 69, 120)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 20, 47)),
+})
+closeGradient.Rotation = 90
+closeGradient.Parent = closeButton
+
+closeButton.MouseEnter:Connect(function()
+	TweenService:Create(closeButton, TweenInfo.new(0.12), {
+		BackgroundColor3 = Color3.fromRGB(19, 82, 135),
+		TextColor3 = ACCENT_LIGHT,
+	}):Play()
+	TweenService:Create(closeGlow, TweenInfo.new(0.12), {
+		Transparency = 0.3,
+		Thickness = 10,
+	}):Play()
+end)
+closeButton.MouseLeave:Connect(function()
+	TweenService:Create(closeButton, TweenInfo.new(0.12), {
+		BackgroundColor3 = Color3.fromRGB(10, 35, 72),
+		TextColor3 = WHITE,
+	}):Play()
+	TweenService:Create(closeGlow, TweenInfo.new(0.12), {
+		Transparency = 0.58,
+		Thickness = 8,
+	}):Play()
+end)
 
 local gridHost = Instance.new("Frame")
 gridHost.Name = "RewardsGrid"
