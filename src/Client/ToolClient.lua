@@ -243,7 +243,7 @@ local function ActivateEquippedTool(fromMobileButton: boolean?)
 		end
 	end
 
-	clickSound:Play()
+	-- Le feedback sonore est joué seulement après un vrai pop confirmé par le serveur.
 	local cd = tool:GetAttribute("Cooldown")
 	if type(cd) == "number" and cd > 0 then
 		cooldownUntil = now + cd
