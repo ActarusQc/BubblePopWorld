@@ -24,7 +24,9 @@
     "Workspace": {
       "$className": "Workspace",
       "$properties": {
-        "StreamingEnabled": true
+        "StreamingEnabled": true,
+        "StreamingMinRadius": 896,
+        "StreamingTargetRadius": 1408
       }
     },
     "Lighting": { "$className": "Lighting" }

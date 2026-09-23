@@ -48,8 +48,10 @@ function TravelConfigTests.Run(): boolean
 
 	local lobby = TravelConfig.Get("Lobby")
 	local summer = TravelConfig.Get("SummerZone")
+	local park = TravelConfig.Get("AmusementPark")
 	check(lobby ~= nil, "Lobby destination exists")
 	check(summer ~= nil, "SummerZone destination exists")
+	check(park ~= nil, "AmusementPark destination exists")
 	if not lobby or not summer then
 		return false
 	end
@@ -57,9 +59,11 @@ function TravelConfigTests.Run(): boolean
 	check(lobby.ShowFromLobby == false, "Lobby not shown from Lobby")
 	check(summer.ShowFromLobby == true, "Summer shown from Lobby")
 	check(summer.RequiredLevel == ZoneDefs.GetRequiredLevel("SummerZone"), "Summer RequiredLevel synced with ZoneDefs")
-	check(summer.RequiredLevel == 5, "Summer RequiredLevel == 5")
+	check(summer.RequiredLevel == 3, "Summer RequiredLevel == 3")
 	check(lobby.DestinationMarkerName == "LobbyTravelArrival", "Lobby arrival marker name")
 	check(summer.DestinationMarkerName == "SummerZoneTravelArrival", "Summer arrival marker name")
+	check(park ~= nil and park.DestinationMarkerName == "AmusementParkTravelArrival", "Park arrival marker name")
+	check(park ~= nil and park.RequiredLevel == 1, "Park accessible dès le niveau 1")
 
 	local cardsL1 = buildCards(1, "Lobby")
 	check(findCard(cardsL1, "Lobby") == nil, "Lobby hidden from Lobby terminal")
@@ -67,10 +71,10 @@ function TravelConfigTests.Run(): boolean
 	check(summerL1 ~= nil and summerL1.IsLocked == true, "Summer locked at level 1")
 	check(summerL1 ~= nil, "locked SummerZone reste visible dans la liste")
 
-	local cardsL5 = buildCards(5, "Lobby")
-	local summerL5 = findCard(cardsL5, "SummerZone")
-	check(summerL5 ~= nil and summerL5.IsLocked == false, "Summer unlocked at level 5")
-	check(#cardsL5 >= 1, "Lobby terminal retourne au moins 1 destination")
+	local cardsL3 = buildCards(3, "Lobby")
+	local summerL3 = findCard(cardsL3, "SummerZone")
+	check(summerL3 ~= nil and summerL3.IsLocked == false, "Summer unlocked at level 3")
+	check(#cardsL3 >= 1, "Lobby terminal retourne au moins 1 destination")
 
 	local builtL1 = TravelConfig.BuildDestinationCards(1, "Lobby")
 	local builtL7 = TravelConfig.BuildDestinationCards(7, "Lobby")
@@ -96,6 +100,7 @@ function TravelConfigTests.Run(): boolean
 		"alias modèle hub → LobbyTransit"
 	)
 	check(TravelConfig.NormalizeTransitId("SummerZoneTransit") == "SummerZoneTransit", "SummerZoneTransit canonique")
+	check(TravelConfig.NormalizeTransitId("AmusementParkTransit") == "AmusementParkTransit", "AmusementParkTransit canonique")
 	check(
 		TravelConfig.NormalizeTransitId("BubbleTransit_SummerZoneTransit") == "SummerZoneTransit",
 		"alias modèle Summer → SummerZoneTransit"

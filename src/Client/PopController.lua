@@ -57,6 +57,50 @@ local function cellKey(zoneId: string, x: number, z: number): string
 	return zoneId .. ":" .. x .. "_" .. z
 end
 
+local function isAliveBubble(part: BasePart): boolean
+	return part:GetAttribute("CellX") ~= nil
+		and part:GetAttribute("CellZ") ~= nil
+		and part:GetAttribute("Alive") == true
+		and part.CanCollide
+		and part.Transparency < 1
+end
+
+-- Traverse les obstacles (pet, déco, planchers) jusqu'à la bulle sous le joueur.
+local function raycastBubble(origin: Vector3, char: Model, distance: number): (BasePart?, number)
+	local exclude: { Instance } = { char }
+	local pets = workspace:FindFirstChild("BPW_Pets")
+	if pets then
+		table.insert(exclude, pets)
+	end
+	local visuals = workspace:FindFirstChild("_BPW_ClientPearlVisuals")
+	if visuals then
+		table.insert(exclude, visuals)
+	end
+
+	local traveled = 0
+	local cursor = origin
+	local remaining = distance
+	for _ = 1, 8 do
+		if remaining <= 0.05 then
+			break
+		end
+		params.FilterDescendantsInstances = exclude
+		local result = workspace:Raycast(cursor, Vector3.new(0, -remaining, 0), params)
+		if not result or not result.Instance:IsA("BasePart") then
+			break
+		end
+		local part = result.Instance
+		traveled += result.Distance
+		if isAliveBubble(part) then
+			return part, traveled
+		end
+		table.insert(exclude, part)
+		cursor = result.Position + Vector3.new(0, -0.05, 0)
+		remaining -= result.Distance + 0.05
+	end
+	return nil, 0
+end
+
 local function tryPopBubble(part: BasePart, state: FlightState?)
 	local x = part:GetAttribute("CellX")
 	local z = part:GetAttribute("CellZ")
@@ -129,19 +173,16 @@ local function updateWingFlight(root: BasePart, hum: Humanoid, char: Model): boo
 	root.AssemblyLinearVelocity = Vector3.new(state.dir.X * state.speed, vy, state.dir.Z * state.speed)
 	hum:ChangeState(Enum.HumanoidStateType.Freefall)
 
-	params.FilterDescendantsInstances = { char }
-	local result = workspace:Raycast(root.Position, Vector3.new(0, -14, 0), params)
-	if result and result.Instance:IsA("BasePart") then
-		local part = result.Instance
-		if part:GetAttribute("CellX") ~= nil and part:GetAttribute("Alive") == true then
-			tryPopBubble(part, state)
-		end
+	local part = raycastBubble(root.Position, char, 14)
+	if part then
+		tryPopBubble(part, state)
 	end
 
 	return true
 end
 
 function PopController.Start()
+	print("[PopController] pop-client-2026-08-21-v1 actif.")
 	RunService.Heartbeat:Connect(function()
 		local char = player.Character
 		if not char then return end
@@ -164,16 +205,9 @@ function PopController.Start()
 		local now = os.clock()
 		if now - lastBounce < Config.Bubble.BounceCooldown then return end
 
-		params.FilterDescendantsInstances = { char }
-		local result = workspace:Raycast(root.Position, Vector3.new(0, -6, 0), params)
-		if not result then return end
-
-		local part = result.Instance
-		if not part or not part:IsA("BasePart") then return end
-		if part:GetAttribute("CellX") == nil or part:GetAttribute("CellZ") == nil then return end
-		if part:GetAttribute("Alive") ~= true then return end
-		if not part.CanCollide or part.Transparency >= 1 then return end
-		if result.Distance > Config.Bubble.ContactDistance then return end
+		local part, hitDistance = raycastBubble(root.Position, char, 8)
+		if not part then return end
+		if hitDistance > Config.Bubble.ContactDistance + 2 then return end
 
 		lastBounce = now
 

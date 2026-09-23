@@ -89,11 +89,13 @@ function ShopServiceTests.Run(context: Context?): boolean
 	local buyUpgrade = callbacks.BuyUpgrade
 	local buyItem = callbacks.BuyItem
 	local equipBackpack = callbacks.EquipBackpack
+	local equipCosmetic = callbacks.EquipCosmetic
 
 	check(type(getShopData) == "function", "Start branche GetShopData")
 	check(type(buyUpgrade) == "function", "Start branche BuyUpgrade")
 	check(type(buyItem) == "function", "Start branche BuyItem")
 	check(type(equipBackpack) == "function", "Start branche EquipBackpack")
+	check(type(equipCosmetic) == "function", "Start branche EquipCosmetic")
 
 	profile.Coins = 50000
 	profile.Upgrades = { Speed = 1, Jump = 2, Power = 0, CoinMult = 3 }
@@ -101,6 +103,7 @@ function ShopServiceTests.Run(context: Context?): boolean
 	profile.EquippedBackpack = "BackpackGold"
 	profile.BackpackCapacity = Config.ShopItems.BackpackGold.Capacity
 	profile.CurrentBubbles = 0
+	profile.EquippedCosmetics = { Hat = "" }
 
 	local data = getShopData(player)
 	check(type(data.Categories) == "table", "GetShopData contient Categories")
@@ -116,7 +119,7 @@ function ShopServiceTests.Run(context: Context?): boolean
 		local speed = rowById(data.Categories.Skills, "Speed")
 		local gold = rowById(data.Categories.Items, "BackpackGold")
 		local magnet = rowById(data.Categories.Skills, "Magnet")
-		local cap = rowById(data.Categories.Cosmetics, "Cap")
+		local cap = rowById(data.Categories.Hats, "Cap")
 		check(speed.Cost == Config.UpgradeCost("Speed", 1), "coût Speed vient de GameConfig")
 		check(gold.Cost == Config.ShopItems.BackpackGold.Cost, "coût BackpackGold vient de GameConfig")
 		check(speed.Level == 1 and speed.Max == Config.Upgrades.Speed.Max, "ligne upgrade contient Level/Max")
@@ -124,18 +127,18 @@ function ShopServiceTests.Run(context: Context?): boolean
 		check(gold.Owned == true and gold.Equipped == true, "ligne sac contient Owned/Equipped")
 		check(magnet.Cost == nil and magnet.ButtonState == "ComingSoon",
 			"Magnet Coming Soon sans Cost")
-		check(cap.Cost == nil and cap.ButtonState == "ComingSoon", "Cap Coming Soon sans Cost")
+		check(cap.Cost == Config.ShopItems.Cap.Cost and cap.ButtonState == "Buy", "Cap live avec coût en coins")
 		check(type(speed.Label) == "string" and speed.Label ~= "SkillSpeed", "NameKey résolu côté serveur")
 		check(type(speed.Description) == "string" and speed.Description ~= "SkillSpeedDesc",
 			"DescriptionKey résolu côté serveur")
-		print(("  EXEMPLE GetShopData Coins=%d EquippedBackpack=%s Upgrades=%d Items=%d Categories={Skills=%d,Items=%d,Cosmetics=%d} Speed={Cost=%d,ButtonState=%s} Magnet={Cost=nil,ButtonState=%s}"):format(
+		print(("  EXEMPLE GetShopData Coins=%d EquippedBackpack=%s Upgrades=%d Items=%d Categories={Skills=%d,Items=%d,Hats=%d} Speed={Cost=%d,ButtonState=%s} Magnet={Cost=nil,ButtonState=%s}"):format(
 			data.Coins,
 			data.EquippedBackpack,
 			#data.Upgrades,
 			#data.Items,
 			#data.Categories.Skills,
 			#data.Categories.Items,
-			#data.Categories.Cosmetics,
+			#data.Categories.Hats,
 			speed.Cost,
 			speed.ButtonState,
 			magnet.ButtonState
@@ -186,7 +189,6 @@ function ShopServiceTests.Run(context: Context?): boolean
 		{ callback = buyUpgrade, id = "Magnet" },
 		{ callback = buyItem, id = "Pin" },
 		{ callback = buyItem, id = "Hammer" },
-		{ callback = buyItem, id = "Cap" },
 	}) do
 		context.ResetCounters()
 		local before = clone(profile)
@@ -290,6 +292,37 @@ function ShopServiceTests.Run(context: Context?): boolean
 		context.Counters.Announce,
 		context.Counters.Refresh
 	))
+
+	context.ResetCounters()
+	profile.Coins = Config.ShopItems.Cap.Cost + 100
+	profile.OwnedItems.Cap = nil
+	profile.EquippedCosmetics = { Hat = "" }
+	local capOk = buyItem(player, "Cap")
+	check(capOk == true, "achat Bubble Cap réussit")
+	check(profile.Coins == 100 and profile.OwnedItems.Cap == true, "Bubble Cap débite 2500 coins et devient possédée")
+	check(profile.EquippedCosmetics.Hat == "Cap", "Bubble Cap est équipée automatiquement")
+	check(context.Counters.Push == 1 and context.Counters.NotifyCoinsChanged == 1
+		and context.Counters.Announce == 1 and context.Counters.Refresh == 1,
+		"achat Bubble Cap appelle Push/Notify/Announce/Refresh")
+	local coinsAfterCapPurchase = profile.Coins
+	context.ResetCounters()
+	local duplicateCapOk = buyItem(player, "Cap")
+	check(duplicateCapOk == false, "owned cosmetic cannot be purchased twice")
+	check(profile.Coins == coinsAfterCapPurchase, "duplicate cosmetic purchase does not debit coins")
+	check(context.Counters.Push == 0 and context.Counters.NotifyCoinsChanged == 0,
+		"duplicate cosmetic purchase does not save a mutation")
+	profile.EquippedCosmetics.Hat = ""
+	context.ResetCounters()
+	local capEquipOk = equipCosmetic(player, "Cap")
+	check(capEquipOk == true and profile.EquippedCosmetics.Hat == "Cap", "Bubble Cap possédée peut être rééquipée")
+	check(context.Counters.Push == 1 and context.Counters.Announce == 1 and context.Counters.Refresh == 1,
+		"rééquipement Bubble Cap rafraîchit le personnage")
+
+	context.ResetCounters()
+	local capUnequipOk = equipCosmetic(player, "")
+	check(capUnequipOk == true and profile.EquippedCosmetics.Hat == "", "cosmetic can be unequipped")
+	check(context.Counters.Push == 1 and context.Counters.Refresh == 1,
+		"unequipping a cosmetic saves and refreshes the character")
 
 	upgradeAnalytics = {}
 	itemSinkAnalytics = {}

@@ -85,6 +85,17 @@ TravelConfig.Destinations = {
 		ShowFromLobby = true,
 		Enabled = true,
 	},
+	AmusementPark = {
+		Id = "AmusementPark",
+		DisplayName = "Amusement Park",
+		Description = "Rides, attractions and multi-level bubbles",
+		RequiredLevel = ZoneDefs.GetRequiredLevel("AmusementPark"),
+		AreaName = "AmusementPark",
+		DestinationMarkerName = "AmusementParkTravelArrival",
+		SortOrder = 3,
+		ShowFromLobby = true,
+		Enabled = true,
+	},
 } :: { [string]: DestinationDef }
 
 --------------------------------------------------------------------
@@ -119,6 +130,14 @@ TravelConfig.CapsulePlacements = {
 		Position = Vector3.new(0, 0, 0),
 		YawDegrees = -90,
 		RelativeToSummerBridge = true,
+	},
+	AmusementPark = {
+		TransitId = "AmusementParkTransit",
+		CurrentArea = "AmusementPark",
+		ArrivalMarkerName = "AmusementParkTravelArrival",
+		-- Sur le pont, devant l'arche d'entrée du parc.
+		Position = Vector3.new(-151, 6, 0),
+		YawDegrees = -90,
 	},
 } :: { [string]: CapsulePlacement }
 
@@ -176,6 +195,14 @@ TravelConfig.Terminals = {
 		ZoneId = "SummerZone",
 		Aliases = {
 			"BubbleTransit_SummerZoneTransit",
+		},
+		IsHubLobby = false,
+	},
+	AmusementParkTransit = {
+		CanonicalId = "AmusementParkTransit",
+		ZoneId = "AmusementPark",
+		Aliases = {
+			"BubbleTransit_AmusementParkTransit",
 		},
 		IsHubLobby = false,
 	},

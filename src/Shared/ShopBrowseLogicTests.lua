@@ -62,6 +62,7 @@ function ShopBrowseLogicTests.Run(): boolean
 	check(ShopBrowseLogic.CanInvokeAction({ Available = true, ButtonState = "Buy" }) == true, "Buy invocable")
 	check(ShopBrowseLogic.CanInvokeAction({ Available = true, ButtonState = "Upgrade" }) == true, "Upgrade invocable")
 	check(ShopBrowseLogic.CanInvokeAction({ Available = true, ButtonState = "Equip" }) == true, "Equip invocable")
+	check(ShopBrowseLogic.CanInvokeAction({ Available = true, ButtonState = "EquipCosmetic" }) == true, "EquipCosmetic invocable")
 	check(ShopBrowseLogic.CanInvokeAction({ Available = true, ButtonState = "ComingSoon" }) == false, "ComingSoon jamais invocable")
 	check(ShopBrowseLogic.CanInvokeAction({ Available = true, ButtonState = "Locked" }) == false, "Locked jamais invocable")
 	check(ShopBrowseLogic.CanInvokeAction({ Available = true, ButtonState = "TooExpensive" }) == false, "TooExpensive jamais invocable")
@@ -75,6 +76,7 @@ function ShopBrowseLogicTests.Run(): boolean
 	check(ShopBrowseLogic.RemoteForButtonState("Buy") == "BuyItem", "Buy -> BuyItem")
 	check(ShopBrowseLogic.RemoteForButtonState("Upgrade") == "BuyUpgrade", "Upgrade -> BuyUpgrade")
 	check(ShopBrowseLogic.RemoteForButtonState("Equip") == "EquipBackpack", "Equip -> EquipBackpack")
+	check(ShopBrowseLogic.RemoteForButtonState("EquipCosmetic") == "EquipCosmetic", "EquipCosmetic -> EquipCosmetic")
 	check(ShopBrowseLogic.RemoteForButtonState("ComingSoon") == nil, "ComingSoon -> aucun remote")
 	check(ShopBrowseLogic.RemoteForButtonState(nil) == nil, "nil -> aucun remote")
 

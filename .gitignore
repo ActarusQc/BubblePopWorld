@@ -35,3 +35,21 @@ secrets/
 credentials.json
 **/api_keys*
 **/ApiKey*
+
+# Assets de conception / fichiers 3D lourds
+*.blend
+*.blend1
+*.fbx
+*.obj
+*.mtl
+
+# Images de reference / concepts
+assets/**/*.png
+assets/**/*.PNG
+assets/**/*.jpg
+assets/**/*.JPG
+assets/**/*.jpeg
+assets/**/*.JPEG
+
+# Configuration locale Codex
+.codex-classic-template/

@@ -78,10 +78,10 @@ function BubbleAppearanceTests.Run(): boolean
 	local pastel = GameConfig.Bubble.MainZoneNormalColors
 	check(type(pastel) == "table" and #pastel == 4, "MainZoneNormalColors = 4")
 	local expectedPastel = {
-		Color3.fromRGB(85, 165, 215),
-		Color3.fromRGB(90, 190, 145),
-		Color3.fromRGB(145, 120, 210),
-		Color3.fromRGB(220, 125, 100),
+		Color3.fromRGB(72, 205, 232),
+		Color3.fromRGB(96, 218, 188),
+		Color3.fromRGB(185, 145, 232),
+		Color3.fromRGB(242, 179, 112),
 	}
 	if pastel then
 		for i, c in ipairs(expectedPastel) do
@@ -107,8 +107,8 @@ function BubbleAppearanceTests.Run(): boolean
 		check(not BubbleAppearance.HasSpecialSymbol(part), "normal " .. i .. " sans symbole")
 		check(not BubbleAppearance.HasRealLights(part), "normal " .. i .. " sans lights")
 		check(not BubbleAppearance.HasBeam(part), "normal " .. i .. " sans beam")
-		check(part.Material == Enum.Material.Neon, "normal " .. i .. " Neon")
-		check(part.Reflectance == 0, "normal " .. i .. " Reflectance 0")
+		check(part.Material == Enum.Material.SmoothPlastic, "normal " .. i .. " SmoothPlastic")
+		check(part.Reflectance == 0.08, "normal " .. i .. " Reflectance glossy")
 		check(part.Transparency == 0, "normal " .. i .. " Transparency 0")
 		check(part.CastShadow == false, "normal " .. i .. " CastShadow false")
 		check(part:FindFirstChildOfClass("SurfaceAppearance") == nil, "normal " .. i .. " pas SurfaceAppearance")
@@ -127,10 +127,10 @@ function BubbleAppearanceTests.Run(): boolean
 		check(seenPastel[i] == true, "pastel " .. i .. " réalisable")
 	end
 
-	-- A/B matériaux : Resolve n’utilise pas Plastic/SmoothPlastic en zone principale
+	-- La zone principale utilise maintenant le dôme glossy SmoothPlastic.
 	local ab = BubbleAppearance.Resolve("ClassicZone", "Normal", 1)
-	check(ab.Material == Enum.Material.Neon, "Resolve main Normal = Neon (pas Plastic/SmoothPlastic)")
-	check(ab.Reflectance == 0, "Resolve main Reflectance 0")
+	check(ab.Material == Enum.Material.SmoothPlastic, "Resolve main Normal = SmoothPlastic")
+	check(ab.Reflectance == 0.08, "Resolve main Reflectance glossy")
 	check(ab.Transparency == 0, "Resolve main Transparency 0")
 
 	local specialIds = { "Rare", "Golden", "Diamond", "Legendary" }
@@ -152,8 +152,9 @@ function BubbleAppearanceTests.Run(): boolean
 		check(colorEq(part.Color, BubbleAppearance.GetSpecialColor(id)), id .. " GetSpecialColor")
 		check(not BubbleAppearance.IsNormalPaletteColor("ClassicZone", part.Color), id .. " hors palette pastel")
 		check(part:GetAttribute("BaseValue") == def.SellValue, id .. " valeur")
-		check(part.Material == Enum.Material.Neon, id .. " Neon")
-		check(part.Reflectance == 0, id .. " Reflectance 0 main")
+		local resolvedSpecial = BubbleAppearance.Resolve("ClassicZone", id, 1)
+		check(part.Material == Enum.Material.SmoothPlastic, id .. " SmoothPlastic")
+		check(part.Reflectance == resolvedSpecial.Reflectance, id .. " Reflectance glossy")
 		check(part.Transparency == 0, id .. " Transparency 0")
 		check(part.CastShadow == false, id .. " CastShadow false")
 		check(BubbleAppearance.IsMainZoneStableVisual(part, true), id .. " stable visual")
@@ -166,12 +167,12 @@ function BubbleAppearanceTests.Run(): boolean
 		check(not BubbleAppearance.HasSpecialSymbol(part), id .. " symbol cleared")
 		check(not BubbleAppearance.HasRarityMarker(part), id .. " marqueurs cleared après pop")
 		check(not BubbleAppearance.HasRealLights(part), id .. " lights still none after pop")
-		check(part.Material == Enum.Material.Neon, id .. " Neon après pop")
+		check(part.Material == Enum.Material.SmoothPlastic, id .. " SmoothPlastic après pop")
 
 		-- Respawn special : même couleur fixe, toujours sans marqueur
 		BubbleAppearance.ApplyToPart(part, "ClassicZone", id, 1, true)
 		check(colorEq(part.Color, def.Color), id .. " couleur fixe au respawn")
-		check(part.Material == Enum.Material.Neon, id .. " Neon respawn")
+		check(part.Material == Enum.Material.SmoothPlastic, id .. " SmoothPlastic respawn")
 		check(not BubbleAppearance.HasRarityMarker(part), id .. " sans marqueur respawn")
 		check(not BubbleAppearance.HasRealLights(part), id .. " no lights respawn")
 
@@ -181,7 +182,7 @@ function BubbleAppearanceTests.Run(): boolean
 		check(not BubbleAppearance.HasSpecialSymbol(part), id .. "→Normal clear symbol")
 		check(not BubbleAppearance.HasRarityMarker(part), id .. "→Normal clear markers")
 		check(BubbleAppearance.IsNormalPaletteColor("ClassicZone", part.Color), id .. "→Normal pastel")
-		check(part.Material == Enum.Material.Neon, id .. "→Normal Neon")
+		check(part.Material == Enum.Material.SmoothPlastic, id .. "→Normal SmoothPlastic")
 		check(not colorEq(part.Color, def.Color), id .. "→Normal ne conserve pas couleur spéciale")
 		check(BubbleAppearance.IsMainZoneStableVisual(part, true), id .. "→Normal stable")
 		part:Destroy()
@@ -195,7 +196,7 @@ function BubbleAppearanceTests.Run(): boolean
 	check(BubbleAppearance.IsMainZoneStableVisual(recycle, true), "recycle start stable")
 	local mat0 = recycle.Material
 	BubbleAppearance.ApplyBubbleVisual(recycle, "Rare", "GameRoom", 1, true)
-	check(recycle.Material == Enum.Material.Neon, "recycle→Rare Neon")
+	check(recycle.Material == Enum.Material.SmoothPlastic, "recycle→Rare SmoothPlastic")
 	check(colorEq(recycle.Color, Color3.fromRGB(200, 45, 45)), "recycle→Rare color")
 	check(not BubbleAppearance.HasRarityMarker(recycle), "recycle→Rare no markers")
 	BubbleAppearance.ApplyBubbleVisual(recycle, "Normal", "GameRoom", 2, true)

@@ -23,7 +23,7 @@ local ShopAvatarVisibility = require(script.Parent.ShopAvatarVisibility)
 local player = Players.LocalPlayer
 local ShopUI = {}
 
-type CategoryId = "Skills" | "Items" | "Cosmetics"
+type CategoryId = "Skills" | "Items" | "Hats" | "Vests" | "Shirts" | "Accessories" | "Shoes"
 
 type ShopRow = {
 	Id: string,
@@ -33,6 +33,7 @@ type ShopRow = {
 	Available: boolean,
 	Equipable: boolean?,
 	IconKey: string?,
+	ModelName: string?,
 	ButtonState: string,
 	Level: number?,
 	Max: number?,
@@ -40,7 +41,122 @@ type ShopRow = {
 	Capacity: number?,
 	Owned: boolean?,
 	Equipped: boolean?,
+	Slot: string?,
+	Rarity: string?,
 }
+
+local function buildImportedAccessoryPreview(modelName: string?): (Model?, ShopViewportModels.Bounds?)
+	if type(modelName) ~= "string" or modelName == "" then
+		return nil, nil
+	end
+	local shopAssets = ReplicatedStorage:FindFirstChild("ShopAssets")
+	local hats = if shopAssets then shopAssets:FindFirstChild("Hats") else nil
+	local accessory = if hats then hats:FindFirstChild(modelName) else nil
+	local sourceHandle = if accessory then accessory:FindFirstChild("Handle") else nil
+	if not sourceHandle or not sourceHandle:IsA("BasePart") then
+		return nil, nil
+	end
+
+	local model = Instance.new("Model")
+	model.Name = "Preview_" .. modelName
+	-- Imported hat assets face away from the shop camera in their attachment
+	-- orientation. Keep that orientation for gameplay and only turn the preview.
+	model:SetAttribute("ShopPreviewYaw", math.pi)
+	local handle = sourceHandle:Clone()
+	handle.Name = "PreviewHandle"
+	handle.Anchored = true
+	handle.CanCollide = false
+	handle.CanTouch = false
+	handle.CanQuery = false
+	handle.CastShadow = false
+	for _, descendant in handle:GetDescendants() do
+		if descendant:IsA("Weld") or descendant:IsA("WeldConstraint") then
+			descendant:Destroy()
+		end
+	end
+
+	-- Reproduce Roblox's accessory alignment: the HatAttachment defines which
+	-- way is up and which way is the front, regardless of the imported mesh axes.
+	local hatAttachment = handle:FindFirstChild("HatAttachment")
+	local attachmentRotation = if hatAttachment and hatAttachment:IsA("Attachment")
+		then hatAttachment.CFrame.Rotation
+		else CFrame.new()
+	handle.CFrame = attachmentRotation:Inverse()
+	handle.Parent = model
+
+	-- An invisible fixed pivot lets the model spin without replacing the
+	-- attachment-derived orientation of the visible handle.
+	local pivot = Instance.new("Part")
+	pivot.Name = "PreviewPivot"
+	pivot.Size = Vector3.new(0.05, 0.05, 0.05)
+	pivot.Transparency = 1
+	pivot.Anchored = true
+	pivot.CanCollide = false
+	pivot.CanTouch = false
+	pivot.CanQuery = false
+	pivot.CastShadow = false
+	pivot.CFrame = CFrame.new()
+	pivot.Parent = model
+	model.PrimaryPart = pivot
+	local size = handle.Size
+	local bounds: ShopViewportModels.Bounds = {
+		Center = Vector3.new(),
+		Size = size,
+		Radius = math.max(0.5, size.Magnitude * 0.5),
+	}
+	return model, bounds
+end
+
+local function buildImportedShirtPreview(modelName: string?): (Model?, ShopViewportModels.Bounds?)
+	if type(modelName) ~= "string" or modelName == "" then return nil, nil end
+	local shopAssets = ReplicatedStorage:FindFirstChild("ShopAssets")
+	local shirts = if shopAssets then shopAssets:FindFirstChild("Shirts") else nil
+	local source = if shirts then shirts:FindFirstChild(modelName, true) else nil
+	if not source or not source:IsA("Shirt") then return nil, nil end
+	local model = Instance.new("Model")
+	model.Name = "Preview_" .. modelName
+	local function bodyPart(name: string, size: Vector3, position: Vector3)
+		local part = Instance.new("Part")
+		part.Name = name; part.Size = size; part.Position = position
+		part.Anchored = true; part.CanCollide = false; part.CanTouch = false; part.CanQuery = false
+		part.Color = Color3.fromRGB(235, 235, 235); part.Parent = model
+		return part
+	end
+	local torso = bodyPart("Torso", Vector3.new(2, 2, 1), Vector3.new(0, 0, 0))
+	bodyPart("Left Arm", Vector3.new(1, 2, 1), Vector3.new(-1.5, 0, 0))
+	bodyPart("Right Arm", Vector3.new(1, 2, 1), Vector3.new(1.5, 0, 0))
+	local shirt = source:Clone(); shirt.Parent = model
+	model.PrimaryPart = torso
+	return model, { Center = Vector3.new(), Size = Vector3.new(4, 2, 1), Radius = 2.3 }
+end
+
+local function getImportedShirtImage(modelName: string?): string?
+	if type(modelName) ~= "string" or modelName == "" then return nil end
+	local shopAssets = ReplicatedStorage:FindFirstChild("ShopAssets")
+	local shirts = if shopAssets then shopAssets:FindFirstChild("Shirts") else nil
+	local source = if shirts then shirts:FindFirstChild(modelName, true) else nil
+	if source and source:IsA("Shirt") and source.ShirtTemplate ~= "" then
+		return source.ShirtTemplate
+	end
+	return nil
+end
+
+local function buildImportedCosmeticPreview(modelName: string?, category: CategoryId?): (Model?, ShopViewportModels.Bounds?)
+	if category == "Shirts" then return buildImportedShirtPreview(modelName) end
+	return buildImportedAccessoryPreview(modelName)
+end
+
+local function getPreviewCameraCFrame(model: Model, bounds: ShopViewportModels.Bounds, fieldOfView: number): CFrame
+	if type(model:GetAttribute("ShopPreviewYaw")) == "number" then
+		-- Hats are shallow vertically, so the regular elevated shop camera shows
+		-- mostly their crown. A level catalogue view presents their front instead.
+		local yaw = math.rad(-10)
+		local direction = Vector3.new(math.sin(yaw), 0, math.cos(yaw))
+		local distance = ShopViewportModels.GetCameraDistance(bounds.Radius, fieldOfView)
+		return CFrame.lookAt(direction * distance, Vector3.new())
+	end
+	return ShopViewportModels.GetCameraCFrame(bounds, fieldOfView)
+end
 
 type SavedState = {
 	WalkSpeed: number,
@@ -56,18 +172,23 @@ type SavedState = {
 	FieldOfView: number,
 }
 
-local CATEGORY_IDS: { CategoryId } = { "Skills", "Items", "Cosmetics" }
+local CATEGORY_IDS: { CategoryId } = { "Skills", "Items", "Hats", "Vests", "Shirts", "Accessories", "Shoes" }
 
 local CATEGORY_LABEL_KEY: { [string]: string } = {
 	Skills = "Skills",
 	Items = "Items",
-	Cosmetics = "Cosmetics",
+	Hats = "Hats",
+	Vests = "Vests",
+	Shirts = "Shirts",
+	Accessories = "Accessories",
+	Shoes = "Shoes",
 }
 
 local BUTTON_LABEL_KEY: { [string]: string } = {
 	Buy = "Buy",
 	Upgrade = "Upgrade",
 	Equip = "Equip",
+	EquipCosmetic = "Equip",
 	Equipped = "Equipped",
 	TooExpensive = "TooExpensive",
 	ComingSoon = "ComingSoon",
@@ -91,6 +212,36 @@ local function corner(parent: Instance, r: number?): UICorner
 	c.CornerRadius = UDim.new(0, r or 12)
 	c.Parent = parent
 	return c
+end
+
+local function createShirtSilhouette(parent: Instance, size: UDim2, position: UDim2, zIndex: number): Frame
+	local holder = Instance.new("Frame")
+	holder.Name = "ShirtSilhouette"
+	holder.Size = size; holder.Position = position
+	holder.BackgroundTransparency = 1; holder.ZIndex = zIndex; holder.Parent = parent
+	local function panel(name: string, panelSize: UDim2, panelPosition: UDim2, rotation: number, offset: Vector2, rectSize: Vector2)
+		local image = Instance.new("ImageLabel")
+		image.Name = name; image.Size = panelSize; image.Position = panelPosition
+		image.AnchorPoint = Vector2.new(0.5, 0.5); image.BackgroundTransparency = 1
+		image.ImageRectOffset = offset; image.ImageRectSize = rectSize
+		image.ScaleType = Enum.ScaleType.Stretch; image.Rotation = rotation
+		image.ZIndex = zIndex; image.Parent = holder
+		return image
+	end
+	panel("LeftSleeve", UDim2.fromScale(0.31, 0.54), UDim2.fromScale(0.20, 0.38), 18, Vector2.new(19,355), Vector2.new(64,128))
+	panel("RightSleeve", UDim2.fromScale(0.31, 0.54), UDim2.fromScale(0.80, 0.38), -18, Vector2.new(503,355), Vector2.new(64,128))
+	panel("Torso", UDim2.fromScale(0.57, 0.72), UDim2.fromScale(0.50, 0.52), 0, Vector2.new(231,74), Vector2.new(128,128))
+	local collar = Instance.new("Frame")
+	collar.Name = "Collar"; collar.Size = UDim2.fromScale(0.20,0.10); collar.Position = UDim2.fromScale(0.40,0.14)
+	collar.BackgroundColor3 = Color3.fromRGB(18,48,82); collar.BorderSizePixel = 0; collar.ZIndex = zIndex + 1; collar.Parent = holder
+	corner(collar, 20)
+	return holder
+end
+
+local function setShirtSilhouetteImage(holder: Frame, imageId: string)
+	for _, child in holder:GetChildren() do
+		if child:IsA("ImageLabel") then child.Image = imageId end
+	end
 end
 
 local function comma(n: number): string
@@ -145,8 +296,8 @@ function ShopUI.Start()
 	panel.Name = "BrowsePanel"
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.new(0.5, 0, 0.52, 0)
-	panel.Size = UDim2.new(0.92, 0, 0.82, 0)
-	panel.BackgroundColor3 = Color3.fromRGB(70, 58, 119)
+	panel.Size = UDim2.new(0.84, 0, 0.78, 0)
+	panel.BackgroundColor3 = Color3.fromRGB(7, 27, 50)
 	panel.BackgroundTransparency = 0.02
 	panel.BorderSizePixel = 0
 	panel.Visible = false
@@ -156,21 +307,28 @@ function ShopUI.Start()
 
 	local sizeConstraint = Instance.new("UISizeConstraint")
 	sizeConstraint.MinSize = Vector2.new(320, 360)
-	sizeConstraint.MaxSize = Vector2.new(1180, 720)
+	sizeConstraint.MaxSize = Vector2.new(1500, 820)
 	sizeConstraint.Parent = panel
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(122, 99, 184)
-	stroke.Thickness = 4
-	stroke.Transparency = 0.08
+	stroke.Color = Color3.fromRGB(235, 252, 255)
+	stroke.Thickness = 3
+	stroke.Transparency = 0
 	stroke.Parent = panel
+	local panelGradient = Instance.new("UIGradient")
+	panelGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 62, 98)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(6, 24, 46)),
+	})
+	panelGradient.Rotation = 90
+	panelGradient.Parent = panel
 
 	local ribbonShadow = Instance.new("Frame")
 	ribbonShadow.Name = "RibbonShadow"
 	ribbonShadow.AnchorPoint = Vector2.new(0.5, 0)
 	ribbonShadow.Position = UDim2.new(0.5, 0, 0, -18)
 	ribbonShadow.Size = UDim2.new(0.58, 0, 0, 82)
-	ribbonShadow.BackgroundColor3 = Color3.fromRGB(91, 20, 45)
+	ribbonShadow.BackgroundColor3 = Color3.fromRGB(10, 63, 145)
 	ribbonShadow.BorderSizePixel = 0
 	ribbonShadow.ZIndex = 4
 	ribbonShadow.Parent = panel
@@ -181,27 +339,26 @@ function ShopUI.Start()
 	ribbon.AnchorPoint = Vector2.new(0.5, 0)
 	ribbon.Position = UDim2.new(0.5, 0, 0, -24)
 	ribbon.Size = UDim2.new(0.54, 0, 0, 72)
-	ribbon.BackgroundColor3 = Color3.fromRGB(197, 53, 71)
+	ribbon.BackgroundColor3 = Color3.fromRGB(244, 252, 255)
 	ribbon.BorderSizePixel = 0
 	ribbon.ZIndex = 5
 	ribbon.Parent = panel
 	corner(ribbon, 10)
 	local ribbonStroke = Instance.new("UIStroke")
-	ribbonStroke.Color = Color3.fromRGB(255, 174, 47)
+	ribbonStroke.Color = Color3.fromRGB(22, 105, 238)
 	ribbonStroke.Thickness = 3
 	ribbonStroke.Parent = ribbon
 	local ribbonGradient = Instance.new("UIGradient")
-	ribbonGradient.Color = ColorSequence.new(Color3.fromRGB(224, 71, 84), Color3.fromRGB(166, 37, 61))
+	ribbonGradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(196, 239, 255))
 	ribbonGradient.Rotation = 90
 	ribbonGradient.Parent = ribbon
 	local shopTitle = Instance.new("TextLabel")
 	shopTitle.Size = UDim2.fromScale(1, 1)
 	shopTitle.BackgroundTransparency = 1
 	shopTitle.Font = Enum.Font.GothamBlack
-	shopTitle.Text = "PREMIUM SHOP"
-	shopTitle.TextColor3 = Color3.fromRGB(255, 202, 54)
-	shopTitle.TextStrokeColor3 = Color3.fromRGB(91, 29, 24)
-	shopTitle.TextStrokeTransparency = 0
+	shopTitle.Text = "BUBBLE SHOP!"
+	shopTitle.TextColor3 = Color3.fromRGB(20, 87, 218)
+	shopTitle.TextStrokeTransparency = 1
 	shopTitle.TextScaled = true
 	shopTitle.ZIndex = 6
 	shopTitle.Parent = ribbon
@@ -234,16 +391,21 @@ function ShopUI.Start()
 	categoryTitle.Parent = header
 	categoryTitle.Visible = false
 
-	local categoryTabs = Instance.new("Frame")
+	local categoryTabs = Instance.new("ScrollingFrame")
 	categoryTabs.Name = "CategoryTabs"
 	categoryTabs.Size = UDim2.new(0.68, 0, 1, 0)
 	categoryTabs.Position = UDim2.new(0.02, 0, 0, 0)
 	categoryTabs.BackgroundTransparency = 1
+	categoryTabs.BorderSizePixel = 0
+	categoryTabs.ScrollBarThickness = 0
+	categoryTabs.ScrollingDirection = Enum.ScrollingDirection.X
+	categoryTabs.AutomaticCanvasSize = Enum.AutomaticSize.X
+	categoryTabs.CanvasSize = UDim2.new()
 	categoryTabs.ZIndex = 3
 	categoryTabs.Parent = header
 	local tabsLayout = Instance.new("UIListLayout")
 	tabsLayout.FillDirection = Enum.FillDirection.Horizontal
-	tabsLayout.Padding = UDim.new(0, 14)
+	tabsLayout.Padding = UDim.new(0, 12)
 	tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	tabsLayout.Parent = categoryTabs
 
@@ -251,9 +413,10 @@ function ShopUI.Start()
 	for i, catId in ipairs(CATEGORY_IDS) do
 		local tab = Instance.new("TextButton")
 		tab.Name = "Tab_" .. catId
-		tab.Size = UDim2.new(0.33, -4, 1, 0)
+		tab.Size = UDim2.fromOffset(118, 52)
 		tab.BackgroundColor3 = Color3.fromRGB(117, 205, 47)
-		tab.TextColor3 = Color3.fromRGB(42, 28, 75)
+		tab.TextColor3 = Color3.fromRGB(9, 48, 91)
+		tab.TextStrokeTransparency = 1
 		tab.Font = Enum.Font.GothamBlack
 		tab.TextSize = 18
 		tab.BorderSizePixel = 0
@@ -262,9 +425,10 @@ function ShopUI.Start()
 		tab.LayoutOrder = i
 		tab.ZIndex = 4
 		tab.Parent = categoryTabs
-		corner(tab, 10)
+		corner(tab, 18)
 		local tabStroke = Instance.new("UIStroke")
-		tabStroke.Color = Color3.fromRGB(58, 40, 100)
+		tabStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		tabStroke.Color = Color3.fromRGB(255, 255, 255)
 		tabStroke.Thickness = 3
 		tabStroke.Parent = tab
 		L10nUtil.localize(tab, localized(CATEGORY_LABEL_KEY[catId]))
@@ -293,7 +457,8 @@ function ShopUI.Start()
 	coinsLabel.Font = Enum.Font.GothamBold
 	coinsLabel.TextSize = 16
 	coinsLabel.TextXAlignment = Enum.TextXAlignment.Right
-	coinsLabel.TextColor3 = Color3.fromRGB(255, 220, 120)
+	coinsLabel.TextColor3 = Color3.fromRGB(255, 244, 105)
+	coinsLabel.TextStrokeTransparency = 1
 	coinsLabel.Text = ""
 	coinsLabel.ZIndex = 3
 	coinsLabel.Parent = header
@@ -303,15 +468,15 @@ function ShopUI.Start()
 	closeBtn.Name = "CloseButton"
 	closeBtn.Size = UDim2.fromOffset(40, 40)
 	closeBtn.Position = UDim2.new(1, -40, 0, -4)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(196, 55, 66)
-	closeBtn.TextColor3 = Color3.fromRGB(112, 17, 24)
+	closeBtn.BackgroundColor3 = Color3.fromRGB(255, 77, 79)
+	closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	closeBtn.Font = Enum.Font.GothamBlack
 	closeBtn.TextSize = 18
 	closeBtn.BorderSizePixel = 0
 	closeBtn.AutoButtonColor = true
 	closeBtn.Selectable = true
 	closeBtn.ZIndex = 4
-	closeBtn.Parent = header
+	closeBtn.Parent = panel
 	L10nUtil.dynamic(closeBtn, L10n.Close)
 	local closeCorner = corner(closeBtn, 10)
 
@@ -320,14 +485,14 @@ function ShopUI.Start()
 	body.Name = "Body"
 	body.Size = UDim2.new(1, -56, 1, -164)
 	body.Position = UDim2.new(0, 28, 0, 138)
-	body.BackgroundColor3 = Color3.fromRGB(83, 69, 137)
-	body.BackgroundTransparency = 1
+	body.BackgroundColor3 = Color3.fromRGB(12, 62, 96)
+	body.BackgroundTransparency = 0.04
 	body.ZIndex = 3
 	body.Parent = panel
 	corner(body, 16)
 	local bodyStroke = Instance.new("UIStroke")
-	bodyStroke.Color = Color3.fromRGB(43, 33, 80)
-	bodyStroke.Thickness = 4
+	bodyStroke.Color = Color3.fromRGB(225, 249, 255)
+	bodyStroke.Thickness = 3
 	bodyStroke.Parent = body
 
 	local itemGrid = Instance.new("ScrollingFrame")
@@ -338,7 +503,7 @@ function ShopUI.Start()
 	itemGrid.BackgroundTransparency = 1
 	itemGrid.BorderSizePixel = 0
 	itemGrid.ScrollBarThickness = 8
-	itemGrid.ScrollBarImageColor3 = Color3.fromRGB(196, 128, 255)
+	itemGrid.ScrollBarImageColor3 = Color3.fromRGB(235, 252, 255)
 	itemGrid.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	itemGrid.CanvasSize = UDim2.new()
 	itemGrid.ZIndex = 3
@@ -351,7 +516,7 @@ function ShopUI.Start()
 	itemGridPadding.PaddingRight = UDim.new(0, 12)
 	itemGridPadding.Parent = itemGrid
 	local itemGridLayout = Instance.new("UIGridLayout")
-	itemGridLayout.CellSize = UDim2.new(0.5, -10, 0, 154)
+	itemGridLayout.CellSize = UDim2.new(0.25, -12, 0, 280)
 	itemGridLayout.CellPadding = UDim2.fromOffset(16, 16)
 	itemGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	itemGridLayout.Parent = itemGrid
@@ -446,6 +611,13 @@ function ShopUI.Start()
 	viewport.ZIndex = 4
 	viewport.Parent = content
 	local viewportCorner = corner(viewport, 12)
+	local shirtPreview = createShirtSilhouette(content, UDim2.fromOffset(VIEWPORT_SIZE - 20, VIEWPORT_SIZE - 20), UDim2.new(0.5, -(VIEWPORT_SIZE - 20) / 2, 0, 28), 7)
+	shirtPreview.Name = "ShirtTexturePreview"
+	shirtPreview.Size = UDim2.fromOffset(VIEWPORT_SIZE - 22, VIEWPORT_SIZE - 22)
+	shirtPreview.Position = UDim2.new(0.5, -(VIEWPORT_SIZE - 22) / 2, 0, 29)
+	shirtPreview.BackgroundTransparency = 1
+	shirtPreview.ZIndex = 7
+	shirtPreview.Visible = false
 
 	local vpCamera = Instance.new("Camera")
 	vpCamera.FieldOfView = VIEWPORT_FOV
@@ -460,6 +632,8 @@ function ShopUI.Start()
 	local previewSpin = 0
 
 	local function clearPreview()
+		shirtPreview.Visible = false
+		setShirtSilhouetteImage(shirtPreview, "")
 		if previewModel then
 			previewModel:Destroy()
 			previewModel = nil
@@ -593,36 +767,54 @@ function ShopUI.Start()
 		appliedHeight = container.Y
 		currentLayout = ShopBrowseLayout.Resolve(mode, container)
 
-		local compact = container.X < 760 or container.Y < 560
+		-- PC et console partagent la navigation verticale plus lisible.
+		-- Seuls les trÃ¨s petits Ã©crans mobiles utilisent la barre horizontale.
+		local compact = container.X < 760 or container.Y < 450
 		panel.AnchorPoint = Vector2.new(0.5, 0.5)
-		panel.Size = if compact then UDim2.new(0.96, 0, 0.90, 0) else UDim2.new(0.92, 0, 0.84, 0)
+		panel.Size = if compact then UDim2.new(0.94, 0, 0.86, 0) else UDim2.new(0.84, 0, 0.78, 0)
 		panel.Position = UDim2.new(0.5, 0, 0.52, 0)
 		sizeConstraint.MinSize = Vector2.new(320, 360)
-		sizeConstraint.MaxSize = Vector2.new(1180, 760)
+		sizeConstraint.MaxSize = Vector2.new(1500, 820)
 		panelCorner.CornerRadius = UDim.new(0, 18)
 
-		ribbon.Size = if compact then UDim2.new(0.62, 0, 0, 58) else UDim2.new(0.54, 0, 0, 72)
+		ribbon.Size = if compact then UDim2.new(0.62, 0, 0, 58) else UDim2.new(0.46, 0, 0, 68)
 		ribbon.Position = UDim2.new(0.5, 0, 0, if compact then -12 else -24)
 		ribbonShadow.Size = if compact then UDim2.new(0.66, 0, 0, 66) else UDim2.new(0.58, 0, 0, 82)
 		ribbonShadow.Position = UDim2.new(0.5, 0, 0, if compact then -7 else -18)
 
-		header.Size = UDim2.new(1, -48, 0, if compact then 52 else 64)
-		header.Position = UDim2.new(0, 24, 0, if compact then 52 else 62)
-		categoryTabs.Size = UDim2.new(if compact then 0.72 else 0.68, 0, 1, 0)
+		header.Size = if compact then UDim2.new(1, -48, 0, 54) else UDim2.new(1, -48, 1, -86)
+		header.Position = UDim2.new(0, 24, 0, if compact then 72 else 78)
+		tabsLayout.FillDirection = if compact then Enum.FillDirection.Horizontal else Enum.FillDirection.Vertical
+		tabsLayout.Padding = UDim.new(0, 8)
+		categoryTabs.ScrollingDirection = if compact then Enum.ScrollingDirection.X else Enum.ScrollingDirection.Y
+		categoryTabs.AutomaticCanvasSize = if compact then Enum.AutomaticSize.X else Enum.AutomaticSize.Y
+		categoryTabs.Size = if compact then UDim2.new(1, -270, 0, 52) else UDim2.new(0, 124, 1, -8)
 		categoryTabs.Position = UDim2.new(0, 0, 0, 0)
-		coinsLabel.Size = UDim2.new(0.24, -58, 1, 0)
-		coinsLabel.Position = UDim2.new(0.72, 0, 0, 0)
+		for _, tab in pairs(categoryTabButtons) do
+			tab.Size = if compact then UDim2.fromOffset(90, 52) else UDim2.new(1, -8, 0, 52)
+			tab.TextSize = if compact then 13 else 15
+		end
+		coinsLabel.Size = UDim2.new(0, 180, 0, 54)
+		coinsLabel.Position = UDim2.new(1, -246, 0, if compact then 0 else -10)
 		coinsLabel.TextSize = if compact then 14 else 18
 		closeBtn.Size = UDim2.fromOffset(if compact then 44 else 54, if compact then 44 else 54)
-		closeBtn.Position = UDim2.new(1, -(if compact then 44 else 54), 0.5, -(if compact then 22 else 27))
+		closeBtn.Position = UDim2.new(1, -(if compact then 56 else 68), 0, 14)
 		closeBtn.TextSize = if compact then 22 else 28
 		closeCorner.CornerRadius = UDim.new(0, 10)
 
-		body.Size = UDim2.new(1, -56, 1, if compact then -136 else -164)
-		body.Position = UDim2.new(0, 28, 0, if compact then 116 else 138)
+		body.Size = if compact then UDim2.new(1, -40, 1, -154) else UDim2.new(1, -180, 1, -118)
+		body.Position = if compact then UDim2.new(0, 20, 0, 136) else UDim2.new(0, 150, 0, 96)
 		itemGrid.Size = UDim2.new(1, -24, 1, -24)
 		itemGrid.Position = UDim2.fromOffset(12, 12)
-		itemGridLayout.CellSize = if compact then UDim2.new(1, -8, 0, 132) else UDim2.new(0.5, -10, 0, 154)
+		-- Height alone must not collapse the catalogue into long horizontal rows.
+		-- Desktop/console keep two product cards per row and simply scroll down.
+		if container.X >= 1100 then
+			itemGridLayout.CellSize = UDim2.new(0.25, -12, 0, 285)
+		elseif container.X >= 760 then
+			itemGridLayout.CellSize = UDim2.new(0.5, -10, 0, 285)
+		else
+			itemGridLayout.CellSize = UDim2.new(1, -8, 0, 250)
+		end
 	end
 
 	-- Plusieurs événements d'entrée peuvent arriver en rafale : on temporise, et
@@ -645,6 +837,7 @@ function ShopUI.Start()
 	local function selectionStroke(button: GuiButton): UIStroke
 		local outline = Instance.new("UIStroke")
 		outline.Name = "SelectionOutline"
+		outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		outline.Thickness = 3
 		outline.Color = Color3.fromRGB(255, 255, 255)
 		outline.Transparency = 1
@@ -696,7 +889,8 @@ function ShopUI.Start()
 			previewSpin = (previewSpin + dt * 0.55) % (math.pi * 2)
 			local model = previewModel
 			if model then
-				model:PivotTo(CFrame.Angles(0, previewSpin, 0))
+				local yawOffset = model:GetAttribute("ShopPreviewYaw")
+				model:PivotTo(CFrame.Angles(0, previewSpin + (if type(yawOffset) == "number" then yawOffset else 0), 0))
 			end
 		end)
 		table.insert(browse.tempConns, conn)
@@ -759,10 +953,22 @@ function ShopUI.Start()
 		viewport.Ambient = lighting.Ambient
 		viewport.LightColor = lighting.LightColor
 		viewport.LightDirection = lighting.LightDirection
+		local shirtImage = if category == "Shirts" then getImportedShirtImage(if item then item.ModelName else nil) else nil
+		if shirtImage then
+			setShirtSilhouetteImage(shirtPreview, shirtImage)
+			shirtPreview.Visible = true
+			viewport.Visible = false
+			return
+		end
+		viewport.Visible = true
 
-		local model, bounds = ShopViewportModels.Build(wantedId, if item then item.Type else nil, category)
-		vpCamera.CFrame = ShopViewportModels.GetCameraCFrame(bounds, VIEWPORT_FOV)
-		model:PivotTo(CFrame.Angles(0, previewSpin, 0))
+		local model, bounds = buildImportedCosmeticPreview(if item then item.ModelName else nil, category)
+		if not model or not bounds then
+			model, bounds = ShopViewportModels.Build(wantedId, if item then item.Type else nil, category)
+		end
+		vpCamera.CFrame = getPreviewCameraCFrame(model, bounds, VIEWPORT_FOV)
+		local yawOffset = model:GetAttribute("ShopPreviewYaw")
+		model:PivotTo(CFrame.Angles(0, previewSpin + (if type(yawOffset) == "number" then yawOffset else 0), 0))
 		model.Parent = viewport
 		previewModel = model
 
@@ -773,6 +979,21 @@ function ShopUI.Start()
 
 	local invokeItemAction: ((number) -> ())? = nil
 
+	local function getItemTier(row: ShopRow): (string, Color3, Color3)
+		if browse.category == "Shirts" then
+			if row.Rarity == "Epic" then return "EPIC", Color3.fromRGB(224, 126, 255), Color3.fromRGB(74, 23, 105) end
+			if row.Rarity == "Rare" then return "RARE", Color3.fromRGB(83, 211, 255), Color3.fromRGB(12, 72, 111) end
+			return "COMMON", Color3.fromRGB(111, 235, 132), Color3.fromRGB(22, 76, 45)
+		end
+		local cost = if type(row.Cost) == "number" then row.Cost else 0
+		if cost >= 20000 then
+			return "PRESTIGE", Color3.fromRGB(255, 196, 46), Color3.fromRGB(82, 48, 8)
+		elseif cost >= 5000 then
+			return "INTERMEDIATE", Color3.fromRGB(74, 215, 255), Color3.fromRGB(13, 65, 91)
+		end
+		return "BASIC", Color3.fromRGB(111, 235, 132), Color3.fromRGB(22, 76, 45)
+	end
+
 	local function refreshPresentation()
 		local count = #browse.items
 		local item: ShopRow? = if count > 0 then browse.items[browse.index] else nil
@@ -782,12 +1003,16 @@ function ShopUI.Start()
 		for catId, tab in pairs(categoryTabButtons) do
 			local active = catId == browse.category
 			local activeColors = {
-				Skills = Color3.fromRGB(113, 207, 47),
-				Items = Color3.fromRGB(196, 54, 219),
-				Cosmetics = Color3.fromRGB(35, 181, 229),
+				Skills = Color3.fromRGB(91, 218, 51),
+				Items = Color3.fromRGB(255, 139, 39),
+				Hats = Color3.fromRGB(171, 72, 235),
+				Vests = Color3.fromRGB(63, 185, 242),
+				Shirts = Color3.fromRGB(255, 105, 170),
+				Accessories = Color3.fromRGB(255, 195, 52),
+				Shoes = Color3.fromRGB(82, 220, 177),
 			}
-			tab.BackgroundColor3 = if active then activeColors[catId] else Color3.fromRGB(126, 108, 166)
-			tab.TextColor3 = if active then Color3.fromRGB(42, 28, 75) else Color3.fromRGB(225, 218, 241)
+			tab.BackgroundColor3 = if active then activeColors[catId] else activeColors[catId]:Lerp(Color3.fromRGB(25, 103, 170), 0.45)
+			tab.TextColor3 = Color3.fromRGB(9, 48, 91)
 		end
 		L10nUtil.dynamic(positionLabel, if count > 0 then string.format("%d / %d", browse.index, count) else "")
 		L10nUtil.dynamic(coinsLabel, comma(browse.coins) .. " " .. L10n.CoinsUnit)
@@ -801,23 +1026,45 @@ function ShopUI.Start()
 		end
 		local firstSelectable: GuiButton? = nil
 		for itemIndex, row in ipairs(browse.items) do
+			local tierName, tierColor, tierBackground = getItemTier(row)
 			local card = Instance.new("Frame")
 			card.Name = "ItemCard_" .. row.Id
 			card.LayoutOrder = itemIndex
-			card.BackgroundColor3 = Color3.fromRGB(105, 87, 159)
+			card.BackgroundColor3 = Color3.fromRGB(55, 151, 205)
 			card.BorderSizePixel = 0
 			card.ZIndex = 4
 			card.Parent = itemGrid
 			corner(card, 14)
 			local cardStroke = Instance.new("UIStroke")
-			cardStroke.Color = Color3.fromRGB(48, 36, 89)
-			cardStroke.Thickness = 4
+			cardStroke.Color = Color3.fromRGB(8, 67, 135)
+			cardStroke.Thickness = 3
 			cardStroke.Parent = card
 
+			local tierBadge = Instance.new("TextLabel")
+			tierBadge.Name = "Tier"
+			tierBadge.Size = UDim2.fromOffset(126, 26)
+			tierBadge.Position = UDim2.fromOffset(12, 10)
+			tierBadge.BackgroundColor3 = tierBackground
+			tierBadge.BorderSizePixel = 0
+			tierBadge.Font = Enum.Font.GothamBlack
+			tierBadge.TextSize = 12
+			tierBadge.TextColor3 = tierColor
+			tierBadge.TextStrokeTransparency = 1
+			tierBadge.Text = tierName
+			tierBadge.ZIndex = 8
+			tierBadge.Parent = card
+			corner(tierBadge, 13)
+			local tierStroke = Instance.new("UIStroke")
+			tierStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			tierStroke.Color = tierColor
+			tierStroke.Thickness = 1.5
+			tierStroke.Transparency = 0.15
+			tierStroke.Parent = tierBadge
+
 			local iconBack = Instance.new("Frame")
-			iconBack.Size = UDim2.fromOffset(118, 118)
-			iconBack.Position = UDim2.fromOffset(12, 18)
-			iconBack.BackgroundColor3 = Color3.fromRGB(72, 59, 126)
+			iconBack.Size = UDim2.new(1, -24, 0, 150)
+			iconBack.Position = UDim2.fromOffset(12, 42)
+			iconBack.BackgroundColor3 = Color3.fromRGB(29, 161, 224)
 			iconBack.BorderSizePixel = 0
 			iconBack.ZIndex = 5
 			iconBack.Parent = card
@@ -826,7 +1073,7 @@ function ShopUI.Start()
 			local cardViewport = Instance.new("ViewportFrame")
 			cardViewport.Size = UDim2.new(1, -8, 1, -8)
 			cardViewport.Position = UDim2.fromOffset(4, 4)
-			cardViewport.BackgroundColor3 = ShopViewportModels.GetViewportBackground(browse.category)
+			cardViewport.BackgroundColor3 = Color3.fromRGB(55, 190, 237)
 			cardViewport.BorderSizePixel = 0
 			cardViewport.ZIndex = 6
 			cardViewport.Parent = iconBack
@@ -839,54 +1086,74 @@ function ShopUI.Start()
 			cardViewport.Ambient = cardLighting.Ambient
 			cardViewport.LightColor = cardLighting.LightColor
 			cardViewport.LightDirection = cardLighting.LightDirection
-			local cardModel, cardBounds = ShopViewportModels.Build(row.Id, row.Type, browse.category)
-			cardCamera.CFrame = ShopViewportModels.GetCameraCFrame(cardBounds, VIEWPORT_FOV)
-			cardModel.Parent = cardViewport
+			local shirtImage = if browse.category == "Shirts" then getImportedShirtImage(row.ModelName) else nil
+			if shirtImage then
+				local silhouette = createShirtSilhouette(cardViewport, UDim2.new(1, -28, 1, -12), UDim2.fromOffset(14, 6), 7)
+				setShirtSilhouetteImage(silhouette, shirtImage)
+			else
+				local cardModel, cardBounds = buildImportedCosmeticPreview(row.ModelName, browse.category)
+				if not cardModel or not cardBounds then
+					cardModel, cardBounds = ShopViewportModels.Build(row.Id, row.Type, browse.category)
+				end
+				cardCamera.CFrame = getPreviewCameraCFrame(cardModel, cardBounds, VIEWPORT_FOV)
+				local cardYawOffset = cardModel:GetAttribute("ShopPreviewYaw")
+				cardModel:PivotTo(CFrame.Angles(0, if type(cardYawOffset) == "number" then cardYawOffset else 0, 0))
+				cardModel.Parent = cardViewport
+			end
 
 			local cardName = Instance.new("TextLabel")
-			cardName.Size = UDim2.new(1, -154, 0, 34)
-			cardName.Position = UDim2.fromOffset(144, 14)
+			cardName.Size = UDim2.new(1, -24, 0, 26)
+			cardName.Position = UDim2.fromOffset(12, 198)
 			cardName.BackgroundTransparency = 1
 			cardName.Font = Enum.Font.GothamBlack
-			cardName.TextSize = 20
-			cardName.TextXAlignment = Enum.TextXAlignment.Left
+			cardName.TextSize = 19
+			cardName.TextXAlignment = Enum.TextXAlignment.Center
 			cardName.TextTruncate = Enum.TextTruncate.AtEnd
-			cardName.TextColor3 = WHITE
+			cardName.TextColor3 = Color3.fromRGB(246, 251, 255)
+			cardName.TextStrokeTransparency = 1
 			cardName.Text = row.Label
 			cardName.ZIndex = 5
 			cardName.Parent = card
 
 			local cardDescription = Instance.new("TextLabel")
-			cardDescription.Size = UDim2.new(1, -154, 0, 38)
-			cardDescription.Position = UDim2.fromOffset(144, 48)
+			cardDescription.Size = UDim2.new(1, -28, 0, 28)
+			cardDescription.Position = UDim2.fromOffset(14, 201)
 			cardDescription.BackgroundTransparency = 1
 			cardDescription.Font = Enum.Font.Gotham
-			cardDescription.TextSize = 12
+			cardDescription.TextSize = 11
 			cardDescription.TextWrapped = true
-			cardDescription.TextXAlignment = Enum.TextXAlignment.Left
+			cardDescription.TextXAlignment = Enum.TextXAlignment.Center
 			cardDescription.TextYAlignment = Enum.TextYAlignment.Top
-			cardDescription.TextColor3 = Color3.fromRGB(224, 218, 242)
+			cardDescription.TextColor3 = Color3.fromRGB(20, 75, 112)
+			cardDescription.TextStrokeTransparency = 1
 			cardDescription.Text = row.Description or ""
 			cardDescription.ZIndex = 5
 			cardDescription.Parent = card
+			cardDescription.Visible = false
 
 			local buttonState = row.ButtonState
 			local canInvoke = ShopBrowseLogic.CanInvokeAction(row)
 			local buyButton = Instance.new("TextButton")
 			buyButton.Name = "Buy_" .. row.Id
-			buyButton.Size = UDim2.new(1, -154, 0, 42)
-			buyButton.Position = UDim2.new(0, 144, 1, -54)
-			buyButton.BackgroundColor3 = if canInvoke then Color3.fromRGB(103, 204, 39) else Color3.fromRGB(78, 69, 112)
+			buyButton.Size = UDim2.new(1, -24, 0, 42)
+			buyButton.Position = UDim2.new(0, 12, 1, -52)
+			buyButton.BackgroundColor3 = if canInvoke then Color3.fromRGB(73, 239, 54) else Color3.fromRGB(79, 132, 167)
 			buyButton.BorderSizePixel = 0
 			buyButton.Font = Enum.Font.GothamBlack
 			buyButton.TextSize = 16
-			buyButton.TextColor3 = if canInvoke then Color3.fromRGB(37, 70, 18) else Color3.fromRGB(190, 184, 211)
+			buyButton.TextColor3 = if canInvoke then Color3.fromRGB(12, 66, 18) else Color3.fromRGB(218, 239, 247)
+			buyButton.TextStrokeTransparency = 1
 			buyButton.AutoButtonColor = canInvoke
 			buyButton.Active = canInvoke
 			buyButton.Selectable = canInvoke
 			buyButton.ZIndex = 6
 			buyButton.Parent = card
 			corner(buyButton, 9)
+			local buyStroke = Instance.new("UIStroke")
+			buyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			buyStroke.Color = if canInvoke then Color3.fromRGB(25, 125, 27) else Color3.fromRGB(43, 91, 128)
+			buyStroke.Thickness = 2
+			buyStroke.Parent = buyButton
 			if canInvoke and type(row.Cost) == "number" then
 				local levelText = if row.Type == "Upgrade" and type(row.Level) == "number" and type(row.Max) == "number"
 					then string.format("  •  Lv %d/%d", row.Level, row.Max)
@@ -1295,8 +1562,9 @@ function ShopUI.Start()
 		if triggeringPlayer ~= player then
 			return
 		end
-		local category = prompt:GetAttribute("BPW_ShopCategory")
-		if category ~= "Skills" and category ~= "Items" and category ~= "Cosmetics" then
+		local rawCategory = prompt:GetAttribute("BPW_ShopCategory")
+		local category = if rawCategory == "Cosmetics" then "Hats" else rawCategory
+		if not table.find(CATEGORY_IDS, category) then
 			return
 		end
 

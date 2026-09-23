@@ -44,7 +44,7 @@ HudChrome.FONT_STATUS = 10
 HudChrome.STATS_ORDER = { "Coins", "Backpack", "LevelXp", "Status" } :: { string }
 
 HudChrome.ACTION_BUTTON_SIZE = 64
-HudChrome.ACTION_BUTTON_GAP = 12
+HudChrome.ACTION_BUTTON_GAP = 24 -- laisse place au libellé sous chaque icône ronde
 HudChrome.ACTION_COLUMN_RIGHT = 14
 HudChrome.ACTION_COLUMN_TOP = 12
 

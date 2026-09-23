@@ -380,6 +380,20 @@ function EnvironmentBackdropBuilder.ApplyAtmosphere(worldSky: Color3?)
 
 	Lighting.FogStart = atm.FogStart
 	Lighting.FogEnd = atm.FogEnd
+
+	local streaming = Config.WorldStreaming
+	if streaming then
+		-- StreamingMinRadius a été retiré de Workspace par Roblox ; y écrire lève une
+		-- erreur qui interromprait tout le reste de l'ambiance.
+		local world = game:GetService("Workspace")
+		pcall(function()
+			world.StreamingMinRadius = streaming.MinRadius
+		end)
+		pcall(function()
+			world.StreamingTargetRadius = streaming.TargetRadius
+		end)
+	end
+
 	Lighting.Brightness = light.Brightness
 	Lighting.Ambient = light.Ambient
 	Lighting.EnvironmentDiffuseScale = light.EnvironmentDiffuseScale

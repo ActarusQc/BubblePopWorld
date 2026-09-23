@@ -4,6 +4,7 @@
 
 local GameConfig = require(script.Parent.GameConfig)
 local SummerZoneConfig = require(script.Parent.SummerZoneConfig)
+local Workspace = game:GetService("Workspace")
 
 export type ZoneDef = {
 	Id: string,
@@ -111,7 +112,7 @@ ZoneDefs.ClassicZone = {
 ZoneDefs.SummerZone = {
 	Id = "SummerZone",
 	DisplayName = "SUMMER ZONE",
-	RequiredLevel = 5,
+	RequiredLevel = 3,
 	ThemeId = "Summer",
 	RewardMultiplier = 1,
 	Origin = summerBoardOrigin,
@@ -139,6 +140,209 @@ ZoneDefs.SummerZone = {
 	},
 } :: ZoneDef
 
+-- Parc d'attractions : une seule planche logique, répartie physiquement sur
+-- trois étages. Les coordonnées personnalisées sont résolues dans CellToWorld.
+local AMUSEMENT_REGION_SLOTS = {
+	{ Name = "Ground", Rows = 7, Center = Vector3.new(-237, 7, -4), Size = Vector3.new(86, 0.4, 46), Required = true },
+	{ Name = "Ground_02", Rows = 7 },
+	{ Name = "Ground_03", Rows = 7 },
+	{ Name = "Mid", Rows = 5, Center = Vector3.new(-270, 18, -51), Size = Vector3.new(50, 0.4, 32), Required = true },
+	{ Name = "Mid_02", Rows = 5 },
+	{ Name = "Mid_03", Rows = 5 },
+	{ Name = "High", Rows = 5, Center = Vector3.new(-306, 30, 47), Size = Vector3.new(46, 0.4, 30), Required = true },
+	{ Name = "High_02", Rows = 5 },
+	{ Name = "High_03", Rows = 5 },
+}
+
+local AMUSEMENT_TOTAL_ROWS = 0
+for _, slot in ipairs(AMUSEMENT_REGION_SLOTS) do
+	slot.FirstRow = AMUSEMENT_TOTAL_ROWS + 1
+	AMUSEMENT_TOTAL_ROWS += slot.Rows
+	local family, index = string.match(slot.Name, "^(%a+)_(%d+)$")
+	slot.Family = family or slot.Name
+	slot.Index = if index then tonumber(index) else 1
+end
+
+local function amusementSlotForRow(z: number): any?
+	for _, slot in ipairs(AMUSEMENT_REGION_SLOTS) do
+		if z >= slot.FirstRow and z < slot.FirstRow + slot.Rows then
+			return slot
+		end
+	end
+	return nil
+end
+
+ZoneDefs.AmusementPark = {
+	Id = "AmusementPark",
+	DisplayName = "AMUSEMENT PARK",
+	RequiredLevel = 1,
+	ThemeId = "AmusementPark",
+	RewardMultiplier = 2,
+	Origin = Vector3.new(-258, 6, 0),
+	ZoneOrigin = Vector3.new(-258, 6, 0),
+	RightDirection = CLASSIC_RIGHT,
+	SizeX = 16,
+	-- Trois surfaces éditables maximum par étage. Les surfaces _02/_03 ne
+	-- produisent aucune bulle tant que leur Part n'existe pas dans BubbleRegions.
+	SizeZ = AMUSEMENT_TOTAL_ROWS,
+	FloorColor = Color3.fromRGB(25, 58, 108),
+	BorderColor = Color3.fromRGB(255, 196, 48),
+	BubbleTintVariants = {
+		Color3.fromRGB(255, 88, 104),
+		Color3.fromRGB(255, 198, 50),
+		Color3.fromRGB(58, 213, 255),
+		Color3.fromRGB(170, 92, 255),
+	},
+	MultiLevel = true,
+	Ambiance = nil,
+} :: any
+
+function ZoneDefs.GetAmusementParkRegionName(z: number): string?
+	local slot = amusementSlotForRow(z)
+	return if slot then slot.Name else nil
+end
+
+-- Capacité d'une surface BubbleRegions : grille à Spacing naturel (jamais compressée).
+-- Le plan jouable suit les deux axes locaux les plus horizontaux (ignore l'épaisseur).
+function ZoneDefs.GetAmusementParkRegionPlayAxes(regionCF: CFrame, regionSize: Vector3): (number, number, Vector3, Vector3)
+	local candidates = {
+		{ Align = math.abs(regionCF.RightVector.Y), Extent = regionSize.X, Axis = Vector3.new(1, 0, 0) },
+		{ Align = math.abs(regionCF.UpVector.Y), Extent = regionSize.Y, Axis = Vector3.new(0, 1, 0) },
+		{ Align = math.abs(regionCF.LookVector.Y), Extent = regionSize.Z, Axis = Vector3.new(0, 0, 1) },
+	}
+	table.sort(candidates, function(a, b)
+		if a.Align == b.Align then
+			return a.Extent > b.Extent
+		end
+		return a.Align > b.Align
+	end)
+	-- candidates[1] = axe le plus vertical = épaisseur de la surface
+	local a = candidates[2]
+	local b = candidates[3]
+	local aWorld = regionCF:VectorToWorldSpace(a.Axis)
+	local bWorld = regionCF:VectorToWorldSpace(b.Axis)
+	-- Colonnes ≈ axe le plus « gauche-droite » en monde
+	if math.abs(aWorld.X) >= math.abs(bWorld.X) then
+		return a.Extent, b.Extent, a.Axis, b.Axis
+	end
+	return b.Extent, a.Extent, b.Axis, a.Axis
+end
+
+function ZoneDefs.GetAmusementParkRegionCapacity(
+	regionCF: CFrame,
+	regionSize: Vector3,
+	maxCols: number,
+	maxRows: number
+): (number, number)
+	local spacing = G.Spacing
+	local pad = math.max(G.BubbleSize.X, G.BubbleSize.Z)
+	local planeCol, planeRow = ZoneDefs.GetAmusementParkRegionPlayAxes(regionCF, regionSize)
+	local usableCol = math.max(0, planeCol - pad)
+	local usableRow = math.max(0, planeRow - pad)
+	local cols = math.clamp(math.floor(usableCol / spacing) + 1, 1, math.max(1, maxCols))
+	local rows = math.clamp(math.floor(usableRow / spacing) + 1, 1, math.max(1, maxRows))
+	while cols > 1 and (cols - 1) * spacing > usableCol + 1e-6 do
+		cols -= 1
+	end
+	while rows > 1 and (rows - 1) * spacing > usableRow + 1e-6 do
+		rows -= 1
+	end
+	return cols, rows
+end
+
+-- Dupliquer une surface dans Studio garde le nom d'origine ("Ground", "Ground",
+-- "Ground"). On accepte donc les homonymes autant que les suffixes numériques,
+-- et on les ordonne de façon stable pour que chaque étage garde sa place.
+function ZoneDefs.MatchesBubbleRegionFamily(name: string, family: string): boolean
+	if name == family then
+		return true
+	end
+	if string.sub(name, 1, #family) ~= family then
+		return false
+	end
+	return string.match(string.sub(name, #family + 1), "^[%s_%-]*%(?%d+%)?$") ~= nil
+end
+
+local regionCache: { [string]: { BasePart } } = {}
+local regionCacheClock = -math.huge
+
+local function amusementRegionParts(family: string): { BasePart }
+	local now = os.clock()
+	if now - regionCacheClock > 0.5 then
+		regionCache = {}
+		regionCacheClock = now
+	end
+	local cached = regionCache[family]
+	if cached then
+		return cached
+	end
+	local park = Workspace:FindFirstChild("ParcAttractions")
+	local regions = park and park:FindFirstChild("BubbleRegions")
+	local found: { BasePart } = {}
+	if regions then
+		for _, child in ipairs(regions:GetChildren()) do
+			if child:IsA("BasePart") and ZoneDefs.MatchesBubbleRegionFamily(child.Name, family) then
+				table.insert(found, child)
+			end
+		end
+		table.sort(found, function(a: BasePart, b: BasePart): boolean
+			if a.Name ~= b.Name then
+				return a.Name < b.Name
+			end
+			local pa, pb = a.Position, b.Position
+			if math.abs(pa.X - pb.X) > 1e-3 then
+				return pa.X < pb.X
+			end
+			if math.abs(pa.Z - pb.Z) > 1e-3 then
+				return pa.Z < pb.Z
+			end
+			return pa.Y < pb.Y
+		end)
+	end
+	regionCache[family] = found
+	return found
+end
+
+local function amusementRegionPart(slot: any): BasePart?
+	return amusementRegionParts(slot.Family)[slot.Index]
+end
+
+local function amusementRegionPlacement(slot: any): (CFrame, number, number, number, Vector3, Vector3)
+	local fallbackCenter = slot.Center or Vector3.new(-237, 7, -4)
+	local fallbackSize = slot.Size or Vector3.new(30, 0.4, 22)
+	local region = amusementRegionPart(slot)
+	local regionCF = if region then region.CFrame else CFrame.new(fallbackCenter)
+	local regionSize = if region then region.Size else fallbackSize
+	local maxCols = ZoneDefs.AmusementPark.SizeX
+	local maxRows = slot.Rows
+	local cols, rows = ZoneDefs.GetAmusementParkRegionCapacity(regionCF, regionSize, maxCols, maxRows)
+	local _, _, colAxis, rowAxis = ZoneDefs.GetAmusementParkRegionPlayAxes(regionCF, regionSize)
+	return regionCF, cols, rows, G.Spacing, colAxis, rowAxis
+end
+
+function ZoneDefs.GetAmusementParkFitForRow(z: number): (number, number)
+	local slot = amusementSlotForRow(z)
+	if not slot then
+		return 0, 0
+	end
+	local _, cols, rows = amusementRegionPlacement(slot)
+	return cols, rows
+end
+
+function ZoneDefs.IsBubbleCellEnabled(zoneId: string, x: number, z: number): boolean
+	if zoneId ~= "AmusementPark" then return true end
+	local slot = amusementSlotForRow(z)
+	if not slot then return false end
+	if slot.Required ~= true then
+		local region = amusementRegionPart(slot)
+		if not region then return false end
+	end
+	local _, colsFit, rowsFit = amusementRegionPlacement(slot)
+	local localCol = x
+	local localRow = z - slot.FirstRow + 1
+	return localCol >= 1 and localCol <= colsFit and localRow >= 1 and localRow <= rowsFit
+end
+
 -- Constantes Summer (source unique pour preview / builder / rapport).
 ZoneDefs.SummerLayout = {
 	SideDecorMargin = SideDecorMargin,
@@ -160,11 +364,13 @@ ZoneDefs.SummerLayout = {
 ZoneDefs.List = {
 	ZoneDefs.ClassicZone,
 	ZoneDefs.SummerZone,
+	ZoneDefs.AmusementPark,
 } :: { ZoneDef }
 
 ZoneDefs.ById = {
 	ClassicZone = ZoneDefs.ClassicZone,
 	SummerZone = ZoneDefs.SummerZone,
+	AmusementPark = ZoneDefs.AmusementPark,
 } :: { [string]: ZoneDef }
 
 ZoneDefs.INTER_ZONE_GAP = INTER_ZONE_GAP
@@ -242,6 +448,15 @@ end
 
 function ZoneDefs.CellToWorld(x: number, z: number, zoneId: string?): Vector3
 	local id = zoneId or "ClassicZone"
+	if id == "AmusementPark" then
+		local slot = amusementSlotForRow(z) or AMUSEMENT_REGION_SLOTS[1]
+		local regionCF, colsFit, rowsFit, spacing, colAxis, rowAxis = amusementRegionPlacement(slot)
+		local localCol = math.clamp(x, 1, colsFit)
+		local localRow = math.clamp(z - slot.FirstRow + 1, 1, rowsFit)
+		local posCol = (localCol - (colsFit + 1) / 2) * spacing
+		local posRow = (localRow - (rowsFit + 1) / 2) * spacing
+		return regionCF:PointToWorldSpace(colAxis * posCol + rowAxis * posRow)
+	end
 	local def = ZoneDefs.ById[id]
 	local origin = if def then def.Origin else G.Origin
 	local sizeX, sizeZ = ZoneDefs.GetGridSize(id)
@@ -452,7 +667,7 @@ do
 	local summer = ZoneDefs.SummerZone
 	local L = ZoneDefs.SummerLayout
 	assert(classic.Origin == G.Origin, "[ZoneDefs] ClassicZone.Origin doit matcher Grid.Origin")
-	assert(summer.RequiredLevel == 5, "[ZoneDefs] SummerZone.RequiredLevel doit être 5")
+	assert(summer.RequiredLevel == 3, "[ZoneDefs] SummerZone.RequiredLevel doit être 3")
 	assert(summer.RewardMultiplier == 1, "[ZoneDefs] RewardMultiplier doit rester 1")
 	assert(classic.RewardMultiplier == 1, "[ZoneDefs] Classic RewardMultiplier doit rester 1")
 	assert(summer.SizeX == L.BubbleColumns and summer.SizeZ == L.BubbleRows, "[ZoneDefs] Size vs BubbleRows/Columns")

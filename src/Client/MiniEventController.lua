@@ -36,6 +36,8 @@ local animToken = 0
 
 local COIN_GOLD = HudChrome.COIN_YELLOW or Color3.fromRGB(255, 210, 70)
 local DEV = RunService:IsStudio()
+local EVENT_LEFT = 16
+local EVENT_TOP = 182
 
 local function isMuted(): boolean
 	return player:GetAttribute("MusicMuted") == true
@@ -80,9 +82,9 @@ local function panelWidth(): number
 	local cam = Workspace.CurrentCamera
 	local vw = if cam then cam.ViewportSize.X else 1280
 	if vw < 500 then
-		return math.clamp(math.floor(vw * 0.92), 260, 340)
+		return math.clamp(math.floor(vw * 0.62), 210, 260)
 	end
-	return 360
+	return 250
 end
 
 local function ensureUI()
@@ -100,11 +102,11 @@ local function ensureUI()
 
 	local p = Instance.new("Frame")
 	p.Name = "MiniEventPanel"
-	p.AnchorPoint = Vector2.new(0.5, 0)
-	p.Position = UDim2.new(0.5, 0, 0, 10)
-	p.Size = UDim2.fromOffset(panelWidth(), 96)
-	p.BackgroundColor3 = HudChrome.BG
-	p.BackgroundTransparency = 0.12
+	p.AnchorPoint = Vector2.new(0, 0)
+	p.Position = UDim2.fromOffset(EVENT_LEFT, EVENT_TOP)
+	p.Size = UDim2.fromOffset(panelWidth(), 128)
+	p.BackgroundColor3 = Color3.fromRGB(18, 91, 150)
+	p.BackgroundTransparency = 0.02
 	p.BorderSizePixel = 0
 	p.Visible = false
 	p.ClipsDescendants = true
@@ -112,15 +114,24 @@ local function ensureUI()
 	panel = p
 
 	local corn = Instance.new("UICorner")
-	corn.CornerRadius = UDim.new(0, 12)
+	corn.CornerRadius = UDim.new(0, 20)
 	corn.Parent = p
 
 	local str = Instance.new("UIStroke")
 	str.Name = "Stroke"
-	str.Color = HudChrome.ACCENT
-	str.Thickness = 1.4
-	str.Transparency = 0.2
+	str.Color = Color3.fromRGB(140, 235, 255)
+	str.Thickness = 2.5
+	str.Transparency = 0
 	str.Parent = p
+
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(27, 133, 201)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(17, 75, 132)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(52, 43, 133)),
+	})
+	gradient.Rotation = 10
+	gradient.Parent = p
 
 	local pad = Instance.new("UIPadding")
 	pad.PaddingTop = UDim.new(0, 10)
@@ -147,7 +158,7 @@ local function ensureUI()
 	title.Name = "Title"
 	title.BackgroundTransparency = 1
 	title.Position = UDim2.fromOffset(0, 0)
-	title.Size = UDim2.new(1, -72, 0, 22)
+	title.Size = UDim2.new(1, 0, 0, 24)
 	title.Font = Enum.Font.GothamBlack
 	title.TextSize = 18
 	title.TextXAlignment = Enum.TextXAlignment.Left
@@ -162,8 +173,10 @@ local function ensureUI()
 	timer.Name = "Timer"
 	timer.BackgroundTransparency = 1
 	timer.AnchorPoint = Vector2.new(1, 0)
-	timer.Position = UDim2.new(1, 0, 0, 0)
-	timer.Size = UDim2.fromOffset(70, 22)
+	timer.Position = UDim2.new(1, 0, 0, 44)
+	timer.Size = UDim2.fromOffset(78, 24)
+	timer.BackgroundColor3 = Color3.fromRGB(8, 35, 68)
+	timer.BackgroundTransparency = 0.04
 	timer.Font = Enum.Font.GothamBlack
 	timer.TextSize = 16
 	timer.TextXAlignment = Enum.TextXAlignment.Right
@@ -171,18 +184,25 @@ local function ensureUI()
 	timer.Text = ""
 	timer.ZIndex = 2
 	timer.Parent = p
+	local timerCorner = Instance.new("UICorner")
+	timerCorner.CornerRadius = UDim.new(1, 0)
+	timerCorner.Parent = timer
+	local timerPadding = Instance.new("UIPadding")
+	timerPadding.PaddingLeft = UDim.new(0, 8)
+	timerPadding.PaddingRight = UDim.new(0, 8)
+	timerPadding.Parent = timer
 	timerLabel = timer
 
 	local desc = Instance.new("TextLabel")
 	desc.Name = "Desc"
 	desc.BackgroundTransparency = 1
-	desc.Position = UDim2.fromOffset(0, 24)
-	desc.Size = UDim2.new(1, 0, 0, 18)
+	desc.Position = UDim2.fromOffset(0, 28)
+	desc.Size = UDim2.new(1, 0, 0, 38)
 	desc.Font = Enum.Font.Gotham
 	desc.TextSize = 13
 	desc.TextXAlignment = Enum.TextXAlignment.Left
 	desc.TextColor3 = HudChrome.TEXT_SECONDARY
-	desc.TextTruncate = Enum.TextTruncate.AtEnd
+	desc.TextWrapped = true
 	desc.Text = ""
 	desc.ZIndex = 2
 	desc.Parent = p
@@ -191,8 +211,8 @@ local function ensureUI()
 	local progress = Instance.new("TextLabel")
 	progress.Name = "Progress"
 	progress.BackgroundTransparency = 1
-	progress.Position = UDim2.fromOffset(0, 46)
-	progress.Size = UDim2.new(0.55, 0, 0, 18)
+	progress.Position = UDim2.fromOffset(0, 74)
+	progress.Size = UDim2.new(1, 0, 0, 20)
 	progress.Font = Enum.Font.GothamBold
 	progress.TextSize = 14
 	progress.TextXAlignment = Enum.TextXAlignment.Left
@@ -205,7 +225,7 @@ local function ensureUI()
 	local bonus = Instance.new("TextLabel")
 	bonus.Name = "BonusCoins"
 	bonus.BackgroundTransparency = 1
-	bonus.Position = UDim2.fromOffset(0, 66)
+	bonus.Position = UDim2.fromOffset(0, 96)
 	bonus.Size = UDim2.new(1, 0, 0, 18)
 	bonus.Font = Enum.Font.GothamBold
 	bonus.TextSize = 14
@@ -225,16 +245,16 @@ local function animateIn()
 	local token = animToken
 	panel.Visible = true
 	panel.BackgroundTransparency = 1
-	panel.Size = UDim2.fromOffset(panelWidth(), 88)
+	panel.Size = UDim2.fromOffset(panelWidth(), 120)
 	local stroke = panel:FindFirstChild("Stroke")
 	if stroke and stroke:IsA("UIStroke") then
 		stroke.Transparency = 1
 	end
-	panel.Position = UDim2.new(0.5, 0, 0, 0)
+	panel.Position = UDim2.fromOffset(EVENT_LEFT - 10, EVENT_TOP)
 	local goal = {
-		BackgroundTransparency = 0.12,
-		Position = UDim2.new(0.5, 0, 0, 10),
-		Size = UDim2.fromOffset(panelWidth(), 96),
+		BackgroundTransparency = 0.02,
+		Position = UDim2.fromOffset(EVENT_LEFT, EVENT_TOP),
+		Size = UDim2.fromOffset(panelWidth(), 128),
 	}
 	local tw = TweenService:Create(panel, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), goal)
 	tw:Play()
@@ -245,7 +265,7 @@ local function animateIn()
 		if token ~= animToken or not panel then
 			return
 		end
-		panel.BackgroundTransparency = 0.12
+		panel.BackgroundTransparency = 0.02
 	end)
 end
 
@@ -260,8 +280,8 @@ local function animateOut(thenHide: boolean)
 		TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 		{
 			BackgroundTransparency = 1,
-			Position = UDim2.new(0.5, 0, 0, -6),
-			Size = UDim2.fromOffset(math.floor(panelWidth() * 0.96), 90),
+			Position = UDim2.fromOffset(EVENT_LEFT - 10, EVENT_TOP),
+			Size = UDim2.fromOffset(math.floor(panelWidth() * 0.96), 120),
 		}
 	)
 	tw:Play()
@@ -483,10 +503,7 @@ local function applyActiveLabels(payload: any, remaining: number)
 		end
 	end
 	if panel then
-		local h = 72
-		if payload.state == "Active" then
-			h = if (tonumber(payload.bonusCoins) or 0) > 0 then 96 else 84
-		end
+		local h = if payload.state == "Active" and (tonumber(payload.bonusCoins) or 0) > 0 then 144 else 128
 		panel.Size = UDim2.fromOffset(panelWidth(), h)
 	end
 end

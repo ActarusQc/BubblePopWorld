@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.GameConfig)
@@ -383,9 +384,21 @@ local function buildSafetyBorders(gameRoom: Folder)
 			CFrame.new(G.Origin.X + bubbleExtentX + t / 2, 0, G.Origin.Z - (eastGap / 2 + eastSegSouth / 2)))
 	end
 
-	ensureBorderPair(borders, "BorderWest",
-		Vector3.new(t, 0, (northExtentZ + bubbleExtentZ + t * 2)),
-		CFrame.new(G.Origin.X - bubbleExtentX - t / 2, 0, G.Origin.Z + (northExtentZ - bubbleExtentZ) / 2))
+	-- Ouverture ouest vers le parc d'attractions. Auparavant cette bordure était
+	-- continue et bloquait physiquement le joueur, quel que soit son niveau.
+	local westGap = Config.GameRoom.PathSize.X + 8
+	local westNorthLength = math.max(0, northExtentZ + t - westGap / 2)
+	local westSouthLength = math.max(0, bubbleExtentZ + t - westGap / 2)
+	if westNorthLength > 0 then
+		ensureBorderPair(borders, "BorderWestNorth",
+			Vector3.new(t, 0, westNorthLength),
+			CFrame.new(G.Origin.X - bubbleExtentX - t / 2, 0, G.Origin.Z + (westGap / 2 + westNorthLength / 2)))
+	end
+	if westSouthLength > 0 then
+		ensureBorderPair(borders, "BorderWestSouth",
+			Vector3.new(t, 0, westSouthLength),
+			CFrame.new(G.Origin.X - bubbleExtentX - t / 2, 0, G.Origin.Z - (westGap / 2 + westSouthLength / 2)))
+	end
 
 	-- Ouverture sud calibrée sur la passerelle (ArrivalPath) : juste assez large pour
 	-- la traverser, pas assez pour ouvrir un trou de chaque côté. Avec le hub central,
@@ -2718,6 +2731,20 @@ local function resolveAreaFromPosition(pos: Vector3): string
 		return "Lobby"
 	end
 
+	-- Le parc est physiquement distinct de la planche classique. Cette vérification
+	-- doit précéder le fallback GameRoom, sinon le watcher écrase AmusementPark
+	-- environ 0,2 seconde après une téléportation et la musique du parc s'arrête.
+	local parkBounds = ZoneDefs.GetZoneBounds("AmusementPark")
+	if parkBounds then
+		local margin = 18
+		if pos.X >= parkBounds.MinX - margin
+			and pos.X <= parkBounds.MaxX + margin
+			and pos.Z >= parkBounds.MinZ - margin
+			and pos.Z <= parkBounds.MaxZ + margin then
+			return "AmusementPark"
+		end
+	end
+
 	local summerBounds = ZoneDefs.GetZoneBounds("SummerZone")
 	if summerBounds then
 		local margin = 12
@@ -2947,8 +2974,17 @@ local function watchAutoSell()
 		end
 		accum = 0
 
-		local zone = sellZonePart
-		if not (zone and zone.Parent) then
+		local zones: { BasePart } = {}
+		local lobbyZone = sellZonePart
+		if lobbyZone and lobbyZone.Parent then
+			table.insert(zones, lobbyZone)
+		end
+		local park = Workspace:FindFirstChild("ParcAttractions")
+		local parkZone = park and park:FindFirstChild("ParkSellZone", true)
+		if parkZone and parkZone:IsA("BasePart") then
+			table.insert(zones, parkZone)
+		end
+		if #zones == 0 then
 			return
 		end
 
@@ -2960,9 +2996,16 @@ local function watchAutoSell()
 				continue
 			end
 
-			if not insideZone(zone, hrp.Position, 0) then
+			local insideSellZone = false
+			local insideExitMargin = false
+			for _, zone in ipairs(zones) do
+				insideSellZone = insideSellZone or insideZone(zone, hrp.Position, 0)
+				insideExitMargin = insideExitMargin or insideZone(zone, hrp.Position, A.ExitMargin)
+			end
+
+			if not insideSellZone then
 				-- Hystérésis : on ne réarme qu'une fois clairement sorti de la zone.
-				if not insideZone(zone, hrp.Position, A.ExitMargin) then
+				if not insideExitMargin then
 					sellSpent[player] = nil
 				end
 				continue

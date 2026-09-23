@@ -34,6 +34,24 @@ local EVENTS = {
 	"DailyRewardsClaim",        -- client -> serveur : claim du reward du jour
 	"DailyRewardsToggleShirt",  -- client -> serveur : équiper/retirer le chandail J7
 	"DailyRewardsPanelOpened",  -- client -> serveur : analytics panel
+	-- Livre de collection de bulles
+	"CollectionState",          -- serveur -> client : catalogue + découvertes
+	"CollectionRequestState",   -- client -> serveur : demande état
+	"CollectionDiscovered",     -- serveur -> client : nouvelle découverte
+	"CollectionTarget",         -- serveur -> client : cible personnelle proche + expiration
+	-- Jeu de foire Bubble Blaster
+	"BubbleBlasterStart",       -- serveur -> client : début de partie
+	"BubbleBlasterTarget",      -- serveur -> client : nouvelle cible
+	"BubbleBlasterShoot",       -- client -> serveur : targetId touchée
+	"BubbleBlasterState",       -- serveur -> client : score / feedback
+	"BubbleBlasterEnd",         -- serveur -> client : résultat et récompense
+	"BubbleBlasterExit",        -- client -> serveur : abandon volontaire
+	-- Jeu de foire Roll-A-Ball
+	"RollABallStart",           -- serveur -> client : début de partie
+	"RollABallRoll",            -- client -> serveur : puissance 0-1
+	"RollABallState",           -- serveur -> client : score / balle
+	"RollABallEnd",             -- serveur -> client : résultat et récompense
+	"RollABallExit",            -- client -> serveur : abandon volontaire
 	-- Tutoriel d'accueil (serveur → client uniquement)
 	"TutorialState",          -- serveur -> client : étape / progrès / célébration / fin
 }
@@ -43,6 +61,7 @@ local FUNCTIONS = {
 	"BuyItem",          -- client -> serveur : id d'item boutique
 	"EquipBackpack",    -- client -> serveur : id sac ("" = défaut)
 	"GetShopData",      -- client -> serveur : upgrades + items
+	"EquipCosmetic",    -- client -> serveur : item cosmétique possédé
 }
 
 local Remotes = {}

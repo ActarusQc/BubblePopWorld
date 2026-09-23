@@ -8,6 +8,8 @@ local MusicConfig = {}
 MusicConfig.LOBBY_MUSIC_ID = "rbxassetid://132319769870114"
 MusicConfig.MAIN_BUBBLE_ZONE_MUSIC_ID = "rbxassetid://132358134818032"
 MusicConfig.SUMMER_ZONE_MUSIC_ID = "rbxassetid://1841668957"
+MusicConfig.AMUSEMENT_PARK_MUSIC_ID = "rbxassetid://128107167776618"
+MusicConfig.MINI_EVENT_MUSIC_ID = "rbxassetid://1836569144"
 
 MusicConfig.MusicVolume = 0.25
 MusicConfig.CrossfadeSeconds = 1.5
@@ -19,6 +21,7 @@ MusicConfig.AreaToTrackKey = {
 	Lobby = "lobby",
 	GameRoom = "main",
 	SummerZone = "summer",
+	AmusementPark = "amusement",
 }
 
 -- PlayerArea (ZoneService) → SoundId
@@ -26,12 +29,15 @@ MusicConfig.AreaToTrackId = {
 	Lobby = MusicConfig.LOBBY_MUSIC_ID,
 	GameRoom = MusicConfig.MAIN_BUBBLE_ZONE_MUSIC_ID,
 	SummerZone = MusicConfig.SUMMER_ZONE_MUSIC_ID,
+	AmusementPark = MusicConfig.AMUSEMENT_PARK_MUSIC_ID,
 }
 
 MusicConfig.TrackKeyToSoundId = {
 	lobby = MusicConfig.LOBBY_MUSIC_ID,
 	main = MusicConfig.MAIN_BUBBLE_ZONE_MUSIC_ID,
 	summer = MusicConfig.SUMMER_ZONE_MUSIC_ID,
+	amusement = MusicConfig.AMUSEMENT_PARK_MUSIC_ID,
+	challenge = MusicConfig.MINI_EVENT_MUSIC_ID,
 }
 
 function MusicConfig.TrackKeyForArea(area: string?): string

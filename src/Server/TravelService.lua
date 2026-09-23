@@ -579,7 +579,9 @@ function TravelService.RequestTravel(player: Player, destinationId: unknown, tra
 			char:PivotTo(targetCFrame)
 			hrp.AssemblyLinearVelocity = Vector3.zero
 			hrp.AssemblyAngularVelocity = Vector3.zero
-			landedArea = resolveAreaFromPosition(hrp.Position)
+			landedArea = if dest.Id == "AmusementPark"
+				then "AmusementPark"
+				else resolveAreaFromPosition(hrp.Position)
 			player:SetAttribute("PlayerArea", landedArea)
 		end
 	end)

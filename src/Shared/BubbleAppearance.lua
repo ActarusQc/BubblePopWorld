@@ -327,9 +327,10 @@ function BubbleAppearance.Resolve(zoneId: string, rarityId: string, tintIndex: n
 		if summer then
 			return {
 				Color = BubbleAppearance.ResolveNormalColor(zoneId, tintIndex),
-				Material = Enum.Material.Glass,
-				Transparency = 0.35,
-				Reflectance = 0.05,
+				-- Même finition stable que la zone principale; seule la palette Summer change.
+				Material = A.Material,
+				Transparency = A.Transparency,
+				Reflectance = A.Reflectance,
 				CastShadow = A.CastShadow,
 				IsSpecial = false,
 				RelativeMultiplier = 1,
@@ -342,13 +343,13 @@ function BubbleAppearance.Resolve(zoneId: string, rarityId: string, tintIndex: n
 				PulseBorder = false,
 			}
 		end
-		-- Zone principale : Neon opaque (shading non caméra-dépendant).
+		-- Zone principale : dôme glossy, sans instance visuelle supplémentaire.
 		return {
 			Color = BubbleAppearance.ResolveNormalColor(zoneId, tintIndex),
-			Material = Enum.Material.Neon,
-			Transparency = 0,
-			Reflectance = 0,
-			CastShadow = false,
+			Material = A.Material,
+			Transparency = A.Transparency,
+			Reflectance = A.Reflectance,
+			CastShadow = A.CastShadow,
 			IsSpecial = false,
 			RelativeMultiplier = 1,
 			VisualRank = 0,
@@ -364,23 +365,24 @@ function BubbleAppearance.Resolve(zoneId: string, rarityId: string, tintIndex: n
 	local styles = if summer then GameConfig.Bubble.SummerSpecialStyles else GameConfig.Bubble.SpecialStyles
 	local special = styles and styles[def.Id]
 	local color = BubbleAppearance.GetSpecialColor(def.Id, zoneId)
-	local useMarkers = summer
+	-- Une bulle spéciale doit être identifiable dans toutes les zones.
+	local useMarkers = true
 
 	if main then
 		return {
 			Color = color,
-			Material = Enum.Material.Neon,
-			Transparency = 0,
-			Reflectance = 0,
-			CastShadow = false,
+			Material = if special and special.Material then special.Material else A.Material,
+			Transparency = if special and special.Transparency ~= nil then special.Transparency else A.Transparency,
+			Reflectance = if special and special.Reflectance ~= nil then special.Reflectance else A.Reflectance,
+			CastShadow = A.CastShadow,
 			IsSpecial = true,
 			RelativeMultiplier = relative,
 			VisualRank = rank,
-			BorderScale = 1,
-			BorderThickness = 0,
-			BorderTransparency = 1,
-			Symbol = "",
-			SymbolScale = 0,
+			BorderScale = (P.BorderScaleBase or 1.1) + (P.BorderScalePerRank or 0.02) * (rank - 1),
+			BorderThickness = (P.BorderThicknessBase or 0.22) + (P.BorderThicknessPerRank or 0.04) * (rank - 1),
+			BorderTransparency = (P.BorderTransparencyBase or 0.28) - (P.BorderTransparencyStep or 0.04) * (rank - 1),
+			Symbol = SYMBOL_BY_ID[def.Id] or "★",
+			SymbolScale = (P.SymbolScaleBase or 1.15) + (P.SymbolScalePerRank or 0.08) * (rank - 1),
 			PulseBorder = false,
 		}
 	end
@@ -552,7 +554,7 @@ function BubbleAppearance.ApplySpecialBubbleMarker(
 
 	BubbleAppearance.ClearSpecialVisuals(bubbleVisual)
 
-	if not isSummerZone(zoneId) or not style.IsSpecial then
+	if not style.IsSpecial then
 		return { BorderCreated = false, SymbolCreated = false, Style = style }
 	end
 
@@ -690,15 +692,12 @@ function BubbleAppearance.ApplyBubbleVisual(
 		end
 	end
 
-	-- Zone principale = toujours Neon (émissif). Jamais SmoothPlastic / Glass ici.
-	local material = if main then Enum.Material.Neon else style.Material
-
-	bubble.Material = material
+	bubble.Material = style.Material
 	bubble.Color = style.Color
-	bubble.Reflectance = if main then 0 else style.Reflectance
-	bubble.CastShadow = if main then false else style.CastShadow
+	bubble.Reflectance = style.Reflectance
+	bubble.CastShadow = style.CastShadow
 	if alive then
-		bubble.Transparency = if main then 0 else style.Transparency
+		bubble.Transparency = style.Transparency
 	else
 		bubble.Transparency = 1
 	end
@@ -715,11 +714,11 @@ function BubbleAppearance.ApplyBubbleVisual(
 	bubble:SetAttribute("BagValue", bagValue)
 	bubble:SetAttribute("RelativeMultiplier", style.RelativeMultiplier)
 	bubble:SetAttribute("BonusLabel", nil)
-	bubble:SetAttribute("VisualMode", if main then "EmissiveNeonStable" else "LegacyLit")
+	bubble:SetAttribute("VisualMode", "GlossyDome")
 
 	applyMeshScale(bubble, style, zoneId)
 
-	if not isSpecial or not alive or not isSummerZone(zoneId) then
+	if not isSpecial or not alive then
 		for _, name in ipairs(LEGACY_CLEANUP) do
 			local child = bubble:FindFirstChild(name)
 			if child then
@@ -741,10 +740,12 @@ function BubbleAppearance.ApplyBubbleVisual(
 end
 
 function BubbleAppearance.IsMainZoneStableVisual(bubble: BasePart, alive: boolean?): boolean
-	if bubble.Material ~= Enum.Material.Neon then
+	local appearance = GameConfig.Bubble.Appearance
+	if bubble.Material ~= appearance.Material then
 		return false
 	end
-	if bubble.Reflectance ~= 0 then
+	local isSpecial = bubble:GetAttribute("IsSpecial") == true
+	if not isSpecial and math.abs(bubble.Reflectance - appearance.Reflectance) > 1e-6 then
 		return false
 	end
 	if bubble.CastShadow ~= false then

@@ -62,7 +62,7 @@ function InventoryUI.Start()
 	openBtn.Name = HudChrome.INVENTORY_BUTTON_NAME
 	openBtn.LayoutOrder = 1
 	openBtn.Size = UDim2.fromOffset(HudChrome.ACTION_BUTTON_SIZE, HudChrome.ACTION_BUTTON_SIZE)
-	openBtn.BackgroundColor3 = BG_BUTTON
+	openBtn.BackgroundColor3 = Color3.fromRGB(74, 145, 242)
 	openBtn.BackgroundTransparency = 0.08
 	openBtn.BorderSizePixel = 0
 	openBtn.Text = "" -- pas de libellé permanent « Inventory »
@@ -85,8 +85,10 @@ function InventoryUI.Start()
 		openBtn.Parent = gui
 	end
 
-	corner(openBtn, 16)
-	local border = stroke(openBtn, ACCENT, 1.4, 0.12)
+	local openCorner = Instance.new("UICorner")
+	openCorner.CornerRadius = UDim.new(0.5, 0)
+	openCorner.Parent = openBtn
+	local border = stroke(openBtn, Color3.new(1,1,1), 2.2, 0.06)
 
 	local icon = Instance.new("TextLabel")
 	icon.Name = "IconGlyph"
@@ -103,6 +105,14 @@ function InventoryUI.Start()
 	iconConstraint.MinTextSize = 18
 	iconConstraint.MaxTextSize = 32
 	iconConstraint.Parent = icon
+	icon.Size = UDim2.new(1,-14,1,-14); icon.Position = UDim2.fromOffset(7,7)
+	local menuCaption = Instance.new("TextLabel")
+	menuCaption.Name = "MenuCaption"; menuCaption.AnchorPoint = Vector2.new(0.5,0)
+	menuCaption.Position = UDim2.new(0.5,0,1,2); menuCaption.Size = UDim2.fromOffset(92,16)
+	menuCaption.BackgroundTransparency = 1; menuCaption.TextColor3 = Color3.new(1,1,1)
+	menuCaption.TextStrokeColor3 = Color3.fromRGB(12,30,48); menuCaption.TextStrokeTransparency = 0.2
+	menuCaption.Font = Enum.Font.GothamBlack; menuCaption.TextSize = 10; menuCaption.ZIndex = 8; menuCaption.Parent = openBtn
+	L10nUtil.localize(menuCaption, L10n.Inventory)
 
 	local tip = Instance.new("TextLabel")
 	tip.Name = "Tooltip"
@@ -131,7 +141,7 @@ function InventoryUI.Start()
 	local function setHover(on: boolean)
 		border.Thickness = if on then 2.2 else 1.4
 		border.Transparency = if on then 0 else 0.12
-		tip.Visible = on
+		tip.Visible = false
 		openBtn.BackgroundTransparency = if on then 0 else 0.08
 	end
 
@@ -207,7 +217,7 @@ function InventoryUI.Start()
 		end
 	end
 
-	local function addRow(labelText: string, capacity: number, equipped: boolean, equipId: string, canAct: boolean)
+	local function addRow(labelText: string, detailText: string, equipped: boolean, equipId: string, kind: string, canAct: boolean, cosmeticSlot: string?)
 		local row = Instance.new("Frame")
 		row.Size = UDim2.new(1, -8, 0, 58)
 		row.BackgroundColor3 = if equipped then ROW_ON else ROW
@@ -235,7 +245,7 @@ function InventoryUI.Start()
 		cap.TextSize = 12
 		cap.TextXAlignment = Enum.TextXAlignment.Left
 		cap.Parent = row
-		L10nUtil.dynamic(cap, ("%s: %d"):format(L10n.CapacityLabel, capacity))
+		L10nUtil.localize(cap, detailText)
 
 		local action = Instance.new("TextButton")
 		action.Size = UDim2.new(0, 100, 0, 34)
@@ -254,7 +264,9 @@ function InventoryUI.Start()
 			action.AutoButtonColor = action.Active
 			if action.Active then
 				action.Activated:Connect(function()
-					local ok, msg = Remotes.Func("EquipBackpack"):InvokeServer("")
+					local remoteName = if kind == "Cosmetic" then "EquipCosmetic" else "EquipBackpack"
+					local unequipId = if kind == "Cosmetic" and cosmeticSlot then "__unequip:" .. cosmeticSlot else ""
+					local ok, msg = Remotes.Func(remoteName):InvokeServer(unequipId)
 					if not ok then
 						L10nUtil.localize(action, msg or L10n.Denied)
 						task.wait(1.2)
@@ -271,7 +283,8 @@ function InventoryUI.Start()
 			action.TextColor3 = Color3.fromRGB(10, 12, 18)
 			L10nUtil.localize(action, L10n.Equip)
 			action.Activated:Connect(function()
-				local ok, msg = Remotes.Func("EquipBackpack"):InvokeServer(equipId)
+				local remoteName = if kind == "Cosmetic" then "EquipCosmetic" else "EquipBackpack"
+				local ok, msg = Remotes.Func(remoteName):InvokeServer(equipId)
 				if not ok then
 					L10nUtil.localize(action, msg or L10n.Denied)
 					task.wait(1.2)
@@ -290,11 +303,15 @@ function InventoryUI.Start()
 
 		local equipped = data.EquippedBackpack or ""
 		local defaultCap = data.DefaultCapacity or 25
-		addRow(L10n.DefaultBackpack, defaultCap, equipped == "", "", true)
+		addRow(L10n.DefaultBackpack, ("%s: %d"):format(L10n.CapacityLabel, defaultCap), equipped == "", "", "Backpack", true)
 
 		for _, item in ipairs(data.Items or {}) do
-			if item.Owned then
-				addRow(item.Label, item.Capacity or 50, item.Equipped == true, item.Id, true)
+			if item.Owned and item.Kind == "Backpack" then
+				addRow(item.Label, ("%s: %d"):format(L10n.CapacityLabel, item.Capacity or 50), equipped == item.Id, item.Id, "Backpack", true)
+			elseif item.Owned and item.Kind == "Cosmetic" then
+				local slot = item.Slot or "Hat"
+				local detail = if slot == "Shirt" then L10n.Shirts elseif slot == "Pet" then L10n.CosmeticPet else L10n.CosmeticHat
+				addRow(item.Label, detail, item.Equipped == true, item.Id, "Cosmetic", true, slot)
 			end
 		end
 	end

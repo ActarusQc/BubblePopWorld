@@ -90,16 +90,24 @@ EnvironmentBackdropConfig.DecorBubbles = {
 	},
 }
 
--- Atmosphère claire et légère (moins de contraste vue claire/sombre sur le plateau).
+-- Vue grande roue : lobby ~330 studs, Summer Zone ~580 studs. Le brouillard
+-- ne doit pas masquer l'autre plateau tant que le joueur est encore sur le site.
 EnvironmentBackdropConfig.Atmosphere = {
-	Density = 0.14,
-	Offset = 0.12,
-	Haze = 0.85,
+	Density = 0.1,
+	Offset = 0.1,
+	Haze = 0.45,
 	Glare = 0.04,
 	Color = Color3.fromRGB(195, 220, 240),
 	Decay = Color3.fromRGB(160, 195, 220),
-	FogStart = 420,
+	FogStart = 900,
 	FogEnd = 2400,
+}
+
+-- Parc (-326) → lobby (0) → Summer (258). Rayon mini pour garder les 3 plateaux
+-- chargés depuis le sommet de la grande roue (StreamingEnabled).
+EnvironmentBackdropConfig.WorldStreaming = {
+	MinRadius = 896,
+	TargetRadius = 1408,
 }
 
 EnvironmentBackdropConfig.Lighting = {

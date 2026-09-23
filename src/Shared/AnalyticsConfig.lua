@@ -96,6 +96,7 @@ AnalyticsConfig.EconomySkus = {
 	"BubbleSale_SummerZone",
 	"BubbleSale_Mixed",
 	"Chest",
+	"TentChest",
 	"DailyReward",
 	"Code",
 	"Admin",

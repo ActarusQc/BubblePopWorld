@@ -57,7 +57,7 @@ openButton.Name = "DailyRewardsButton"
 openButton.AnchorPoint = Vector2.new(0, 0)
 openButton.Position = UDim2.fromOffset(0, 0)
 openButton.Size = UDim2.fromOffset(HudChrome.ACTION_BUTTON_SIZE, HudChrome.ACTION_BUTTON_SIZE)
-openButton.BackgroundColor3 = HudChrome.BG_BUTTON
+openButton.BackgroundColor3 = Color3.fromRGB(255, 180, 35)
 openButton.BackgroundTransparency = 0.08
 openButton.BorderSizePixel = 0
 openButton.AutoButtonColor = false
@@ -65,13 +65,13 @@ openButton.Text = ""
 openButton.Font = Enum.Font.GothamBold
 openButton.Selectable = true
 openButton.Active = true
-openButton.LayoutOrder = 4
+openButton.LayoutOrder = 5
 openButton.ZIndex = 5
 openButton.Visible = false
 openButton.Parent = gui
 openButton:SetAttribute("AccessibleName", "Daily Rewards")
 local openCorner = Instance.new("UICorner")
-openCorner.CornerRadius = UDim.new(0, 16)
+openCorner.CornerRadius = UDim.new(0.5, 0)
 openCorner.Parent = openButton
 local openGradient = Instance.new("UIGradient")
 openGradient.Color = ColorSequence.new({
@@ -83,7 +83,7 @@ openGradient.Enabled = false
 openGradient.Parent = openButton
 local openStroke = Instance.new("UIStroke")
 openStroke.Thickness = 1.4
-openStroke.Color = HudChrome.ACCENT
+openStroke.Color = Color3.new(1,1,1)
 openStroke.Transparency = 0.12
 openStroke.Parent = openButton
 
@@ -101,6 +101,14 @@ local calendarConstraint = Instance.new("UITextSizeConstraint")
 calendarConstraint.MinTextSize = 18
 calendarConstraint.MaxTextSize = 32
 calendarConstraint.Parent = calendarIcon
+calendarIcon.Size = UDim2.new(1,-14,1,-14); calendarIcon.Position = UDim2.fromOffset(7,7)
+
+local dailyCaption = Instance.new("TextLabel")
+dailyCaption.Name = "MenuCaption"; dailyCaption.AnchorPoint = Vector2.new(0.5,0)
+dailyCaption.Position = UDim2.new(0.5,0,1,2); dailyCaption.Size = UDim2.fromOffset(96,16)
+dailyCaption.BackgroundTransparency = 1; dailyCaption.TextColor3 = WHITE
+dailyCaption.TextStrokeColor3 = Color3.fromRGB(12,30,48); dailyCaption.TextStrokeTransparency = 0.2
+dailyCaption.Font = Enum.Font.GothamBlack; dailyCaption.TextSize = 10; dailyCaption.Text = "DAILY"; dailyCaption.ZIndex = 8; dailyCaption.Parent = openButton
 
 local openTooltip = Instance.new("TextLabel")
 openTooltip.Name = "Tooltip"
@@ -168,6 +176,7 @@ task.spawn(function()
 	local inv = actionColumn:FindFirstChild(HudChrome.INVENTORY_BUTTON_NAME, true)
 	local challenges = actionColumn:FindFirstChild(HudChrome.CHALLENGES_BUTTON_NAME, true)
 	local music = actionColumn:FindFirstChild(HudChrome.MUSIC_BUTTON_NAME, true)
+	local collection = actionColumn:FindFirstChild("CollectionButton", true)
 	if inv and inv:IsA("GuiButton")
 		and challenges and challenges:IsA("GuiButton")
 		and music and music:IsA("GuiButton") then
@@ -178,8 +187,15 @@ task.spawn(function()
 		challenges.NextSelectionUp = inv
 		challenges.NextSelectionDown = music
 		music.NextSelectionUp = challenges
-		music.NextSelectionDown = openButton
-		openButton.NextSelectionUp = music
+		if collection and collection:IsA("GuiButton") then
+			music.NextSelectionDown = collection
+			collection.NextSelectionUp = music
+			collection.NextSelectionDown = openButton
+			openButton.NextSelectionUp = collection
+		else
+			music.NextSelectionDown = openButton
+			openButton.NextSelectionUp = music
+		end
 		openButton.NextSelectionDown = inv
 		inv.NextSelectionUp = openButton
 	end

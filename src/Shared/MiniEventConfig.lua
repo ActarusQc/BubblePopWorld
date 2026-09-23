@@ -123,7 +123,9 @@ MiniEventConfig.ColorLabels = {
 --------------------------------------------------------------------
 MiniEventConfig.Sounds = {
 	Countdown = "rbxassetid://9114221308",
-	Start = "rbxassetid://9114224468",
+	-- Cet ancien ID est un asset qui n'est pas de type Sound. Laisser vide évite
+	-- l'erreur de chargement; la musique de défi fournit déjà le signal sonore.
+	Start = "",
 	Progress = "rbxassetid://9113884125",
 	Success = "rbxassetid://9114224773",
 	Fail = "rbxassetid://9113894196",

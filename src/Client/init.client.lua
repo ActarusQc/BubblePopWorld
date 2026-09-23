@@ -5,6 +5,8 @@ ReplicatedStorage:WaitForChild("Remotes")
 
 local modules = {
 	require(script.HubSpawnCamera),
+	require(script.ElevatorCamera),
+	require(script.FerrisRideCamera),
 	require(script.HUD),
 	require(script.PopController),
 	require(script.PopEffects),
@@ -13,10 +15,14 @@ local modules = {
 	require(script.ToolClient),
 	require(script.ShopUI),
 	require(script.InventoryUI),
+	require(script.CollectionController),
 	require(script.ZoneAmbiance),
 	require(script.MusicController),
 	require(script.SummerFireworks),
 	require(script.TravelController),
+	require(script.BubbleBlasterController),
+	require(script.RollABallController),
+	require(script.TentChestController),
 	-- Challenge barre d'abord pour embarquer les mini-événements.
 	require(script.ChallengeController),
 	require(script.WorldChallengesBoardController),

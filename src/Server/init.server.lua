@@ -84,17 +84,26 @@ local services = {
 	require(script.OnboardingService),
 	require(script.BackpackService),
 	require(script.ZoneService),
+	require(script.AmusementParkBuilder),
+	require(script.FerrisWheelService),
+	require(script.ParkAttractionService),
+	require(script.BubbleBlasterService),
+	require(script.RollABallService),
+	require(script.TentChestService),
 	require(script.TravelService),
 	require(script.GlobalCounterService),
 	require(script.ComboService),
 	require(script.AmbianceService),
 	require(script.BubbleService),
+	require(script.CollectionService),
 	require(script.ToolService),
 	require(script.MiniEventService),
 	require(script.ChallengeService),
 	require(script.DropService),
 	require(script.ChestService),
 	require(script.ShopService),
+	require(script.CosmeticService),
+	require(script.PetService),
 	require(script.ItemShopBuilder),
 	-- Ancrages tableaux hub avant services classements.
 	require(script.HubDisplaysService),
@@ -121,8 +130,35 @@ do
 	runSuite("ZoneAccessTests", function()
 		return require(Shared.ZoneAccessTests)
 	end)
+	runSuite("AmusementParkCollisionLogicTests", function()
+		return require(Shared.AmusementParkCollisionLogicTests)
+	end)
+	runSuite("AmusementParkCoasterLogicTests", function()
+		return require(Shared.AmusementParkCoasterLogicTests)
+	end)
+	runSuite("WorldTourLogicTests", function()
+		return require(Shared.WorldTourLogicTests)
+	end)
+	runSuite("BubbleBlasterConfigTests", function()
+		return require(Shared.BubbleBlasterConfigTests)
+	end)
+	runSuite("RollABallConfigTests", function()
+		return require(Shared.RollABallConfigTests)
+	end)
+	runSuite("TentChestLogicTests", function()
+		return require(Shared.TentChestLogicTests)
+	end)
+	runSuite("BubbleContactLogicTests", function()
+		return require(Shared.BubbleContactLogicTests)
+	end)
+	runSuite("PetFollowLogicTests", function()
+		return require(Shared.PetFollowLogicTests)
+	end)
 	runSuite("MusicConfigTests", function()
 		return require(Shared.MusicConfigTests)
+	end)
+	runSuite("CollectionConfigTests", function()
+		return require(Shared.CollectionConfigTests)
 	end)
 	runSuite("HudChromeTests", function()
 		return require(Shared.HudChromeTests)
@@ -228,6 +264,9 @@ do
 	end)
 	runSuite("ChestServiceTests", function()
 		return require(script.ChestServiceTests)
+	end)
+	runSuite("TentChestServiceTests", function()
+		return require(script.TentChestServiceTests)
 	end)
 end
 

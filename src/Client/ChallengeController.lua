@@ -239,6 +239,34 @@ local function challengeDesc(ch: any): string
 	return (tmpl:gsub("{progress}", tostring(ch.Progress or 0)):gsub("{target}", tostring(ch.Target or 0)))
 end
 
+local function shortCountdown(seconds: number): string
+	local total = math.max(0, math.ceil(seconds))
+	local minutes = math.floor(total / 60)
+	return string.format("%02d:%02d", minutes, total % 60)
+end
+
+local function featuredChallengeForState(challengeState: any): any?
+	if type(challengeState) ~= "table" or type(challengeState.Daily) ~= "table" then
+		return nil
+	end
+	local featuredType = tostring(challengeState.FeaturedEventType or "")
+	local wantedMetric = if featuredType == "GoldenWave"
+		then "PopGoldenWave"
+		elseif featuredType == "ColorRush" then "PopColorRush"
+		else ""
+	for _, challenge in ipairs(challengeState.Daily) do
+		if type(challenge) == "table" and tostring(challenge.Metric or "") == wantedMetric then
+			return challenge
+		end
+	end
+	for _, challenge in ipairs(challengeState.Daily) do
+		if type(challenge) == "table" and tostring(challenge.Slot or "") == "Event" then
+			return challenge
+		end
+	end
+	return nil
+end
+
 local function setButtonActive(btn: GuiButton?, isActive: boolean)
 	if not btn then
 		return
@@ -489,6 +517,7 @@ local function rebuildEventSlot()
 	end
 
 	local compact = isMobileDrawer()
+	local tvMode = isConsoleDocked()
 	eventSlot.Size = UDim2.new(1, 0, 0, 0)
 	eventSlot.AutomaticSize = Enum.AutomaticSize.Y
 
@@ -548,9 +577,9 @@ local function rebuildEventSlot()
 	local title = Instance.new("TextLabel")
 	title.Name = "EventTitle"
 	title.BackgroundTransparency = 1
-	title.Size = UDim2.new(1, -48, 1, 0)
+	title.Size = UDim2.new(1, -70, 1, 0)
 	title.Font = Enum.Font.GothamBold
-	title.TextSize = if compact then 13 else 14
+	title.TextSize = if compact then 15 elseif tvMode then 20 else 17
 	title.TextColor3 = GOLD
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.TextTruncate = Enum.TextTruncate.AtEnd
@@ -579,12 +608,12 @@ local function rebuildEventSlot()
 	timer.BackgroundTransparency = 1
 	timer.AnchorPoint = Vector2.new(1, 0)
 	timer.Position = UDim2.new(1, 0, 0, 0)
-	timer.Size = UDim2.fromOffset(44, 20)
+	timer.Size = UDim2.fromOffset(62, 20)
 	timer.Font = Enum.Font.GothamBold
-	timer.TextSize = if compact then 14 else 15
+	timer.TextSize = if compact then 15 elseif tvMode then 21 else 18
 	timer.TextColor3 = ACCENT
 	timer.TextXAlignment = Enum.TextXAlignment.Right
-	timer.Text = if st == "Ended" then "" else tostring(math.ceil(remaining)) .. "s"
+	timer.Text = if st == "Ended" then "" else shortCountdown(remaining)
 	timer.ZIndex = 24
 	timer.Parent = topRow
 	L10nUtil.markNoLocalize(timer)
@@ -595,7 +624,7 @@ local function rebuildEventSlot()
 	desc.Size = UDim2.new(1, 0, 0, 0)
 	desc.AutomaticSize = Enum.AutomaticSize.Y
 	desc.Font = Enum.Font.Gotham
-	desc.TextSize = if compact then 11 else 12
+	desc.TextSize = if compact then 13 elseif tvMode then 17 else 15
 	desc.TextColor3 = MUTED
 	desc.TextXAlignment = Enum.TextXAlignment.Left
 	desc.TextWrapped = true
@@ -611,7 +640,13 @@ local function rebuildEventSlot()
 			desc.Text = ""
 		end
 	else
-		desc.Text = eventDescLine(et, st, payload.objective)
+		local objectiveText = eventDescLine(et, st, payload.objective)
+		local bonusCoins = math.max(0, math.floor(tonumber(payload.bonusCoins) or 0))
+		if bonusCoins > 0 then
+			desc.Text = string.format("%s  •  %s: +%s coins", objectiveText, labelOf("Reward", "Reward"), HudChrome.Comma(bonusCoins))
+		else
+			desc.Text = objectiveText
+		end
 	end
 
 	if st == "Active" and et == "GiantBubble" and type(payload.progress) == "table" then
@@ -672,6 +707,25 @@ end
 local function wireSelectable(btn: GuiButton)
 	btn.Selectable = true
 	btn.Active = true
+	if btn:FindFirstChild("ConsoleSelection") == nil then
+		local selection = Instance.new("ImageLabel")
+		selection.Name = "ConsoleSelection"
+		selection.BackgroundTransparency = 1
+		selection.Image = ""
+		selection.Position = UDim2.fromOffset(-5, -5)
+		selection.Size = UDim2.new(1, 10, 1, 10)
+		selection.ZIndex = btn.ZIndex + 4
+		selection.Visible = false
+		selection.Parent = btn
+		corner(selection, 10)
+		stroke(selection, GOLD, 3, 0)
+		btn.SelectionGained:Connect(function()
+			selection.Visible = true
+		end)
+		btn.SelectionLost:Connect(function()
+			selection.Visible = false
+		end)
+	end
 end
 
 local function rebuildBody()
@@ -696,6 +750,7 @@ local function rebuildBody()
 	clearChildren(scroll)
 
 	local compact = isMobileDrawer()
+	local tvMode = isConsoleDocked()
 	local cardPad = if compact then (HudChrome.CHALLENGES_MOBILE_CARD_PADDING or 11) else 10
 	local listGap = if compact then (HudChrome.CHALLENGES_MOBILE_CARD_GAP or 8) else 8
 
@@ -724,7 +779,8 @@ local function rebuildBody()
 	end
 
 	if activeTab == "Challenges" then
-		local featH = if compact then 58 else 72
+		local featuredChallenge = featuredChallengeForState(state)
+		local featH = if compact then 72 elseif tvMode then 88 else 82
 		local feat = Instance.new("Frame")
 		feat.LayoutOrder = nextOrder()
 		feat.Size = UDim2.new(1, 0, 0, featH)
@@ -740,7 +796,7 @@ local function rebuildBody()
 		fTitle.Position = UDim2.fromOffset(cardPad, if compact then 6 else 8)
 		fTitle.Size = UDim2.new(1, -cardPad * 2, 0, 14)
 		fTitle.Font = Enum.Font.GothamBold
-		fTitle.TextSize = if compact then 10 else 11
+		fTitle.TextSize = if compact then 11 elseif tvMode then 16 else 13
 		fTitle.TextColor3 = GOLD
 		fTitle.TextXAlignment = Enum.TextXAlignment.Left
 		fTitle.Text = labelOf("EventOfTheDay", "EVENT OF THE DAY")
@@ -753,7 +809,7 @@ local function rebuildBody()
 		fName.Position = UDim2.fromOffset(cardPad, if compact then 22 else 26)
 		fName.Size = UDim2.new(1, -cardPad * 2, 0, if compact then 18 else 20)
 		fName.Font = Enum.Font.GothamBold
-		fName.TextSize = if compact then 14 else 16
+		fName.TextSize = if compact then 16 elseif tvMode then 21 else 18
 		fName.TextColor3 = TEXT
 		fName.TextXAlignment = Enum.TextXAlignment.Left
 		fName.Text = eventDisplayName(tostring(state.FeaturedEventType or ""))
@@ -763,13 +819,26 @@ local function rebuildBody()
 
 		local fDesc = Instance.new("TextLabel")
 		fDesc.BackgroundTransparency = 1
-		fDesc.Position = UDim2.fromOffset(cardPad, if compact then 40 else 48)
-		fDesc.Size = UDim2.new(1, -cardPad * 2, 0, 14)
-		fDesc.Font = Enum.Font.Gotham
-		fDesc.TextSize = if compact then 11 else 12
-		fDesc.TextColor3 = MUTED
+		fDesc.Position = UDim2.fromOffset(cardPad, if compact then 43 else 51)
+		fDesc.Size = UDim2.new(1, -cardPad * 2, 0, if compact then 24 else 26)
+		fDesc.Font = Enum.Font.GothamMedium
+		fDesc.TextSize = if compact then 12 elseif tvMode then 16 else 14
+		fDesc.TextColor3 = TEXT
 		fDesc.TextXAlignment = Enum.TextXAlignment.Left
-		fDesc.Text = labelOf("FeaturedToday", "Featured today")
+		fDesc.TextWrapped = true
+		if featuredChallenge then
+			local target = math.max(1, math.floor(tonumber(featuredChallenge.Target) or 1))
+			local progress = math.min(target, math.max(0, math.floor(tonumber(featuredChallenge.Progress) or 0)))
+			local remaining = math.max(0, target - progress)
+			fDesc.Text = string.format(
+				"%s  •  %s: +%s coins",
+				challengeDesc({ DescKey = featuredChallenge.DescKey, Progress = 0, Target = remaining }),
+				labelOf("Reward", "Reward"),
+				HudChrome.Comma(featuredChallenge.RewardAmount or 0)
+			)
+		else
+			fDesc.Text = labelOf("FeaturedToday", "Today's featured event")
+		end
 		fDesc.ZIndex = 22
 		fDesc.Parent = feat
 		L10nUtil.markNoLocalize(fDesc)
@@ -780,7 +849,7 @@ local function rebuildBody()
 			s.LayoutOrder = nextOrder()
 			s.Size = UDim2.new(1, 0, 0, if compact then 14 else 16)
 			s.Font = Enum.Font.GothamBold
-			s.TextSize = if compact then 10 else 11
+			s.TextSize = if compact then 10 elseif tvMode then 16 else 11
 			s.TextColor3 = ACCENT
 			s.TextXAlignment = Enum.TextXAlignment.Left
 			s.Text = text
@@ -819,6 +888,8 @@ local function rebuildBody()
 			local rowH: number
 			if compact then
 				rowH = if isReady then 118 else 96
+			elseif tvMode then
+				rowH = if isReady then 112 else 94
 			else
 				rowH = if isReady then 122 else 110
 			end
@@ -842,7 +913,7 @@ local function rebuildBody()
 				else Color3.fromRGB(50, 80, 110)
 			stroke(row, strokeColor, if isReady then 1.5 else 1, if isClaimed then 0.35 else 0.2)
 
-			local titleSz = if compact then 16 else 13
+			local titleSz = if compact then 16 elseif tvMode then 19 else 15
 			local title = Instance.new("TextLabel")
 			title.BackgroundTransparency = 1
 			title.Position = UDim2.fromOffset(cardPad, if compact then 8 else 8)
@@ -863,7 +934,7 @@ local function rebuildBody()
 			prog.Position = UDim2.fromOffset(cardPad, progY)
 			prog.Size = UDim2.new(0.45, 0, 0, 14)
 			prog.Font = Enum.Font.GothamMedium
-			prog.TextSize = if compact then 13 else 12
+			prog.TextSize = if compact then 13 elseif tvMode then 17 else 14
 			prog.TextColor3 = if isDone then OK_GREEN else MUTED
 			prog.TextXAlignment = Enum.TextXAlignment.Left
 			prog.Text = string.format("%s / %s", HudChrome.Comma(progress), HudChrome.Comma(target))
@@ -877,7 +948,7 @@ local function rebuildBody()
 			statusLbl.Position = UDim2.new(1, -cardPad, 0, progY)
 			statusLbl.Size = UDim2.fromOffset(130, 14)
 			statusLbl.Font = Enum.Font.GothamBold
-			statusLbl.TextSize = if compact then 12 else 11
+			statusLbl.TextSize = if compact then 12 elseif tvMode then 16 else 13
 			statusLbl.TextXAlignment = Enum.TextXAlignment.Right
 			statusLbl.ZIndex = 22
 			statusLbl.Parent = row
@@ -899,7 +970,7 @@ local function rebuildBody()
 			desc.Position = UDim2.fromOffset(cardPad, descY)
 			desc.Size = UDim2.new(1, -cardPad * 2, 0, if compact then 16 else 16)
 			desc.Font = Enum.Font.Gotham
-			desc.TextSize = if compact then 12 else 11
+			desc.TextSize = if compact then 12 elseif tvMode then 16 else 13
 			desc.TextColor3 = MUTED
 			desc.TextXAlignment = Enum.TextXAlignment.Left
 			desc.TextTruncate = Enum.TextTruncate.AtEnd
@@ -912,9 +983,10 @@ local function rebuildBody()
 			})
 			desc.ZIndex = 22
 			desc.Parent = row
+			desc.Visible = not tvMode
 			L10nUtil.markNoLocalize(desc)
 
-			local barY = if compact then 64 else 62
+			local barY = if compact then 64 elseif tvMode then 49 else 62
 			local barHost = Instance.new("Frame")
 			barHost.BackgroundTransparency = 1
 			barHost.Position = UDim2.fromOffset(cardPad, barY)
@@ -933,13 +1005,13 @@ local function rebuildBody()
 				end
 			end
 
-			local rewardY = if compact then 74 else 76
+			local rewardY = if compact then 74 elseif tvMode then 61 else 76
 			local reward = Instance.new("TextLabel")
 			reward.BackgroundTransparency = 1
 			reward.Position = UDim2.fromOffset(cardPad, rewardY)
 			reward.Size = UDim2.new(if isReady and compact then 0.5 else 0.55, 0, 0, if compact then 18 else 26)
 			reward.Font = Enum.Font.GothamMedium
-			reward.TextSize = if compact then 13 else 11
+			reward.TextSize = if compact then 13 elseif tvMode then 17 else 14
 			reward.TextColor3 = GOLD
 			reward.TextXAlignment = Enum.TextXAlignment.Left
 			reward.TextYAlignment = Enum.TextYAlignment.Center
@@ -1266,7 +1338,7 @@ local function applyCompactButtonChrome(btnSize: number)
 			if child:IsA("GuiButton") then
 				local cornerInst = child:FindFirstChildOfClass("UICorner")
 				if cornerInst then
-					cornerInst.CornerRadius = UDim.new(0, 10)
+					cornerInst.CornerRadius = UDim.new(0.5, 0)
 				end
 				local border = child:FindFirstChildOfClass("UIStroke")
 				if border then
@@ -1281,7 +1353,7 @@ local function applyCompactButtonChrome(btnSize: number)
 					inv.Size = UDim2.fromScale(1, 1)
 					local c = inv:FindFirstChildOfClass("UICorner")
 					if c then
-						c.CornerRadius = UDim.new(0, 10)
+						c.CornerRadius = UDim.new(0.5, 0)
 					end
 					local s = inv:FindFirstChildOfClass("UIStroke")
 					if s then
@@ -1520,12 +1592,12 @@ local function applyChromeForMode()
 		headerFrame.Size = UDim2.new(1, 0, 0, 42)
 		tabsFrame.Size = UDim2.new(1, 0, 0, 38)
 		if hTitleLabel then
-			hTitleLabel.TextSize = 17
+			hTitleLabel.TextSize = if isConsoleDocked() then 22 else 17
 			hTitleLabel.Position = UDim2.fromOffset(12, 4)
 			hTitleLabel.Size = UDim2.new(1, -48, 0, 18)
 		end
 		if countdownLabel then
-			countdownLabel.TextSize = 11
+			countdownLabel.TextSize = if isConsoleDocked() then 16 else 11
 			countdownLabel.Position = UDim2.fromOffset(12, 24)
 		end
 		local closeSize = if isConsoleDocked() then 40 else 32
@@ -1538,8 +1610,10 @@ local function applyChromeForMode()
 		end
 		if isConsoleDocked() and panel then
 			for _, item in ipairs(panel:GetDescendants()) do
-				if item:IsA("TextLabel") or item:IsA("TextButton") then
-					item.TextSize = math.max(item.TextSize, 15)
+				if item:IsA("TextButton") then
+					item.TextSize = math.max(item.TextSize, 18)
+				elseif item:IsA("TextLabel") and item.Visible then
+					item.TextSize = math.max(item.TextSize, 16)
 				end
 			end
 		end
@@ -1631,6 +1705,7 @@ end
 local function ensureGamepadSelectables()
 	local invBtn: GuiButton? = nil
 	local musicBtn: GuiButton? = nil
+	local collectionBtn: GuiButton? = nil
 	local dailyRewardsBtn: GuiButton? = nil
 	if boundActionColumn then
 		local inv = boundActionColumn:FindFirstChild(HudChrome.INVENTORY_BUTTON_NAME, true)
@@ -1647,6 +1722,11 @@ local function ensureGamepadSelectables()
 		if daily and daily:IsA("GuiButton") then
 			dailyRewardsBtn = daily
 			wireSelectable(daily)
+		end
+		local collection = boundActionColumn:FindFirstChild("CollectionButton", true)
+		if collection and collection:IsA("GuiButton") then
+			collectionBtn = collection
+			wireSelectable(collection)
 		end
 	end
 	if challengesBtn then
@@ -1671,7 +1751,14 @@ local function ensureGamepadSelectables()
 		challengesBtn.NextSelectionDown = musicBtn
 		musicBtn.NextSelectionUp = challengesBtn
 	end
-	if musicBtn and dailyRewardsBtn then
+	if musicBtn and collectionBtn then
+		musicBtn.NextSelectionDown = collectionBtn
+		collectionBtn.NextSelectionUp = musicBtn
+	end
+	if collectionBtn and dailyRewardsBtn then
+		collectionBtn.NextSelectionDown = dailyRewardsBtn
+		dailyRewardsBtn.NextSelectionUp = collectionBtn
+	elseif musicBtn and dailyRewardsBtn then
 		musicBtn.NextSelectionDown = dailyRewardsBtn
 		dailyRewardsBtn.NextSelectionUp = musicBtn
 	end
@@ -1692,6 +1779,9 @@ local function ensureGamepadSelectables()
 	end
 	if musicBtn and tabChallenges then
 		musicBtn.NextSelectionRight = tabChallenges
+	end
+	if collectionBtn and tabChallenges then
+		collectionBtn.NextSelectionRight = tabChallenges
 	end
 	if tabChallenges and tabLeaderboard then
 		tabChallenges.NextSelectionRight = tabLeaderboard
@@ -3027,7 +3117,7 @@ function ChallengeController.Start()
 		end
 		local timer = card:FindFirstChild("EventTimer", true)
 		if timer and timer:IsA("TextLabel") then
-			timer.Text = tostring(math.ceil(remaining)) .. "s"
+			timer.Text = shortCountdown(remaining)
 		end
 		local title = card:FindFirstChild("EventTitle", true)
 		if title and title:IsA("TextLabel") and miniPayload.state == "Countdown" then

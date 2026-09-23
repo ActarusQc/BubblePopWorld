@@ -9,6 +9,7 @@ local L10n = require(Shared.LocalizationStrings)
 local ShopCatalog = require(Shared.ShopCatalog)
 local DataService = require(script.Parent.DataService)
 local BackpackVisual = require(script.Parent.BackpackVisual)
+local CosmeticService = require(script.Parent.CosmeticService)
 
 local ShopService = {}
 
@@ -77,6 +78,7 @@ end
 
 local function getItemRows(profile: any)
 	local equipped = profile.EquippedBackpack or ""
+	local equippedCosmetics = if type(profile.EquippedCosmetics) == "table" then profile.EquippedCosmetics else {}
 	local owned = profile.OwnedItems or {}
 	local out = {}
 	for _, id in ipairs(Config.ShopItemOrder) do
@@ -91,8 +93,35 @@ local function getItemRows(profile: any)
 				Style = def.Style,
 				IconKey = def.IconKey,
 				Owned = owned[id] == true,
-				Equipped = equipped == id,
+				Slot = def.Slot,
+				Equipped = if def.Kind == "Cosmetic" then equippedCosmetics[def.Slot or "Hat"] == id else equipped == id,
 			})
+		end
+	end
+	for id, isOwned in pairs(owned) do
+		if isOwned == true and Config.ShopItems[id] and Config.ShopItems[id].PrizeOnly == true then
+			local already = false
+			for _, row in ipairs(out) do
+				if row.Id == id then
+					already = true
+					break
+				end
+			end
+			if not already then
+				local def = Config.ShopItems[id]
+				table.insert(out, {
+					Id = id,
+					Label = ITEM_LABELS[id] or def.Label,
+					Kind = def.Kind,
+					Capacity = def.Capacity,
+					Cost = def.Cost,
+					Style = def.Style,
+					IconKey = def.IconKey,
+					Owned = true,
+					Slot = def.Slot,
+					Equipped = if def.Kind == "Cosmetic" then equippedCosmetics[def.Slot or "Hat"] == id else equipped == id,
+				})
+			end
 		end
 	end
 	return out
@@ -107,10 +136,15 @@ local function getCategoryRows(profile: any)
 	local categories = {
 		Skills = {},
 		Items = {},
-		Cosmetics = {},
+		Hats = {},
+		Vests = {},
+		Shirts = {},
+		Accessories = {},
+		Shoes = {},
 	}
 	local coins = if type(profile.Coins) == "number" then profile.Coins else 0
 	local equipped = profile.EquippedBackpack or ""
+	local equippedCosmetics = if type(profile.EquippedCosmetics) == "table" then profile.EquippedCosmetics else {}
 	local owned = if type(profile.OwnedItems) == "table" then profile.OwnedItems else {}
 
 	for _, category in ipairs(ShopCatalog.Categories) do
@@ -122,6 +156,7 @@ local function getCategoryRows(profile: any)
 					Label = localized(catalogItem.NameKey),
 					Description = localized(catalogItem.DescriptionKey),
 					Type = catalogItem.Type,
+					ModelName = catalogItem.ModelName,
 					Available = catalogItem.Available,
 					Equipable = catalogItem.Equipable,
 					IconKey = catalogItem.IconKey,
@@ -151,6 +186,7 @@ local function getCategoryRows(profile: any)
 						local isOwned = owned[shopItemId] == true
 						local isEquipped = equipped == shopItemId
 						row.Cost = def.Cost
+						row.Rarity = def.Style
 						row.Capacity = def.Capacity
 						row.Owned = isOwned
 						row.Equipped = isEquipped
@@ -158,6 +194,26 @@ local function getCategoryRows(profile: any)
 							row.ButtonState = "Equipped"
 						elseif isOwned then
 							row.ButtonState = "Equip"
+						else
+							row.ButtonState = if coins < def.Cost then "TooExpensive" else "Buy"
+						end
+					end
+				elseif catalogItem.Available and catalogItem.Type == "Cosmetic" then
+					local shopItemId = catalogItem.ShopItemId or catalogItem.Id
+					local def = Config.ShopItems[shopItemId]
+					if def then
+						local isOwned = owned[shopItemId] == true
+						local slot = def.Slot or "Hat"
+						local isEquipped = equippedCosmetics[slot] == shopItemId
+						row.Slot = slot
+						row.Cost = def.Cost
+						row.Rarity = def.Style
+						row.Owned = isOwned
+						row.Equipped = isEquipped
+						if isEquipped then
+							row.ButtonState = "Equipped"
+						elseif isOwned then
+							row.ButtonState = "EquipCosmetic"
 						else
 							row.ButtonState = if coins < def.Cost then "TooExpensive" else "Buy"
 						end
@@ -177,7 +233,7 @@ local function getShopData(player: Player)
 		return {
 			Upgrades = {},
 			Items = {},
-			Categories = { Skills = {}, Items = {}, Cosmetics = {} },
+			Categories = { Skills = {}, Items = {}, Hats = {}, Vests = {}, Shirts = {}, Accessories = {}, Shoes = {} },
 			Coins = 0,
 			EquippedBackpack = "",
 			DefaultCapacity = Config.Backpack.DefaultCapacity,
@@ -189,6 +245,7 @@ local function getShopData(player: Player)
 		Categories = getCategoryRows(profile),
 		Coins = profile.Coins,
 		EquippedBackpack = profile.EquippedBackpack or "",
+		EquippedCosmetics = profile.EquippedCosmetics or { Hat = "", Shirt = "", Pet = "" },
 		DefaultCapacity = Config.Backpack.DefaultCapacity,
 	}
 end
@@ -254,6 +311,11 @@ local function buyItem(player: Player, id: any)
 			profile.BackpackCapacity = targetCap
 			refreshBackpackVisual(player)
 		end
+	elseif def.Kind == "Cosmetic" then
+		if type(profile.EquippedCosmetics) ~= "table" then profile.EquippedCosmetics = { Hat = "", Shirt = "", Pet = "" } end
+		local slot = def.Slot or "Hat"
+		profile.EquippedCosmetics[slot] = id
+		CosmeticService.Refresh(player)
 	end
 
 	DataService.Push(player)
@@ -267,6 +329,41 @@ local function buyItem(player: Player, id: any)
 		itemSku = id,
 	})
 	return true, L10n.ItemPurchased
+end
+
+local function equipCosmetic(player: Player, id: any)
+	if type(id) ~= "string" then return false, "Invalid request" end
+	local profile = DataService.Get(player)
+	if not profile then return false, "Profile not loaded" end
+	if id == "" or string.sub(id, 1, 10) == "__unequip:" then
+		if type(profile.EquippedCosmetics) ~= "table" then profile.EquippedCosmetics = { Hat = "", Shirt = "", Pet = "" } end
+		local slot = if id == "" then "Hat" else string.sub(id, 11)
+		if slot ~= "Hat" and slot ~= "Shirt" and slot ~= "Pet" then return false, "Unknown cosmetic slot" end
+		profile.EquippedCosmetics[slot] = ""
+		profile.__dirty = true
+		DataService.Push(player)
+		CosmeticService.Refresh(player)
+		return true, L10n.CosmeticEquipped
+	end
+	local def = Config.ShopItems[id]
+	if not def or def.Kind ~= "Cosmetic" then
+		return false, "Unknown cosmetic"
+	end
+	if def.PrizeOnly ~= true then
+		local catalogItem = ShopCatalog.GetItem(id)
+		if not catalogItem or catalogItem.Type ~= "Cosmetic" or not catalogItem.Available
+			or not ShopCatalog.IsPurchasable(id) then
+			return false, "Unknown cosmetic"
+		end
+	end
+	if type(profile.OwnedItems) ~= "table" or profile.OwnedItems[id] ~= true then return false, "Not owned" end
+	if type(profile.EquippedCosmetics) ~= "table" then profile.EquippedCosmetics = { Hat = "", Shirt = "", Pet = "" } end
+	profile.EquippedCosmetics[def.Slot or "Hat"] = id
+	profile.__dirty = true
+	DataService.Push(player)
+	CosmeticService.Refresh(player)
+	Remotes.Event("Announce"):FireClient(player, L10n.CosmeticEquipped, "item")
+	return true, L10n.CosmeticEquipped
 end
 
 local function equipBackpack(player: Player, id: any)
@@ -313,6 +410,7 @@ function ShopService.Start()
 	Remotes.Func("BuyUpgrade").OnServerInvoke = buyUpgrade
 	Remotes.Func("BuyItem").OnServerInvoke = buyItem
 	Remotes.Func("EquipBackpack").OnServerInvoke = equipBackpack
+	Remotes.Func("EquipCosmetic").OnServerInvoke = equipCosmetic
 end
 
 return ShopService

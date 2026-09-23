@@ -93,13 +93,13 @@ function ZoneGameplayTests.Run(): boolean
 	end
 
 	local normalStyle = BubbleAppearance.Resolve("GameRoom", "Normal", 1)
-	check(normalStyle.Material == Enum.Material.Neon, "GameRoom Normal Material Neon")
-	check(normalStyle.Reflectance == 0, "GameRoom Normal Reflectance 0")
+check(normalStyle.Material == Enum.Material.SmoothPlastic, "GameRoom Normal Material glossy")
+check(normalStyle.Reflectance == 0.08, "GameRoom Normal Reflectance glossy")
 	check(normalStyle.Transparency == 0, "GameRoom Normal Transparency 0")
 	check(normalStyle.CastShadow == false, "GameRoom Normal CastShadow false")
 	local rareStyle = BubbleAppearance.Resolve("GameRoom", "Rare", 1)
-	check(rareStyle.Material == Enum.Material.Neon, "GameRoom Rare Material Neon")
-	check(rareStyle.Reflectance == 0, "GameRoom Rare Reflectance 0")
+check(rareStyle.Material == Enum.Material.SmoothPlastic, "GameRoom Rare Material glossy")
+check(rareStyle.Reflectance == 0.1, "GameRoom Rare Reflectance glossy")
 
 	local pools = ToolDefs.ZoneItemPools
 	check(pools ~= nil and pools.GameRoom ~= nil and pools.SummerZone ~= nil, "ZoneItemPools")

@@ -19,7 +19,7 @@ export type ShopItemDef = {
 
 local ShopCatalog = {}
 
-ShopCatalog.Categories = { "Skills", "Items", "Cosmetics" }
+ShopCatalog.Categories = { "Skills", "Items", "Hats", "Vests", "Shirts", "Accessories", "Shoes" }
 
 local ALL_ITEMS: { ShopItemDef } = {
 	-- Skills (live)
@@ -191,29 +191,55 @@ local ALL_ITEMS: { ShopItemDef } = {
 	{
 		Id = "Cap",
 		NameKey = "CosmeticCap",
-		Category = "Cosmetics",
+		Category = "Hats",
 		DescriptionKey = "CosmeticCapDesc",
 		IconKey = "CosmeticCap",
-		ModelName = "CapCosmetic",
+		ModelName = "MulticolorCapAccessory",
 		Type = "Cosmetic",
 		Equipable = true,
-		Available = false,
+		Available = true,
+		ShopItemId = "Cap",
 	},
 	{
-		Id = "Hat",
-		NameKey = "CosmeticHat",
-		Category = "Cosmetics",
-		DescriptionKey = "CosmeticHatDesc",
+		Id = "FrogHat",
+		NameKey = "CosmeticFrogHat",
+		Category = "Hats",
+		DescriptionKey = "CosmeticFrogHatDesc",
 		IconKey = "CosmeticHat",
-		ModelName = "HatCosmetic",
+		ModelName = "FrogHatAccessory",
 		Type = "Cosmetic",
 		Equipable = true,
-		Available = false,
+		Available = true,
+		ShopItemId = "FrogHat",
+	},
+	{
+		Id = "WizardHat",
+		NameKey = "CosmeticWizardHat",
+		Category = "Hats",
+		DescriptionKey = "CosmeticWizardHatDesc",
+		IconKey = "CosmeticHat",
+		ModelName = "WizardHatAccessory",
+		Type = "Cosmetic",
+		Equipable = true,
+		Available = true,
+		ShopItemId = "WizardHat",
+	},
+	{
+		Id = "BlueJeweledCrown",
+		NameKey = "CosmeticBlueJeweledCrown",
+		Category = "Hats",
+		DescriptionKey = "CosmeticBlueJeweledCrownDesc",
+		IconKey = "CosmeticHat",
+		ModelName = "BlueJeweledCrownAccessory",
+		Type = "Cosmetic",
+		Equipable = true,
+		Available = true,
+		ShopItemId = "BlueJeweledCrown",
 	},
 	{
 		Id = "Vest",
 		NameKey = "CosmeticVest",
-		Category = "Cosmetics",
+		Category = "Vests",
 		DescriptionKey = "CosmeticVestDesc",
 		IconKey = "CosmeticVest",
 		ModelName = "VestCosmetic",
@@ -221,24 +247,34 @@ local ALL_ITEMS: { ShopItemDef } = {
 		Equipable = true,
 		Available = false,
 	},
+	{ Id = "RedStripesShirt", NameKey = "RedStripesShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "RedStripes", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "RedStripesShirt" },
+	{ Id = "SkyBlueShirt", NameKey = "SkyBlueShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "SkyBlue", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "SkyBlueShirt" },
+	{ Id = "MintWavesShirt", NameKey = "MintWavesShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "MintWaves", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "MintWavesShirt" },
+	{ Id = "YellowSmileShirt", NameKey = "YellowSmileShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "YellowSmile", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "YellowSmileShirt" },
+	{ Id = "OrangeSunsetShirt", NameKey = "OrangeSunsetShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "OrangeSunset", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "OrangeSunsetShirt" },
+	{ Id = "LavandeStarShirt", NameKey = "LavandeStarShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "LavandeStar", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "LavandeStarShirt" },
+	{ Id = "BlueBubbleShirt", NameKey = "BlueBubbleShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "BlueBubble", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "BlueBubbleShirt" },
+	{ Id = "NavyBubbleShirt", NameKey = "NavyBubbleShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "Navy_Bubble", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "NavyBubbleShirt" },
+	{ Id = "BlackNeonShirt", NameKey = "BlackNeonShirt", Category = "Shirts", DescriptionKey = "CommonShirtDesc", IconKey = "CosmeticShirt", ModelName = "BlackNeon", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "BlackNeonShirt" },
+	{ Id = "CosmicDragonShirt", NameKey = "CosmicDragonShirt", Category = "Shirts", DescriptionKey = "EpicShirtDesc", IconKey = "CosmeticShirt", ModelName = "CosmicDragonShirt", Type = "Cosmetic", Equipable = true, Available = true, ShopItemId = "CosmicDragonShirt" },
 	{
-		Id = "Shirt",
-		NameKey = "CosmeticShirt",
-		Category = "Cosmetics",
-		DescriptionKey = "CosmeticShirtDesc",
-		IconKey = "CosmeticShirt",
-		ModelName = "ShirtCosmetic",
+		Id = "Accessory",
+		NameKey = "CosmeticAccessory",
+		Category = "Accessories",
+		DescriptionKey = "CosmeticAccessoryDesc",
+		IconKey = "CosmeticAccessory",
+		ModelName = "AccessoryCosmetic",
 		Type = "Cosmetic",
 		Equipable = true,
 		Available = false,
 	},
 	{
-		Id = "Accessory",
-		NameKey = "CosmeticAccessory",
-		Category = "Cosmetics",
-		DescriptionKey = "CosmeticAccessoryDesc",
-		IconKey = "CosmeticAccessory",
-		ModelName = "AccessoryCosmetic",
+		Id = "Shoes",
+		NameKey = "CosmeticShoes",
+		Category = "Shoes",
+		DescriptionKey = "CosmeticShoesDesc",
+		IconKey = "CosmeticShoes",
+		ModelName = "ShoesCosmetic",
 		Type = "Cosmetic",
 		Equipable = true,
 		Available = false,
@@ -248,6 +284,21 @@ local ALL_ITEMS: { ShopItemDef } = {
 local BY_ID: { [string]: ShopItemDef } = {}
 for _, item in ipairs(ALL_ITEMS) do
 	BY_ID[item.Id] = item
+end
+
+-- Complète le catalogue avec les chandails découverts dans Studio par GameConfig.
+for _, id in ipairs(Config.ShopItemOrder) do
+	local def = Config.ShopItems[id]
+	if not BY_ID[id] and def and def.Kind == "Cosmetic" and def.Slot == "Shirt" then
+		local descriptionKey = if def.Style == "Epic" then "EpicShirtDesc" else if def.Style == "Rare" then "RareShirtDesc" else "CommonShirtDesc"
+		local item: ShopItemDef = {
+			Id = id, NameKey = def.Label, Category = "Shirts", DescriptionKey = descriptionKey,
+			IconKey = "CosmeticShirt", ModelName = def.ModelName, Type = "Cosmetic",
+			Equipable = true, Available = true, ShopItemId = id,
+		}
+		table.insert(ALL_ITEMS, item)
+		BY_ID[id] = item
+	end
 end
 
 local function isInList(list: { string }, id: string): boolean

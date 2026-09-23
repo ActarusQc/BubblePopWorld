@@ -16,6 +16,7 @@ local ACTION_REMOTES: { [string]: string } = {
 	Buy = "BuyItem",
 	Upgrade = "BuyUpgrade",
 	Equip = "EquipBackpack",
+	EquipCosmetic = "EquipCosmetic",
 }
 
 -- Index suivant en boucle (dernier -> premier). count <= 0 retombe sur 1 (liste vide).

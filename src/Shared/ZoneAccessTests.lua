@@ -18,19 +18,19 @@ function ZoneAccessTests.Run(): boolean
 	end
 
 	check(ZoneDefs.GetRequiredLevel("ClassicZone") == 1, "Classic RequiredLevel")
-	check(ZoneDefs.GetRequiredLevel("SummerZone") == 5, "Summer RequiredLevel")
+	check(ZoneDefs.GetRequiredLevel("SummerZone") == 3, "Summer RequiredLevel")
 	check(ZoneDefs.GetRewardMultiplier("SummerZone") == 1, "Summer RewardMultiplier == 1")
 	check(ZoneDefs.GetRewardMultiplier("ClassicZone") == 1, "Classic RewardMultiplier == 1")
 
-	check(ZoneDefs.CanLevelEnter(4, "SummerZone") == false, "level 4 blocked")
-	check(ZoneDefs.CanLevelEnter(5, "SummerZone") == true, "level 5 allowed (>=)")
+	check(ZoneDefs.CanLevelEnter(2, "SummerZone") == false, "level 2 blocked")
+	check(ZoneDefs.CanLevelEnter(3, "SummerZone") == true, "level 3 allowed (>=)")
 	check(ZoneDefs.CanLevelEnter(6, "SummerZone") == true, "level 6 allowed")
 	check(ZoneDefs.CanLevelEnter(1, "ClassicZone") == true, "classic level 1 allowed")
 
 	check(ZoneDefs.GetAccessGroupName(1) == "ZoneAccess_1", "access group level 1")
-	check(ZoneDefs.GetAccessGroupName(4) == "ZoneAccess_1", "access group level 4")
-	check(ZoneDefs.GetAccessGroupName(5) == "ZoneAccess_5", "access group level 5")
-	check(ZoneDefs.GetAccessGroupName(99) == "ZoneAccess_5", "access group level 99")
+	check(ZoneDefs.GetAccessGroupName(2) == "ZoneAccess_1", "access group level 2")
+	check(ZoneDefs.GetAccessGroupName(3) == "ZoneAccess_3", "access group level 3")
+	check(ZoneDefs.GetAccessGroupName(99) == "ZoneAccess_3", "access group level 99")
 
 	local layout = ZoneDefs.GetSummerBridgeLayout()
 	local L = ZoneDefs.SummerLayout
@@ -46,7 +46,7 @@ function ZoneAccessTests.Run(): boolean
 
 	local summerReq = ZoneDefs.GetRequiredLevel("SummerZone")
 	check((1 < summerReq) == true, "ZoneAccess_1 collides with SummerGate")
-	check((5 < summerReq) == false, "ZoneAccess_5 does not collide with SummerGate")
+	check((3 < summerReq) == false, "ZoneAccess_3 does not collide with SummerGate")
 
 	local classic = ZoneDefs.ClassicZone
 	local summer = ZoneDefs.SummerZone
@@ -107,6 +107,35 @@ function ZoneAccessTests.Run(): boolean
 	check(resolvePopZone(nil, "ClassicZone") == "ClassicZone", "pop sans zoneId → fallback")
 	check(resolvePopZone("SummerZone", "ClassicZone") == "SummerZone", "pop Summer zoneId")
 	check(ZoneDefs.List[1].Id == "ClassicZone" and ZoneDefs.List[2].Id == "SummerZone", "List Classic+Summer")
+	check(ZoneDefs.List[3].Id == "AmusementPark", "List AmusementPark")
+	check(ZoneDefs.GetRequiredLevel("AmusementPark") == 1, "Parc accessible sans verrou de niveau")
+	local highRow = nil
+	for z = 1, ZoneDefs.AmusementPark.SizeZ do
+		if ZoneDefs.GetAmusementParkRegionName(z) == "High" then
+			highRow = z
+			break
+		end
+	end
+	local parkGround = ZoneDefs.CellToWorld(1, 1, "AmusementPark")
+	local parkHigh = ZoneDefs.CellToWorld(1, highRow or 1, "AmusementPark")
+	check(highRow ~= nil, "rangée High présente dans la grille du parc")
+	check(parkHigh.Y > parkGround.Y + 15, "Bulles du parc réparties sur plusieurs étages")
+
+	local flat = CFrame.new()
+	local wideCols, wideRows = ZoneDefs.GetAmusementParkRegionCapacity(flat, Vector3.new(46, 0.4, 30), 16, 5)
+	local thinCols, _thinRows = ZoneDefs.GetAmusementParkRegionCapacity(flat, Vector3.new(12, 0.4, 30), 16, 5)
+	-- Région redimensionnée avec Z mince : après rotation 90° (Y horizontal), le plan se remplit.
+	local tipped = CFrame.Angles(math.rad(90), 0, 0)
+	local tippedCols, tippedRows = ZoneDefs.GetAmusementParkRegionCapacity(tipped, Vector3.new(46, 30, 0.4), 16, 5)
+	check(wideCols >= thinCols, "région plus large → plus de colonnes")
+	check(thinCols < 16, "région étroite n'active pas les 16 colonnes")
+	check(wideRows >= 2, "High standard a plusieurs rangées")
+	check(tippedRows >= 2, "axes horizontaux détectés après redimensionnement")
+	check(tippedCols >= 2, "plusieurs colonnes sur le plan basculé")
+	local spacing = GameConfig.Grid.Spacing
+	local pad = math.max(GameConfig.Grid.BubbleSize.X, GameConfig.Grid.BubbleSize.Z)
+	check((thinCols - 1) * spacing <= 12 - pad + 1e-6, "pas de compression colonnes")
+	check(thinCols >= 1, "High étroit garde au moins une colonne jouable")
 
 	local okFw, FwConfig = pcall(function()
 		return require(Shared.SummerFireworksConfig)

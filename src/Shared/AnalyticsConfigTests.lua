@@ -98,6 +98,7 @@ function AnalyticsConfigTests.Run(): boolean
 	check(AnalyticsConfig.IsCustomEventAllowed("NotARealEvent") == false, "IsCustomEventAllowed rejects unknown")
 
 	check(AnalyticsConfig.IsEconomySkuAllowed("BubbleSale_GameRoom") == true, "IsEconomySkuAllowed base sku")
+	check(AnalyticsConfig.IsEconomySkuAllowed("TentChest") == true, "IsEconomySkuAllowed TentChest")
 	check(AnalyticsConfig.IsEconomySkuAllowed("Speed") == true, "IsEconomySkuAllowed upgrade from GameConfig")
 	check(AnalyticsConfig.IsEconomySkuAllowed("BackpackGold") == true, "IsEconomySkuAllowed shop item from GameConfig")
 	check(AnalyticsConfig.IsEconomySkuAllowed("InvalidSku") == false, "IsEconomySkuAllowed rejects unknown")

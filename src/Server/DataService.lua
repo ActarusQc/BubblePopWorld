@@ -74,6 +74,7 @@ local TEMPLATE = {
 	EquippedTitle = "",
 	OwnedItems = {},
 	EquippedBackpack = "",
+	EquippedCosmetics = { Hat = "", Shirt = "", Pet = "" },
 	CurrentBubbles = 0,
 	BackpackCapacity = Config.Backpack.DefaultCapacity,
 	PendingSellValue = 0,
@@ -106,6 +107,13 @@ local TEMPLATE = {
 	WeeklyBest = {
 		WeekKey = "",
 		Score = 0,
+	},
+	Collection = {
+		Version = 1,
+		Discovered = {},
+		FoundCounts = {},
+		TotalSpecialPops = 0,
+		PopsSinceCollection = 0,
 	},
 	Version = 1,
 	Analytics = {
@@ -173,6 +181,16 @@ local function reconcileOwnedItems(data)
 		end
 	end
 	data.EquippedBackpack = equipped
+	if type(data.EquippedCosmetics) ~= "table" then data.EquippedCosmetics = { Hat = "", Shirt = "", Pet = "" } end
+	if type(data.EquippedCosmetics.Pet) ~= "string" then data.EquippedCosmetics.Pet = "" end
+	for _, slot in ipairs({ "Hat", "Shirt", "Pet" }) do
+		local equippedCosmetic = data.EquippedCosmetics[slot]
+		local def = if type(equippedCosmetic) == "string" then Config.ShopItems[equippedCosmetic] else nil
+		if type(equippedCosmetic) ~= "string" or equippedCosmetic == "" or not cleaned[equippedCosmetic]
+			or not def or def.Kind ~= "Cosmetic" or (def.Slot or "Hat") ~= slot then
+			data.EquippedCosmetics[slot] = ""
+		end
+	end
 	data.BackpackCapacity = Config.BackpackCapacityFor(equipped)
 end
 
@@ -385,6 +403,9 @@ function DataService.Push(player: Player)
 	player:SetAttribute("PendingSellBonus", math.max(0, math.floor(finiteNumber(d.PendingSellBonus, 0))))
 	player:SetAttribute("TotalBubblesSold", d.TotalBubblesSold)
 	player:SetAttribute("EquippedBackpack", d.EquippedBackpack or "")
+	player:SetAttribute("EquippedHat", (d.EquippedCosmetics and d.EquippedCosmetics.Hat) or "")
+	player:SetAttribute("EquippedShirt", (d.EquippedCosmetics and d.EquippedCosmetics.Shirt) or "")
+	player:SetAttribute("EquippedPet", (d.EquippedCosmetics and d.EquippedCosmetics.Pet) or "")
 	player:SetAttribute("PlayerLevel", d.Level)
 	local nextLevel = d.Level + 1
 	-- FireClient exige une Instance Player (tests / stubs : ignorer sans casser la mutation).
@@ -401,6 +422,7 @@ function DataService.Push(player: Player)
 			Worlds = d.Worlds,
 			OwnedItems = d.OwnedItems,
 			EquippedBackpack = d.EquippedBackpack or "",
+			EquippedCosmetics = d.EquippedCosmetics or { Hat = "", Shirt = "", Pet = "" },
 			MusicMuted = d.MusicMuted == true,
 		})
 	end)
@@ -413,6 +435,9 @@ local CREDIT_SOURCES = {
 	Code = true,
 	Admin = true,
 	Tutorial = true,
+	BubbleBlaster = true,
+	RollABall = true,
+	TentChest = true,
 }
 
 function DataService.AddCoins(player: Player, amount: number, source: string?): (boolean, number?)

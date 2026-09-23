@@ -437,7 +437,7 @@ local function startGoldenWave()
 	local ratio = MiniEventConfig.Events.GoldenWave.InitialTransformRatio
 	local eligible = {}
 	forEachCell(function(cell, _zoneId)
-		if MiniEventLogic.IsNormalEligibleForGolden(
+		if cell.collectible == nil and MiniEventLogic.IsNormalEligibleForGolden(
 			cell.def and cell.def.Id,
 			cell.alive == true,
 			cell.eventVariant
@@ -456,7 +456,7 @@ local function startColorRush()
 	targetColor = MiniEventConfig.Events.ColorRush.TargetColor
 	local eligible = {}
 	forEachCell(function(cell, _zoneId)
-		if cell.alive and cell.def and cell.def.Id == "Normal" then
+		if cell.collectible == nil and cell.alive and cell.def and cell.def.Id == "Normal" then
 			table.insert(eligible, cell)
 		end
 	end)
@@ -960,7 +960,9 @@ function MiniEventService.OnBubbleReady(cell: any)
 	if machineState ~= MiniEventLogic.STATES.Active or not cell then
 		return
 	end
-	if currentEventType == "GoldenWave" then
+	if cell.collectible ~= nil then
+		return
+	elseif currentEventType == "GoldenWave" then
 		if MiniEventLogic.IsNormalEligibleForGolden(
 			cell.def and cell.def.Id,
 			cell.alive == true,

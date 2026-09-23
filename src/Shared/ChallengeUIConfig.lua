@@ -14,9 +14,10 @@ ChallengeUIConfig.DebugRuntime = false
 --------------------------------------------------------------------
 ChallengeUIConfig.ConsoleSafeMarginX = 36 -- 24–48
 ChallengeUIConfig.ConsoleSafeMarginY = 24 -- 18–36
-ChallengeUIConfig.ConsolePanelWidthRatio = 0.34
-ChallengeUIConfig.ConsolePanelWidthMin = 520
-ChallengeUIConfig.ConsolePanelWidthMax = 700
+-- Un quart de l'ecran laisse le jeu visible tout en gardant les objectifs lisibles sur TV.
+ChallengeUIConfig.ConsolePanelWidthRatio = 0.25
+ChallengeUIConfig.ConsolePanelWidthMin = 440
+ChallengeUIConfig.ConsolePanelWidthMax = 520
 
 --------------------------------------------------------------------
 -- Display

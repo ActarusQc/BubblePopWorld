@@ -23,12 +23,19 @@ function ShopCatalogTests.Run(): boolean
 	check(ShopCatalog.IsPurchasable("BackpackNeon") == true, "BackpackNeon purchasable")
 	check(ShopCatalog.IsPurchasable("Magnet") == false, "Magnet not purchasable")
 	check(ShopCatalog.IsPurchasable("Luck") == false, "Luck not purchasable")
-	check(ShopCatalog.IsPurchasable("Cap") == false, "Cap not purchasable")
+	check(ShopCatalog.IsPurchasable("Cap") == true, "Cap purchasable")
+	check(ShopCatalog.IsPurchasable("FrogHat") == true, "FrogHat purchasable")
+	check(ShopCatalog.IsPurchasable("WizardHat") == true, "WizardHat purchasable")
+	check(ShopCatalog.IsPurchasable("BlueJeweledCrown") == true, "BlueJeweledCrown purchasable")
 	check(ShopCatalog.IsPurchasable("Unknown") == false, "Unknown not purchasable")
 
 	check(#ShopCatalog.GetCategoryItems("Skills") >= 5, "Skills has live + coming soon")
 	check(#ShopCatalog.GetCategoryItems("Items") >= 5, "Items has live + coming soon")
-	check(#ShopCatalog.GetCategoryItems("Cosmetics") >= 3, "Cosmetics populated")
+	check(#ShopCatalog.GetCategoryItems("Hats") == 4, "Hats populated")
+	check(#ShopCatalog.GetCategoryItems("Vests") >= 1, "Vests populated")
+	check(#ShopCatalog.GetCategoryItems("Shirts") >= 1, "Shirts populated")
+	check(#ShopCatalog.GetCategoryItems("Accessories") >= 1, "Accessories populated")
+	check(#ShopCatalog.GetCategoryItems("Shoes") >= 1, "Shoes populated")
 
 	local skills = ShopCatalog.GetCategoryItems("Skills")
 	local liveSkillCount = 0
@@ -41,7 +48,8 @@ function ShopCatalogTests.Run(): boolean
 
 	check(ShopCatalog.Categories[1] == "Skills", "first category Skills")
 	check(ShopCatalog.Categories[2] == "Items", "second category Items")
-	check(ShopCatalog.Categories[3] == "Cosmetics", "third category Cosmetics")
+	check(ShopCatalog.Categories[3] == "Hats", "third category Hats")
+	check(ShopCatalog.Categories[7] == "Shoes", "seventh category Shoes")
 
 	local speed = ShopCatalog.GetItem("Speed")
 	check(speed ~= nil and speed.UpgradeId == "Speed", "Speed UpgradeId")
@@ -50,6 +58,14 @@ function ShopCatalogTests.Run(): boolean
 	local gold = ShopCatalog.GetItem("BackpackGold")
 	check(gold ~= nil and gold.ShopItemId == "BackpackGold", "BackpackGold ShopItemId")
 	check(gold ~= nil and gold.Equipable == true, "BackpackGold Equipable")
+	local cap = ShopCatalog.GetItem("Cap")
+	check(cap ~= nil and cap.ModelName == "MulticolorCapAccessory", "Cap uses imported accessory")
+	local frog = ShopCatalog.GetItem("FrogHat")
+	check(frog ~= nil and frog.ModelName == "FrogHatAccessory", "FrogHat uses imported accessory")
+	local wizard = ShopCatalog.GetItem("WizardHat")
+	check(wizard ~= nil and wizard.ModelName == "WizardHatAccessory", "WizardHat uses imported accessory")
+	local crown = ShopCatalog.GetItem("BlueJeweledCrown")
+	check(crown ~= nil and crown.ModelName == "BlueJeweledCrownAccessory", "BlueJeweledCrown uses imported accessory")
 
 	if failed == 0 then
 		print("[ShopCatalogTests] OK")

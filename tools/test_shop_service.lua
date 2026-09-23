@@ -106,6 +106,7 @@ local profile = {
 	Upgrades = { Speed = 0, Jump = 0, Power = 0, CoinMult = 0 },
 	OwnedItems = {},
 	EquippedBackpack = "",
+	EquippedCosmetics = { Hat = "" },
 	BackpackCapacity = 25,
 	CurrentBubbles = 0,
 }
@@ -139,6 +140,9 @@ MODULE_CACHE.DataService = {
 	NotifyCoinsChanged = function() counters.NotifyCoinsChanged += 1 end,
 }
 MODULE_CACHE.BackpackVisual = {
+	Refresh = function() counters.Refresh += 1 end,
+}
+MODULE_CACHE.CosmeticService = {
 	Refresh = function() counters.Refresh += 1 end,
 }
 

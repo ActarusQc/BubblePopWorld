@@ -118,7 +118,7 @@ local function createActionIcon(parent: GuiObject, glyph: string, fontSize: numb
 	return icon
 end
 
-local function createIconButton(
+	local function createIconButton(
 	parent: Instance,
 	name: string,
 	layoutOrder: number,
@@ -141,11 +141,27 @@ local function createIconButton(
 	btn.Parent = parent
 	btn:SetAttribute("AccessibleName", accessibleName)
 
-	local cornerRadius = 16
-	corner(btn, cornerRadius)
-	local border = stroke(btn, ACCENT, 1.4, 0.12)
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0.5, 0)
+	buttonCorner.Parent = btn
+	local menuColors = {
+		[HudChrome.CHALLENGES_BUTTON_NAME] = Color3.fromRGB(247, 119, 73),
+		[HudChrome.MUSIC_BUTTON_NAME] = Color3.fromRGB(99, 194, 95),
+	}
+	btn.BackgroundColor3 = menuColors[name] or BG_BUTTON
+	local border = stroke(btn, Color3.new(1,1,1), 2.2, 0.06)
 
-	createActionIcon(btn, glyph)
+	local icon = createActionIcon(btn, glyph)
+	icon.Size = UDim2.new(1, -14, 1, -14)
+	icon.Position = UDim2.fromOffset(7, 7)
+
+	local caption = Instance.new("TextLabel")
+	caption.Name = "MenuCaption"; caption.AnchorPoint = Vector2.new(0.5,0)
+	caption.Position = UDim2.new(0.5,0,1,2); caption.Size = UDim2.fromOffset(92,16)
+	caption.BackgroundTransparency = 1; caption.TextColor3 = Color3.new(1,1,1)
+	caption.TextStrokeColor3 = Color3.fromRGB(12,30,48); caption.TextStrokeTransparency = 0.2
+	caption.Font = Enum.Font.GothamBlack; caption.TextSize = 10; caption.ZIndex = 8; caption.Parent = btn
+	L10nUtil.localize(caption, accessibleName)
 
 	local tip = Instance.new("TextLabel")
 	tip.Name = "Tooltip"
@@ -174,7 +190,7 @@ local function createIconButton(
 	local function setHover(on: boolean)
 		border.Thickness = if on then 2.2 else 1.4
 		border.Transparency = if on then 0 else 0.12
-		tip.Visible = on
+		tip.Visible = false
 		btn.BackgroundTransparency = if on then 0 else 0.08
 	end
 
@@ -418,6 +434,56 @@ function HUD.Start()
 	panelSizeConstraint.MaxSize = Vector2.new(240, 140)
 	panelSizeConstraint.Parent = panel
 
+	-- Nouveau bandeau de progression : capsules compactes inspirées des HUD de
+	-- simulateurs, sans concurrencer le bandeau de mini-défi au centre.
+	panel.Visible = false
+	local statCapsules = Instance.new("Frame")
+	statCapsules.Name = "StatCapsules"
+	statCapsules.AnchorPoint = Vector2.new(0.5, 0)
+	-- Le ScreenGui respecte l'inset Roblox; l'offset est compensé plus bas afin
+	-- d'aligner les capsules sur la même rangée que les contrôles Roblox.
+	statCapsules.Position = UDim2.new(0.5, 0, 0, -42)
+	statCapsules.Size = UDim2.fromOffset(430, 56)
+	statCapsules.BackgroundTransparency = 1
+	statCapsules.Parent = gui
+	local capsuleList = Instance.new("UIListLayout")
+	capsuleList.FillDirection = Enum.FillDirection.Horizontal
+	capsuleList.Padding = UDim.new(0, 8)
+	capsuleList.SortOrder = Enum.SortOrder.LayoutOrder
+	capsuleList.Parent = statCapsules
+
+	local function capsule(name: string, width: number, order: number, color: Color3, glyph: string): (Frame, TextLabel)
+		local frame = Instance.new("Frame")
+		frame.Name = name; frame.LayoutOrder = order; frame.Size = UDim2.fromOffset(width, 50)
+		frame.BackgroundColor3 = Color3.fromRGB(250, 247, 226); frame.BorderSizePixel = 0; frame.Parent = statCapsules
+		corner(frame, 25); stroke(frame, Color3.fromRGB(31, 53, 72), 2.5, 0)
+		local disc = Instance.new("Frame")
+		disc.Size = UDim2.fromOffset(42,42); disc.Position = UDim2.fromOffset(4,4)
+		disc.BackgroundColor3 = color; disc.BorderSizePixel = 0; disc.Parent = frame; corner(disc,21)
+		stroke(disc, Color3.new(1,1,1), 2, 0.18)
+		local icon = Instance.new("TextLabel")
+		icon.BackgroundTransparency = 1; icon.Size = UDim2.fromScale(1,1); icon.Text = glyph
+		icon.TextColor3 = Color3.new(1,1,1); icon.Font = Enum.Font.GothamBlack; icon.TextSize = 22
+		icon.Parent = disc; L10nUtil.markNoLocalize(icon)
+		local value = Instance.new("TextLabel")
+		value.Name = "Value"; value.Position = UDim2.fromOffset(52,3); value.Size = UDim2.new(1,-58,0,27)
+		value.BackgroundTransparency = 1; value.TextColor3 = Color3.fromRGB(24,42,58)
+		value.Font = Enum.Font.GothamBlack; value.TextSize = 17; value.TextXAlignment = Enum.TextXAlignment.Left
+		value.Parent = frame
+		local caption = Instance.new("TextLabel")
+		caption.Position = UDim2.fromOffset(52,27); caption.Size = UDim2.new(1,-58,0,17)
+		caption.BackgroundTransparency = 1; caption.TextColor3 = Color3.fromRGB(91,105,115)
+		caption.Font = Enum.Font.GothamBold; caption.TextSize = 9; caption.TextXAlignment = Enum.TextXAlignment.Left
+		caption.Text = string.upper(name); caption.Parent = frame; L10nUtil.markNoLocalize(caption)
+		return frame, value
+	end
+	local _, capsuleCoins = capsule("Coins", 136, 1, Color3.fromRGB(255,184,38), "$" )
+	local _, capsuleBag = capsule("Backpack", 142, 2, Color3.fromRGB(53,169,255), "BAG")
+	local _, capsuleLevel = capsule("Level", 132, 3, Color3.fromRGB(139,93,245), "★")
+	L10nUtil.dynamic(capsuleCoins, "0")
+	L10nUtil.dynamic(capsuleBag, "0 / 0")
+	L10nUtil.dynamic(capsuleLevel, "1")
+
 	local showBubbleGoalUI = Config.UI ~= nil and Config.UI.ShowBubbleGoalUI == true
 
 	local globalFrame = Instance.new("Frame")
@@ -470,6 +536,8 @@ function HUD.Start()
 		sell = Color3.fromRGB(255, 220, 100),
 		backpack_full = Color3.fromRGB(255, 140, 100),
 		zone_locked = Color3.fromRGB(255, 200, 90),
+		win = Color3.fromRGB(255, 210, 70),
+		info = Color3.fromRGB(230, 230, 240),
 	}
 
 	local FIXED_TOAST_KINDS = {
@@ -514,6 +582,7 @@ function HUD.Start()
 		local ratio = HudChrome.BackpackRatio(current, capacity)
 
 		L10nUtil.dynamic(backpackLine, HudChrome.FormatBackpackLine(L10n.Backpack, current, capacity))
+		L10nUtil.dynamic(capsuleBag, ("%s / %s"):format(HudChrome.Comma(current), HudChrome.Comma(capacity)))
 		backpackFill.Size = UDim2.new(ratio, 0, 1, 0)
 
 		if ratio >= 1 then
@@ -541,6 +610,7 @@ function HUD.Start()
 
 	Remotes.Event("StatsUpdate").OnClientEvent:Connect(function(stats)
 		L10nUtil.dynamic(coinsValue, HudChrome.Comma(stats.Coins))
+		L10nUtil.dynamic(capsuleCoins, HudChrome.Comma(stats.Coins))
 
 		local sold = stats.BubblesSold or 0
 		local levelStart = stats.LevelStart or 0
@@ -548,6 +618,7 @@ function HUD.Start()
 		local ratio = HudChrome.XpRatio(sold, levelStart, nextAt)
 
 		L10nUtil.dynamic(levelLine, HudChrome.FormatLevelLine(L10n.Level, stats.Level))
+		L10nUtil.dynamic(capsuleLevel, tostring(stats.Level))
 		if nextAt then
 			L10nUtil.dynamic(xpLine, HudChrome.FormatXpLine(sold, nextAt))
 		else
@@ -685,6 +756,7 @@ function HUD.Start()
 		local vp = if cam then cam.ViewportSize else Vector2.new(1920, 1080)
 		local inset = GuiService:GetGuiInset()
 		local usableW = math.max(200, vp.X - inset.X)
+		statCapsules.Position = UDim2.new(0.5, 0, 0, 8 - inset.Y)
 
 		local width = HudChrome.DESKTOP_PANEL_WIDTH
 		local height = HudChrome.DESKTOP_PANEL_HEIGHT
@@ -712,13 +784,30 @@ function HUD.Start()
 		xpLine.TextSize = levelSize
 		backpackStatus.TextSize = statusSize
 
+		-- Rangée de progression centrée tout en haut.
+		local capsuleScale = if usableW < 700 then 0.74 elseif usableW < 1100 then 0.88 else 1
+		statCapsules.Size = UDim2.fromOffset(430, 56)
+		local capsuleUiScale = statCapsules:FindFirstChild("ResponsiveScale")
+		if not capsuleUiScale then
+			capsuleUiScale = Instance.new("UIScale")
+			capsuleUiScale.Name = "ResponsiveScale"
+			capsuleUiScale.Parent = statCapsules
+		end
+		(capsuleUiScale :: UIScale).Scale = capsuleScale
+
 		local btn = if usableW < 700 then 52 else HudChrome.ACTION_BUTTON_SIZE
 		local gap = if usableW < 700 then 10 else HudChrome.ACTION_BUTTON_GAP
 		-- Ne pas écraser le rail d'icônes docké par ChallengeController.
 		if actionColumn:GetAttribute(HudChrome.DOCKED_ACTIONS_ATTR or "BPW_DockedActions") == true then
 			return
 		end
-		actionColumn.Size = UDim2.fromOffset(btn, btn * 3 + gap * 2)
+		local actionCount = 0
+		for _, child in ipairs(actionColumn:GetChildren()) do
+			if child:IsA("GuiObject") and (child:IsA("GuiButton") or child.Name == "InventorySlot") then
+				actionCount += 1
+			end
+		end
+		actionColumn.Size = UDim2.fromOffset(btn, btn * actionCount + gap * math.max(0, actionCount - 1))
 		actionList.Padding = UDim.new(0, gap)
 		actionList.FillDirection = Enum.FillDirection.Vertical
 		for _, child in ipairs(actionColumn:GetChildren()) do

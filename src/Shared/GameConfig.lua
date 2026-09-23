@@ -61,9 +61,103 @@ GameConfig.ShopItems = {
 		Style = "Neon",
 		IconKey = "BackpackNeon",
 	},
+	Cap = {
+		Label = "Multicolor Cap",
+		Kind = "Cosmetic",
+		Slot = "Hat",
+		Cost = 2500,
+		Style = "BubbleBlue",
+		IconKey = "CosmeticCap",
+	},
+	FrogHat = {
+		Label = "Frog Hat",
+		Kind = "Cosmetic",
+		Slot = "Hat",
+		Cost = 7500,
+		Style = "FrogGreen",
+		IconKey = "CosmeticHat",
+	},
+	WizardHat = {
+		Label = "Wizard Hat",
+		Kind = "Cosmetic",
+		Slot = "Hat",
+		Cost = 15000,
+		Style = "WizardPurple",
+		IconKey = "CosmeticHat",
+	},
+	BlueJeweledCrown = {
+		Label = "Blue Jeweled Crown",
+		Kind = "Cosmetic",
+		Slot = "Hat",
+		Cost = 35000,
+		Style = "RoyalBlue",
+		IconKey = "CosmeticHat",
+	},
+	ToutouChien = {
+		Label = "Toutou Chien",
+		Kind = "Cosmetic",
+		Slot = "Pet",
+		Cost = 0,
+		Style = "Prize",
+		IconKey = "CosmeticHat",
+		PrizeOnly = true,
+		ModelName = "ToutouChien",
+	},
+	BlackNeonShirt = { Label = "Black Neon Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 8000, Style = "Common", IconKey = "CosmeticShirt", ModelName = "BlackNeon" },
+	BlueBubbleShirt = { Label = "Blue Bubble Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 6500, Style = "Common", IconKey = "CosmeticShirt", ModelName = "BlueBubble" },
+	LavandeStarShirt = { Label = "Lavender Star Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 5000, Style = "Common", IconKey = "CosmeticShirt", ModelName = "LavandeStar" },
+	MintWavesShirt = { Label = "Mint Waves Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 3500, Style = "Common", IconKey = "CosmeticShirt", ModelName = "MintWaves" },
+	NavyBubbleShirt = { Label = "Navy Bubble Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 7000, Style = "Common", IconKey = "CosmeticShirt", ModelName = "Navy_Bubble" },
+	OrangeSunsetShirt = { Label = "Orange Sunset Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 4500, Style = "Common", IconKey = "CosmeticShirt", ModelName = "OrangeSunset" },
+	RedStripesShirt = { Label = "Red Stripes Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 2500, Style = "Common", IconKey = "CosmeticShirt", ModelName = "RedStripes" },
+	SkyBlueShirt = { Label = "Sky Blue Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 3000, Style = "Common", IconKey = "CosmeticShirt", ModelName = "SkyBlue" },
+	YellowSmileShirt = { Label = "Yellow Smile Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 4000, Style = "Common", IconKey = "CosmeticShirt", ModelName = "YellowSmile" },
+	CosmicDragonShirt = { Label = "Cosmic Dragon Shirt", Kind = "Cosmetic", Slot = "Shirt", Cost = 75000, Style = "Epic", IconKey = "CosmeticShirt", ModelName = "CosmicDragonShirt" },
 }
 
-GameConfig.ShopItemOrder = { "BackpackGold", "BackpackEmerald", "BackpackNeon" }
+GameConfig.ShopItemOrder = {
+	"BackpackGold", "BackpackEmerald", "BackpackNeon",
+	"Cap", "FrogHat", "WizardHat", "BlueJeweledCrown",
+	"RedStripesShirt", "SkyBlueShirt", "MintWavesShirt", "YellowSmileShirt", "OrangeSunsetShirt",
+	"LavandeStarShirt", "BlueBubbleShirt", "NavyBubbleShirt", "BlackNeonShirt", "CosmicDragonShirt",
+}
+
+-- Les Shirt ajoutés manuellement dans ShopAssets/Shirts/Common|Rare|Epic sont
+-- découverts automatiquement. Les attributs DisplayName et Price sont optionnels.
+local function registerStudioShirts()
+	local ok, replicatedStorage = pcall(function() return game:GetService("ReplicatedStorage") end)
+	if not ok or not replicatedStorage or type(replicatedStorage.FindFirstChild) ~= "function" then return end
+	local shopAssets = replicatedStorage:FindFirstChild("ShopAssets")
+	if not shopAssets or type(shopAssets.FindFirstChild) ~= "function" then return end
+	local shirts = if shopAssets then shopAssets:FindFirstChild("Shirts") else nil
+	if not shirts or type(shirts.FindFirstChild) ~= "function" or type(shirts.GetChildren) ~= "function" then return end
+	local knownModels: { [string]: boolean } = {}
+	for _, def in pairs(GameConfig.ShopItems) do
+		if def.Kind == "Cosmetic" and def.Slot == "Shirt" and type(def.ModelName) == "string" then knownModels[def.ModelName] = true end
+	end
+	local rarityBase = { Common = 2500, Rare = 12000, Epic = 50000 }
+	for _, rarity in ipairs({ "Common", "Rare", "Epic" }) do
+		local folder = shirts:FindFirstChild(rarity)
+		if folder then
+			local entries = folder:GetChildren()
+			table.sort(entries, function(a, b) return a.Name < b.Name end)
+			for index, shirt in ipairs(entries) do
+				if shirt:IsA("Shirt") and not knownModels[shirt.Name] then
+					local clean = string.gsub(shirt.Name, "[^%w]", "")
+					local id = "StudioShirt_" .. clean
+					local displayName = shirt:GetAttribute("DisplayName")
+					if type(displayName) ~= "string" or displayName == "" then displayName = string.gsub(shirt.Name, "_", " ") end
+					local customPrice = shirt:GetAttribute("Price")
+					local step = if rarity == "Common" then 750 else if rarity == "Rare" then 2500 else 7500
+					GameConfig.ShopItems[id] = { Label = displayName, Kind = "Cosmetic", Slot = "Shirt", Cost = if type(customPrice) == "number" then math.max(0, math.floor(customPrice)) else rarityBase[rarity] + (index - 1) * step, Style = rarity, IconKey = "CosmeticShirt", ModelName = shirt.Name }
+					table.insert(GameConfig.ShopItemOrder, id)
+					knownModels[shirt.Name] = true
+				end
+			end
+		end
+	end
+end
+registerStudioShirts()
 
 -- Vitrine 3D « Bubble Items » près du kiosque (affichage uniquement, pas d'achat ici).
 -- LabelKey = clé LocalizationStrings. Extensible : ajouter une entrée + IconKey dans ShopIcons.
@@ -444,24 +538,23 @@ GameConfig.Bubble = {
 	EffectFlushRate = 0.1,   -- fréquence d'envoi des effets aux clients (batch)
 	WingFlightSeconds = 0.9, -- durée du vol horizontal (ailes)
 
-	-- MeshScale < 1 pour laisser un espace visible entre bulles (Spacing = 6)
-	MeshScale = Vector3.new(0.92, 0.98, 0.92),
+	-- Dôme glossy plus haut que la hitbox, avec le même espacement horizontal.
+	MeshScale = Vector3.new(0.92, 1.55, 0.92),
 
-	-- Zone principale : Material NEON (émissif) → plus de shading diffuse caméra-dépendant.
-	-- SmoothPlastic échoue : faces ombrées/claires sur sphère changent avec l’angle de vue.
-	-- RGB volontairement plus bas pour rester pastel (Neon affiche plus lumineux).
+	-- SmoothPlastic produit le relief, le dégradé et le reflet sans ajouter
+	-- de lumière ou de seconde pièce à chacune des milliers de bulles.
 	Appearance = {
-		Material = Enum.Material.Neon,
-		BaseColor = Color3.fromRGB(85, 165, 215),
+		Material = Enum.Material.SmoothPlastic,
+		BaseColor = Color3.fromRGB(72, 205, 232),
 		Transparency = 0,
-		Reflectance = 0,
+		Reflectance = 0.08,
 		CastShadow = false,
 
 		TintVariants = {
-			Color3.fromRGB(85, 165, 215), -- bleu pastel stable (Neon)
-			Color3.fromRGB(90, 190, 145), -- menthe pastel stable
-			Color3.fromRGB(145, 120, 210), -- mauve pastel stable
-			Color3.fromRGB(220, 125, 100), -- pêche pastel stable
+			Color3.fromRGB(72, 205, 232), -- cyan glossy
+			Color3.fromRGB(96, 218, 188), -- menthe glossy
+			Color3.fromRGB(185, 145, 232), -- mauve glossy
+			Color3.fromRGB(242, 179, 112), -- pêche glossy
 		},
 
 		OutlineColor = Color3.fromRGB(85, 165, 215),
@@ -472,12 +565,12 @@ GameConfig.Bubble = {
 		ReflectionSize = Vector3.new(0.7, 0.45, 0.7),
 	},
 
-	-- Palette pastels zone principale (valeurs calibrées pour Neon, pas SmoothPlastic).
+	-- Palette pastel calibrée pour SmoothPlastic.
 	MainZoneNormalColors = {
-		Color3.fromRGB(85, 165, 215), -- bleu
-		Color3.fromRGB(90, 190, 145), -- menthe
-		Color3.fromRGB(145, 120, 210), -- mauve
-		Color3.fromRGB(220, 125, 100), -- pêche
+		Color3.fromRGB(72, 205, 232), -- cyan
+		Color3.fromRGB(96, 218, 188), -- menthe
+		Color3.fromRGB(185, 145, 232), -- mauve
+		Color3.fromRGB(242, 179, 112), -- pêche
 	},
 
 	-- Spéciales principales : vives mais contrôlées sous Neon (évite bloom blanc).
@@ -498,27 +591,27 @@ GameConfig.Bubble = {
 
 	ReservedColorMinDistance = 0.38,
 
-	-- Finition spéciale zone principale = Neon opaque stable.
+	-- Finition spéciale zone principale = glossy opaque.
 	SpecialStyles = {
 		Rare = {
-			Material = Enum.Material.Neon,
+			Material = Enum.Material.SmoothPlastic,
 			Transparency = 0,
-			Reflectance = 0,
+			Reflectance = 0.1,
 		},
 		Golden = {
-			Material = Enum.Material.Neon,
+			Material = Enum.Material.SmoothPlastic,
 			Transparency = 0,
-			Reflectance = 0,
+			Reflectance = 0.16,
 		},
 		Diamond = {
-			Material = Enum.Material.Neon,
+			Material = Enum.Material.SmoothPlastic,
 			Transparency = 0,
-			Reflectance = 0,
+			Reflectance = 0.2,
 		},
 		Legendary = {
-			Material = Enum.Material.Neon,
+			Material = Enum.Material.SmoothPlastic,
 			Transparency = 0,
-			Reflectance = 0,
+			Reflectance = 0.14,
 		},
 	},
 
@@ -526,30 +619,30 @@ GameConfig.Bubble = {
 	SummerSpecialStyles = {
 		Rare = {
 			Material = Enum.Material.SmoothPlastic,
-			Transparency = 0.18,
-			Reflectance = 0.22,
+			Transparency = 0,
+			Reflectance = 0.1,
 		},
 		Golden = {
 			Material = Enum.Material.SmoothPlastic,
-			Transparency = 0.12,
-			Reflectance = 0.4,
+			Transparency = 0,
+			Reflectance = 0.16,
 		},
 		Diamond = {
 			Material = Enum.Material.SmoothPlastic,
-			Transparency = 0.1,
-			Reflectance = 0.55,
+			Transparency = 0,
+			Reflectance = 0.2,
 		},
 		Legendary = {
 			Material = Enum.Material.SmoothPlastic,
-			Transparency = 0.08,
-			Reflectance = 0.3,
+			Transparency = 0,
+			Reflectance = 0.14,
 		},
 	},
 
 	-- Marqueurs désactivés en zone principale. Summer réutilise EnableBorderPulse si rang élevé.
 	SpecialPresentation = {
 		EnableMarkers = false, -- zone principale : jamais
-		EnableBorderPulse = true, -- Summer Diamond+ seulement
+		EnableBorderPulse = false, -- rendu fixe : aucun clignotement, PC et Xbox
 		PulseMinRank = 3,
 		BorderScaleBase = 1.1,
 		BorderScalePerRank = 0.02,

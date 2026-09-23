@@ -13,8 +13,10 @@ local ZoneDefs = require(Shared.ZoneDefs)
 local BubbleTypes = require(Shared.BubbleTypes)
 local BubbleAppearance = require(Shared.BubbleAppearance)
 local BubbleValue = require(Shared.BubbleValue)
+local CollectionConfig = require(Shared.CollectionConfig)
 local HubLayout = require(Shared.HubLayout)
 local Remotes = require(Shared.Remotes)
+local BubbleContactLogic = require(Shared.BubbleContactLogic)
 
 local DataService = require(script.Parent.DataService)
 local BackpackService = require(script.Parent.BackpackService)
@@ -38,17 +40,30 @@ type BoardState = {
 }
 
 local BubbleService = {}
+local CODE_VERSION = "bubble-pop-2026-08-21-v1"
 local boards: { [string]: BoardState } = {}
 local boardList: { BoardState } = {}
 local rng = Random.new()
 local currentWorld = Config.Worlds[1]
 local defaultZoneId = "ClassicZone"
+local personalTargets: { [number]: any } = {}
 
 -- Anti-exploit : budget de pops par joueur
 local budget: { [Player]: { tokens: number, last: number } } = {}
 
 -- File d'effets envoyée en lot aux clients : { x, z, rarityId, zoneId }
 local effectQueue: { any } = {}
+
+-- Diagnostic Studio : pourquoi une demande de pop n'aboutit pas. Limité dans le temps
+-- pour rester lisible dans Output.
+local lastPopDebug = 0
+local function popDebug(reason: string, ...)
+	if not RunService:IsStudio() then return end
+	local now = os.clock()
+	if now - lastPopDebug < 0.5 then return end
+	lastPopDebug = now
+	warn("[BubblePop] refusé :", reason, ...)
+end
 
 --------------------------------------------------------------------
 -- Coordonnées (zone-aware)
@@ -63,6 +78,9 @@ end
 
 function BubbleService.CellToWorld(x: number, z: number, zoneId: string?): Vector3
 	local id = zoneId or defaultZoneId
+	if id == "AmusementPark" then
+		return ZoneDefs.CellToWorld(x, z, id)
+	end
 	local board = boards[id]
 	local def = ZoneDefs.Get(id)
 	local origin = if board then board.origin elseif def then def.Origin else G.Origin
@@ -167,6 +185,55 @@ local function applyBubbleAppearance(bubble: BasePart, zoneId: string, def, tint
 	BubbleAppearance.ApplyToPart(bubble, zoneId, def.Id, tintIndex, alive)
 end
 
+local function applyCollectibleAppearance(cell: any)
+	local part = cell.part :: BasePart
+	local old = part:FindFirstChild("CollectionVisual")
+	if old then old:Destroy() end
+	local oldLight = part:FindFirstChild("CollectionLight")
+	if oldLight then oldLight:Destroy() end
+	part:SetAttribute("CollectionId", nil)
+	part:SetAttribute("CollectionRarity", nil)
+	if not cell.collectible then return end
+
+	local def = cell.collectible
+	local rarity = CollectionConfig.Rarities[def.Rarity]
+	part:SetAttribute("CollectionId", def.Id)
+	part:SetAttribute("CollectionRarity", def.Rarity)
+	part.Material = Enum.Material.Neon
+	part.Color = rarity.Color
+
+	local visual = Instance.new("BillboardGui")
+	visual.Name = "CollectionVisual"
+	visual.Size = UDim2.fromOffset(90, 90)
+	visual.AlwaysOnTop = false
+	visual.LightInfluence = 0
+	visual.MaxDistance = 180
+	visual.Parent = part
+	if def.ImageId ~= "" then
+		local image = Instance.new("ImageLabel")
+		image.Size = UDim2.fromScale(1, 1)
+		image.BackgroundTransparency = 1
+		image.Image = def.ImageId
+		image.Parent = visual
+	else
+		local placeholder = Instance.new("TextLabel")
+		placeholder.Size = UDim2.fromScale(1, 1)
+		placeholder.BackgroundTransparency = 1
+		placeholder.Text = "★"
+		placeholder.TextColor3 = Color3.new(1, 1, 1)
+		placeholder.TextStrokeTransparency = 0.25
+		placeholder.TextScaled = true
+		placeholder.Font = Enum.Font.GothamBlack
+		placeholder.Parent = visual
+	end
+	local light = Instance.new("PointLight")
+	light.Name = "CollectionLight"
+	light.Color = rarity.Color
+	light.Brightness = 2
+	light.Range = 10
+	light.Parent = part
+end
+
 --------------------------------------------------------------------
 -- Construction d'une planche
 --------------------------------------------------------------------
@@ -187,6 +254,10 @@ local function buildBubble(board: BoardState, x: number, z: number)
 	part:SetAttribute("ThemeId", board.themeId)
 	part.CanQuery = true
 	part.CanTouch = true
+	-- Le PopController détecte une bulle solide sous le joueur, le fait rebondir,
+	-- puis demande son éclatement. Les corridors du parc sont dégagés à la création
+	-- de la grille plutôt qu'en désactivant la collision de toutes les bulles.
+	part.CanCollide = true
 
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
@@ -215,10 +286,69 @@ local function buildBubble(board: BoardState, x: number, z: number)
 		home = part.CFrame,
 		tintIndex = tintIndex,
 		zoneId = board.zoneId,
+		collectible = CollectionConfig.RollForZone(board.zoneId, rng),
+		collectionOwnerUserId = nil,
 	}
 	-- 3) apparence + effets après type confirmé
 	applyBubbleAppearance(part, board.zoneId, cell.def, tintIndex, true)
+	applyCollectibleAppearance(cell)
 	return cell
+end
+
+local function isAmusementParkAccessCell(zoneId: string, x: number, z: number): boolean
+	if zoneId ~= "AmusementPark" then
+		return false
+	end
+	local regionName = ZoneDefs.GetAmusementParkRegionName(z)
+	local colsFit = select(1, ZoneDefs.GetAmusementParkFitForRow(z))
+	if colsFit <= 0 then
+		return false
+	end
+
+	-- Le couloir d'accès garde la même proportion quelle que soit la largeur de la
+	-- surface : sur la grille de référence (16 colonnes) c'est 3 colonnes au Mid et
+	-- 4 au High. Sur une surface redimensionnée en Studio on réduit d'autant, sinon
+	-- une petite région perd toutes ses bulles.
+	local function corridorWidth(referenceCols: number): number
+		local scaled = math.floor(colsFit * referenceCols / ZoneDefs.AmusementPark.SizeX + 0.5)
+		return math.clamp(scaled, if colsFit >= 2 then 1 else 0, math.max(0, colsFit - 1))
+	end
+
+	-- Niveau intermédiaire : l'escalier arrive par le côté est (dernières colonnes).
+	if regionName == "Mid" then
+		local accessCols = corridorWidth(3)
+		return accessCols > 0 and x > colsFit - accessCols
+	end
+
+	-- Niveau supérieur : dégagement devant l'arrivée de l'ascenseur (ouest).
+	if regionName == "High" then
+		return x <= corridorWidth(4)
+	end
+
+	return false
+end
+
+local function isInsideAmusementCarousel(zoneId: string, x: number, z: number): boolean
+	if zoneId ~= "AmusementPark" or ZoneDefs.GetAmusementParkRegionName(z) ~= "Ground" then return false end
+	local park = workspace:FindFirstChild("ParcAttractions")
+	if not park then return false end
+	local carousel = park:FindFirstChild("Carousel", true) or park:FindFirstChild("Caroussel", true)
+	if not carousel or not (carousel:IsA("Model") or carousel:IsA("BasePart")) then return false end
+	local boxCF: CFrame
+	local boxSize: Vector3
+	if carousel:IsA("Model") then
+		boxCF, boxSize = carousel:GetBoundingBox()
+	else
+		boxCF, boxSize = carousel.CFrame, carousel.Size
+	end
+	local world = BubbleService.CellToWorld(x, z, zoneId)
+	local localPosition = boxCF:PointToObjectSpace(world)
+	-- La marge garde les bulles hors des chevaux et laisse un passage circulaire;
+	-- les cellules immédiatement après cette marge forment naturellement la
+	-- couronne de bulles demandée autour du manège.
+	local clearance = 4.5
+	return math.abs(localPosition.X) <= boxSize.X / 2 + clearance
+		and math.abs(localPosition.Z) <= boxSize.Z / 2 + clearance
 end
 
 local function destroyBoard(zoneId: string)
@@ -288,7 +418,7 @@ function BubbleService.BuildBoard(zoneDef: any)
 	boards[zoneId] = board
 	table.insert(boardList, board)
 
-	do
+	if zoneDef.MultiLevel ~= true then
 		local halfX = (sizeX * G.Spacing) / 2 + 2
 		local halfZ = (sizeZ * G.Spacing) / 2 + 2
 		local thickness = 1.2
@@ -317,7 +447,10 @@ function BubbleService.BuildBoard(zoneDef: any)
 	for x = 1, sizeX do
 		board.grid[x] = {}
 		for z = 1, sizeZ do
-			if HubLayout.IsCellReserved(zoneId, x, z) then
+			if not ZoneDefs.IsBubbleCellEnabled(zoneId, x, z)
+				or HubLayout.IsCellReserved(zoneId, x, z)
+				or isAmusementParkAccessCell(zoneId, x, z)
+				or isInsideAmusementCarousel(zoneId, x, z) then
 				reserved += 1
 			else
 				board.grid[x][z] = buildBubble(board, x, z)
@@ -366,6 +499,9 @@ local function regen(cell)
 	cell.popClaim = nil
 	-- 1) type réel d'abord
 	cell.def = BubbleTypes.Roll(rng)
+	cell.collectible = CollectionConfig.RollForZone(cell.zoneId, rng)
+	cell.collectionOwnerUserId = nil
+	cell.part:SetAttribute("CollectionOwnerUserId", nil)
 	cell.alive = true
 	cell.part.CanCollide = true
 	cell.part.CanQuery = true
@@ -386,6 +522,7 @@ local function regen(cell)
 		cell.tintIndex = 1
 	end
 	applyBubbleAppearance(cell.part, cell.zoneId, cell.def, cell.tintIndex, true)
+	applyCollectibleAppearance(cell)
 	cell.eventVariant = nil
 	cell.part:SetAttribute("EventVariant", nil)
 	local ring = cell.part:FindFirstChild("EventMarkRing")
@@ -395,6 +532,71 @@ local function regen(cell)
 	pcall(function()
 		require(script.Parent.MiniEventService).OnBubbleReady(cell)
 	end)
+end
+
+local function clearPersonalTarget(userId: number, cell: any, restoreBubble: boolean)
+	if personalTargets[userId] ~= cell then return end
+	personalTargets[userId] = nil
+	if cell and cell.collectionOwnerUserId == userId then
+		cell.collectionOwnerUserId = nil
+		if cell.part then cell.part:SetAttribute("CollectionOwnerUserId", nil) end
+		if restoreBubble and cell.alive and cell.part and cell.part.Parent then
+			cell.collectible = nil
+			applyBubbleAppearance(cell.part, cell.zoneId, cell.def, cell.tintIndex, true)
+			applyCollectibleAppearance(cell)
+		end
+	end
+	local owner = Players:GetPlayerByUserId(userId)
+	if owner then Remotes.Event("CollectionTarget"):FireClient(owner, { Active = false }) end
+end
+
+local function spawnPersonalCollectionTarget(player: Player, zoneId: string, collectibleDef: any): boolean
+	local existing = personalTargets[player.UserId]
+	if existing and existing.alive and existing.part and existing.part.Parent then return false end
+	if existing then clearPersonalTarget(player.UserId, existing, true) end
+
+	local board = boards[zoneId]
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not board or not root or not root:IsA("BasePart") then return false end
+	local settings = CollectionConfig.PersonalDiscovery
+	local nearby = {}
+	local fallback = {}
+	for x = 1, board.sizeX do
+		for z = 1, board.sizeZ do
+			local cell = board.grid[x] and board.grid[x][z]
+			if cell and cell.alive and cell.collectible == nil and cell.def and cell.def.Id == "Normal" then
+				local offset = cell.part.Position - root.Position
+				local distance = Vector2.new(offset.X, offset.Z).Magnitude
+				if distance >= settings.TargetMinDistance and distance <= settings.TargetMaxDistance then
+					table.insert(nearby, cell)
+				elseif distance < settings.TargetFallbackDistance then
+					table.insert(fallback, cell)
+				end
+			end
+		end
+	end
+	local candidates = if #nearby > 0 then nearby else fallback
+	if #candidates == 0 then return false end
+	local cell = candidates[rng:NextInteger(1, #candidates)]
+	cell.collectible = collectibleDef
+	cell.collectionOwnerUserId = player.UserId
+	cell.part:SetAttribute("CollectionOwnerUserId", player.UserId)
+	applyCollectibleAppearance(cell)
+	personalTargets[player.UserId] = cell
+
+	local expiresAt = workspace:GetServerTimeNow() + settings.TargetLifetimeSeconds
+	Remotes.Event("CollectionTarget"):FireClient(player, {
+		Active = true,
+		Bubble = cell.part,
+		Id = collectibleDef.Id,
+		Name = collectibleDef.Name,
+		ExpiresAt = expiresAt,
+	})
+	task.delay(settings.TargetLifetimeSeconds, function()
+		clearPersonalTarget(player.UserId, cell, true)
+	end)
+	return true
 end
 
 local function tryClaim(cell: any): any?
@@ -516,7 +718,12 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 	if not cell.alive then return "skip" end
 
 	local def = cell.def
+	local collectible = cell.collectible
 	if type(def) ~= "table" or type(def.Id) ~= "string" then return "skip" end
+	local collectionOwnerUserId = cell.collectionOwnerUserId
+	if collectible and type(collectionOwnerUserId) == "number" and collectionOwnerUserId ~= player.UserId then
+		return "reserved"
+	end
 
 	local storage = math.max(1, math.floor(positiveNumber(def.StorageValue, 1)))
 	if not BackpackService.CanAdd(player, storage) then
@@ -567,6 +774,15 @@ local function popClaimedCell(player: Player, cell: any, x: number, z: number, c
 			warn(("[BubbleService] rollback du sac échoué en %d,%d"):format(x, z))
 		end
 		return "skip"
+	end
+
+	if collectible then
+		if collectionOwnerUserId == player.UserId then
+			clearPersonalTarget(player.UserId, cell, false)
+		end
+		pcall(function()
+			require(script.Parent.CollectionService).Discover(player, collectible.Id)
+		end)
 	end
 
 	local challengeTags = { isGoldenWave = false, isColorRushMatch = false }
@@ -623,6 +839,8 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 	local count = 0
 	local announce = nil
 	local notifiedFull = false
+	local lastSuccessfulZone = zoneIdHint or defaultZoneId
+	local lastReject: string? = nil
 
 	for _, c in ipairs(cells) do
 		local x, z = c[1], c[2]
@@ -630,12 +848,19 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 		if type(x) == "number" and type(z) == "number" and BubbleService.InBounds(x, z, zid) then
 			local profile = DataService.Get(player)
 			if not profile or not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zid) then
+				lastReject = "profil/niveau"
 				continue
 			end
 			local board = boards[zid]
 			local cell = board and board.grid[x] and board.grid[x][z]
+			if not cell then
+				lastReject = ("aucune cellule en %d,%d (%s)"):format(x, z, zid)
+			end
 			if cell then
 				local token = tryClaim(cell)
+				if not token then
+					lastReject = "cellule déjà réclamée ou morte"
+				end
 				if token then
 					local status: string? = nil
 					local def: any = nil
@@ -648,17 +873,28 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 
 					if ok and status == "ok" and def then
 						count += 1
+						lastSuccessfulZone = zid
 						if def.Announce then announce = def end
 					elseif ok and status == "full" and not notifiedFull then
 						notifiedFull = true
+						lastReject = "sac plein"
 						BackpackService.NotifyFull(player)
+					elseif not ok then
+						lastReject = "erreur pendant le pop (voir warning ci-dessus)"
+					else
+						lastReject = "statut " .. tostring(status)
 					end
 				end
 			end
+		else
+			lastReject = ("cellule hors planche %d,%d (%s)"):format(tonumber(x) or -1, tonumber(z) or -1, zid)
 		end
 	end
 
-	if count == 0 then return 0 end
+	if count == 0 then
+		popDebug(lastReject or "aucune cellule traitée")
+		return 0
+	end
 
 	local profile = DataService.Get(player)
 	if not profile then return count end
@@ -667,6 +903,12 @@ function BubbleService.PopCells(player: Player, cells: { { any } }, multiplier: 
 	profile.__dirty = true
 	DataService.Push(player)
 	GlobalCounterService.Add(count)
+
+	pcall(function()
+		local CollectionService = require(script.Parent.CollectionService)
+		local targetDef = CollectionService.RecordValidPops(player, count, lastSuccessfulZone, rng)
+		if targetDef then spawnPersonalCollectionTarget(player, lastSuccessfulZone, targetDef) end
+	end)
 
 	pcall(function()
 		require(script.Parent.TutorialService).OnBubblesPopped(player, count)
@@ -725,16 +967,26 @@ local function resolvePopBoardZone(x: number, z: number, zoneIdArg: any): string
 end
 
 local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
-	if type(x) ~= "number" or type(z) ~= "number" then return end
+	if type(x) ~= "number" or type(z) ~= "number" then
+		popDebug("coordonnées invalides", tostring(x), tostring(z))
+		return
+	end
 	x, z = math.floor(x), math.floor(z)
-	if not checkBudget(player) then return end
+	if not checkBudget(player) then
+		popDebug("budget anti-exploit épuisé")
+		return
+	end
 
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not root then return end
+	if not root then
+		popDebug("pas de HumanoidRootPart")
+		return
+	end
 
 	local zoneId = resolvePopBoardZone(x, z, zoneIdArg)
 	if not zoneId then
+		popDebug("aucune planche pour la cellule", x, z, tostring(zoneIdArg))
 		-- Tentative Giant Bubble même hors cellule de grille.
 		pcall(function()
 			require(script.Parent.MiniEventService).TryGiantHit(player, root.Position, "Jump")
@@ -744,7 +996,11 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 
 	local target = BubbleService.CellToWorld(x, z, zoneId)
 	local maxRange = if player:GetAttribute("HasWings") == true then B.WingPopRange else B.MaxPopRange
-	if (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(target.X, 0, target.Z)).Magnitude > maxRange then
+	local distance = if zoneId == "AmusementPark"
+		then (root.Position - target).Magnitude
+		else (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(target.X, 0, target.Z)).Magnitude
+	if distance > maxRange then
+		popDebug("hors portée", ("%.1f > %d"):format(distance, maxRange))
 		return
 	end
 
@@ -754,7 +1010,12 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 	end)
 
 	local profile = DataService.Get(player)
-	if not profile or not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zoneId) then
+	if not profile then
+		popDebug("profil non chargé")
+		return
+	end
+	if not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zoneId) then
+		popDebug("niveau insuffisant pour", zoneId)
 		return
 	end
 	local power = Config.EffectiveUpgradeLevel("Power", profile.Upgrades.Power or 0)
@@ -766,7 +1027,9 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 			cells = {}
 			for dx = -r, r do
 				for dz = -r, r do
-					if dx * dx + dz * dz <= r * r then
+					local sameParkFloor = zoneId ~= "AmusementPark"
+						or ZoneDefs.GetAmusementParkRegionName(z + dz) == ZoneDefs.GetAmusementParkRegionName(z)
+					if dx * dx + dz * dz <= r * r and sameParkFloor then
 						table.insert(cells, { x + dx, z + dz, zoneId })
 					end
 				end
@@ -777,12 +1040,52 @@ local function onPopRequest(player: Player, x: any, z: any, zoneIdArg: any)
 	BubbleService.PopCells(player, cells, nil, zoneId)
 end
 
+local function tryContactPop(player: Player)
+	if not DataService.Get(player) then
+		return
+	end
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0 then
+		return
+	end
+	local x, z, zoneId = BubbleService.WorldToCell(root.Position)
+	if not BubbleService.InBounds(x, z, zoneId) then
+		return
+	end
+	if not ZoneDefs.CanLevelEnter(DataService.GetPlayerLevel(player), zoneId) then
+		return
+	end
+	local board = boards[zoneId]
+	local cell = board and board.grid[x] and board.grid[x][z]
+	if not cell or not cell.alive or not cell.part or not cell.part.Parent then
+		return
+	end
+	if not BubbleContactLogic.IsStandingOn(root.Position, root.AssemblyLinearVelocity.Y, cell.part.Position, G.Spacing) then
+		return
+	end
+	BubbleService.PopCells(player, { { x, z, zoneId } }, nil, zoneId)
+end
+
 --------------------------------------------------------------------
 -- Diffusion groupée des effets
 --------------------------------------------------------------------
 local function startEffectLoop()
 	local acc = 0
+	local contactAcc = 0
 	RunService.Heartbeat:Connect(function(dt)
+		contactAcc += dt
+		if contactAcc >= 0.05 then
+			contactAcc = 0
+			for _, player in ipairs(Players:GetPlayers()) do
+				-- Une erreur sur un joueur ne doit jamais couper la diffusion des effets.
+				local ok, err = pcall(tryContactPop, player)
+				if not ok then
+					popDebug("erreur contact", tostring(err))
+				end
+			end
+		end
 		acc += dt
 		if acc < B.EffectFlushRate then return end
 		acc = 0
@@ -1020,13 +1323,69 @@ function BubbleService.IsAlive(x: number, z: number, zoneId: string?): boolean
 end
 
 function BubbleService.Start()
-	-- ZoneService.EnsureWorld crée GameZones avant ; BuildAllBoards y accroche les planches.
-	BubbleService.BuildAllBoards()
-	-- Réapplique le rendu stable Neon sur les bulles actives (évite templates/anciens mats).
-	BubbleService.ReapplyMainZoneVisuals()
+	-- Le pop est la boucle centrale du jeu : il se branche avant toute construction,
+	-- sinon une erreur de planche / décor / ambiance le désactive pour la session.
 	Remotes.Event("PopRequest").OnServerEvent:Connect(onPopRequest)
-	Players.PlayerRemoving:Connect(function(p) budget[p] = nil end)
+	Players.PlayerRemoving:Connect(function(p)
+		budget[p] = nil
+		local target = personalTargets[p.UserId]
+		if target then clearPersonalTarget(p.UserId, target, true) end
+	end)
 	startEffectLoop()
+	print("[BubbleService] " .. CODE_VERSION .. " : pop branché.")
+
+	-- ZoneService.EnsureWorld crée GameZones avant ; BuildAllBoards y accroche les planches.
+	local buildOk, buildErr = pcall(BubbleService.BuildAllBoards)
+	if not buildOk then
+		warn("[BubbleService] construction des planches échouée : " .. tostring(buildErr))
+	end
+
+	-- Réapplique le rendu stable Neon sur les bulles actives (évite templates/anciens mats).
+	local visualOk, visualErr = pcall(BubbleService.ReapplyMainZoneVisuals)
+	if not visualOk then
+		warn("[BubbleService] rendu des bulles échoué : " .. tostring(visualErr))
+	end
+
+	local total = 0
+	for _, board in ipairs(boardList) do
+		for x = 1, board.sizeX do
+			local col = board.grid[x]
+			if col then
+				for z = 1, board.sizeZ do
+					if col[z] then total += 1 end
+				end
+			end
+		end
+	end
+	print(("[BubbleService] %d planches, %d bulles prêtes."):format(#boardList, total))
+
+	-- Diagnostic parc : une ligne par emplacement de surface, y compris les copies.
+	local parkBoard = boards["AmusementPark"]
+	if parkBoard then
+		local order: { string } = {}
+		local built: { [string]: number } = {}
+		local fit: { [string]: string } = {}
+		for z = 1, parkBoard.sizeZ do
+			local name = ZoneDefs.GetAmusementParkRegionName(z)
+			if name then
+				if built[name] == nil then
+					built[name] = 0
+					table.insert(order, name)
+					local cols, rows = ZoneDefs.GetAmusementParkFitForRow(z)
+					fit[name] = ("%dx%d"):format(cols, rows)
+				end
+				for x = 1, parkBoard.sizeX do
+					local col = parkBoard.grid[x]
+					if col and col[z] then
+						built[name] += 1
+					end
+				end
+			end
+		end
+		for _, name in ipairs(order) do
+			print(("[ParcBulles] %s grille=%s bulles=%d"):format(name, fit[name], built[name]))
+		end
+	end
 end
 
 -- Force le pipeline d’apparence actuel sur toutes les bulles de zone principale.

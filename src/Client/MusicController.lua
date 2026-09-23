@@ -28,6 +28,7 @@ local warnedIds: { [string]: boolean } = {}
 local lastDiagKey: string? = nil
 local started = false
 local playGeneration = 0
+local miniEventActive = false
 
 local function ensureMusicGroup(): SoundGroup
 	if musicGroup and musicGroup.Parent then
@@ -284,10 +285,22 @@ local function playTrack(trackKey: string, immediate: boolean?)
 	end
 end
 
+local function desiredTrackKey(area: string?): string
+	-- Le parc possède une identité musicale permanente. Un mini-défi ne doit pas
+	-- remplacer cette piste pendant que le joueur visite les attractions.
+	if area == "AmusementPark" then
+		return MusicConfig.TrackKeyForArea(area)
+	end
+	if miniEventActive then
+		return "challenge"
+	end
+	return MusicConfig.TrackKeyForArea(area)
+end
+
 local function applyArea(area: any, immediate: boolean?)
 	local areaName = if type(area) == "string" and area ~= "" then area else "Lobby"
 	currentArea = areaName
-	playTrack(MusicConfig.TrackKeyForArea(areaName), immediate)
+	playTrack(desiredTrackKey(areaName), immediate)
 end
 
 function MusicController.IsMuted(): boolean
@@ -315,7 +328,7 @@ function MusicController.SetMuted(nextMuted: boolean, persist: boolean?)
 		emitDiagnostics(area, trackKey, MusicConfig.SoundIdForTrackKey(trackKey), false)
 	else
 		local area = currentArea or player:GetAttribute("PlayerArea")
-		local trackKey = MusicConfig.TrackKeyForArea(if type(area) == "string" then area else "Lobby")
+		local trackKey = desiredTrackKey(if type(area) == "string" then area else "Lobby")
 		if activeSound and activeSound.Parent and currentTrackKey == trackKey then
 			emitDiagnostics(if type(area) == "string" then area else "Lobby", trackKey, MusicConfig.SoundIdForTrackKey(trackKey), true)
 			fadeVolume(activeSound, MusicConfig.MusicVolume, 0.45)
@@ -393,6 +406,19 @@ function MusicController.Start()
 		elseif wasMuted == true and stats.MusicMuted == false then
 			-- unmute via serveur déjà géré dans SetMuted
 		end
+	end)
+
+	Remotes.Event("MiniEventState").OnClientEvent:Connect(function(payload)
+		if type(payload) ~= "table" or type(payload.state) ~= "string" then
+			return
+		end
+		local shouldChallenge = payload.state == "Active"
+		if shouldChallenge == miniEventActive then
+			return
+		end
+		miniEventActive = shouldChallenge
+		currentTrackKey = nil
+		applyArea(player:GetAttribute("PlayerArea") or currentArea, false)
 	end)
 end
 

@@ -113,7 +113,7 @@ end
 
 local function setCharacterGroup(char: Model, groupName: string)
 	for _, desc in ipairs(char:GetDescendants()) do
-		if desc:IsA("BasePart") then
+		if desc:IsA("BasePart") and desc:GetAttribute("BPWPetPart") ~= true then
 			desc.CollisionGroup = groupName
 		end
 	end
@@ -151,7 +151,7 @@ function ZoneAccess.ApplyToCharacter(player: Player, char: Model?)
 	if not characterBound[character] then
 		characterBound[character] = true
 		local conn = character.DescendantAdded:Connect(function(desc)
-			if desc:IsA("BasePart") then
+			if desc:IsA("BasePart") and desc:GetAttribute("BPWPetPart") ~= true then
 				desc.CollisionGroup = ZoneDefs.GetAccessGroupName(ZoneAccess.GetPlayerLevel(player))
 			end
 		end)
